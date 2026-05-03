@@ -77,6 +77,39 @@ class WebStaticAssetTests(unittest.TestCase):
         ):
             self.assertIn(f'"{key}"', i18n_js)
 
+    def test_messenger_stage_stream_contract_is_explicit(self) -> None:
+        messenger_js = (WEB_ROOT / "messenger-app.js").read_text(encoding="utf-8")
+        stage_js = (WEB_ROOT / "stage-app.js").read_text(encoding="utf-8")
+
+        self.assertIn('route_mode: DEFAULT_ROUTE_MODE', messenger_js)
+        self.assertIn('const DEFAULT_ROUTE_MODE = "chat_only";', messenger_js)
+        self.assertIn('await publishStageEvent("subtitle", sessionName, ""', messenger_js)
+        self.assertIn('await publishStageEvent("assistant_delta", sessionName, delta', messenger_js)
+        self.assertIn('await publishStageEvent("assistant_final", sessionName, finalText', messenger_js)
+        self.assertIn('source: "messenger"', messenger_js)
+        self.assertIn('"/api/stage/events"', messenger_js)
+
+        self.assertIn("new EventSource(url)", stage_js)
+        self.assertIn('source.addEventListener("assistant_delta"', stage_js)
+        self.assertIn('source.addEventListener("assistant_final"', stage_js)
+        self.assertIn("subtitleElement.textContent", stage_js)
+        self.assertNotIn("subtitleElement.innerHTML", stage_js)
+
+        delta_handler = re.search(
+            r'source\.addEventListener\("assistant_delta".*?\}\);',
+            stage_js,
+            flags=re.S,
+        )
+        final_handler = re.search(
+            r'source\.addEventListener\("assistant_final".*?\}\);',
+            stage_js,
+            flags=re.S,
+        )
+        self.assertIsNotNone(delta_handler)
+        self.assertIsNotNone(final_handler)
+        self.assertNotIn("playTts", delta_handler.group(0))
+        self.assertIn("playTts(payload.text)", final_handler.group(0))
+
 
 if __name__ == "__main__":
     unittest.main()

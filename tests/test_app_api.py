@@ -55,6 +55,7 @@ from echobot.tts import (
     TTSService,
     VoiceOption,
 )
+from echobot.app.routers.stage import subscribe_stage_events
 
 
 os.environ.setdefault("ECHOBOT_ASR_SHERPA_AUTO_DOWNLOAD", "false")
@@ -1998,6 +1999,57 @@ class AppApiTests(unittest.TestCase):
             self.assertEqual(["hello stage"], [item.text for item in alpha_history])
             self.assertEqual(["beta stage"], [item.text for item in beta_history])
             self.assertEqual([], alpha_other_session)
+
+    def test_stage_event_sse_route_replays_published_event(self) -> None:
+        async def read_first_sse_payload(runtime) -> tuple[str, dict[str, str], str]:
+            response = await subscribe_stage_events(
+                session_name="demo",
+                runtime=runtime,
+            )
+            iterator = response.body_iterator
+            try:
+                payload = await asyncio.wait_for(anext(iterator), timeout=0.2)
+            finally:
+                close = getattr(iterator, "aclose", None)
+                if close is not None:
+                    await close()
+            return response.media_type or "", dict(response.headers), payload
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            app = create_app(
+                runtime_options=RuntimeOptions(
+                    workspace=workspace,
+                    no_tools=True,
+                    no_skills=True,
+                    no_memory=True,
+                    no_heartbeat=True,
+                ),
+                channel_config_path=workspace / ".echobot" / "channels.json",
+                context_builder=build_test_context,
+            )
+
+            with TestClient(app) as client:
+                published = client.post(
+                    "/api/stage/events",
+                    json={
+                        "kind": "assistant_delta",
+                        "session_name": "demo",
+                        "text": "po",
+                        "speaker": "EchoBot",
+                        "source": "messenger",
+                    },
+                )
+                media_type, headers, payload = asyncio.run(
+                    read_first_sse_payload(app.state.runtime),
+                )
+
+            self.assertEqual(200, published.status_code)
+            self.assertEqual("text/event-stream", media_type)
+            self.assertIn("x-accel-buffering", headers)
+            self.assertIn("event: assistant_delta", payload)
+            self.assertIn('"text": "po"', payload)
+            self.assertIn('"source": "messenger"', payload)
 
     def test_session_and_chat_endpoints_share_runtime_state(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

@@ -71,6 +71,9 @@ async function submitMessage() {
     setStatus("messenger.status.streaming");
 
     try {
+        await publishStageEvent("subtitle", sessionName, "", {
+            reason: "assistant_stream_start",
+        });
         await streamChat(
             {
                 prompt: prompt,
@@ -234,7 +237,7 @@ function messageRoleLabel(role) {
         : i18n.t("messenger.assistantLabel");
 }
 
-async function publishStageEvent(kind, sessionName, text) {
+async function publishStageEvent(kind, sessionName, text, metadata = {}) {
     try {
         const response = await fetch("/api/stage/events", {
             method: "POST",
@@ -247,6 +250,7 @@ async function publishStageEvent(kind, sessionName, text) {
                 text: String(text || ""),
                 speaker: "EchoBot",
                 source: "messenger",
+                metadata: metadata,
             }),
         });
         if (!response.ok) {

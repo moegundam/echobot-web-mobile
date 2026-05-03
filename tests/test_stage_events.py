@@ -65,6 +65,33 @@ class StageEventBrokerTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual("second", event.text)
 
+    async def test_subscribe_replays_history_for_late_stage_viewer(self) -> None:
+        broker = StageEventBroker(history_limit=10, queue_limit=2)
+
+        await broker.publish(
+            scope_key="alpha",
+            request=StageEventPublishRequest(
+                kind="assistant_final",
+                session_name="demo",
+                text="ready for stage",
+                source="messenger",
+            ),
+        )
+
+        subscription = await broker.subscribe(
+            scope_key="alpha",
+            session_name="demo",
+            replay_history=True,
+        )
+        try:
+            event = await asyncio.wait_for(subscription.next_event(), timeout=0.2)
+        finally:
+            await subscription.close()
+
+        self.assertEqual("assistant_final", event.kind)
+        self.assertEqual("demo", event.session_name)
+        self.assertEqual("ready for stage", event.text)
+
     async def test_stage_event_serializes_to_sse_payload(self) -> None:
         broker = StageEventBroker()
         event = await broker.publish(
