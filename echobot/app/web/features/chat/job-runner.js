@@ -31,6 +31,7 @@ export function createChatRunner(deps) {
         startTracePanel,
         stopSpeechPlayback,
         syncCurrentSessionFromServer,
+        t = (key) => key,
         applyTracePayload,
         updateMessage,
     } = deps;
@@ -54,7 +55,7 @@ export function createChatRunner(deps) {
             sessionState.currentSessionName || "",
         );
         sessionState.currentSessionName = sessionName;
-        DOM.sessionLabel.textContent = `会话: ${sessionName}`;
+        DOM.sessionLabel.textContent = t("console.sessionLabel", { session: sessionName });
         window.localStorage.setItem("echobot.web.session", sessionName);
 
         stopSpeechPlayback();
@@ -62,7 +63,7 @@ export function createChatRunner(deps) {
         resetTracePanel();
         setChatBusy(true);
         const speechSession = audioState.ttsEnabled ? createSpeechSession() : null;
-        setRunStatus("正在请求回复...");
+        setRunStatus(t("console.requestingReply"));
 
         addMessage(
             "user",
@@ -82,7 +83,7 @@ export function createChatRunner(deps) {
                     workspace_path: file.workspacePath,
                 })),
             ),
-            "你",
+            t("console.youLabel"),
             { renderMode: "plain" },
         );
         let assistantMessageId = addMessage(
@@ -125,7 +126,7 @@ export function createChatRunner(deps) {
 
             if (response.session_name) {
                 sessionState.currentSessionName = normalizeSessionName(response.session_name);
-                DOM.sessionLabel.textContent = `会话: ${sessionState.currentSessionName}`;
+                DOM.sessionLabel.textContent = t("console.sessionLabel", { session: sessionState.currentSessionName });
                 window.localStorage.setItem("echobot.web.session", sessionState.currentSessionName);
             }
             roleState.currentRoleName = response.role_name || roleState.currentRoleName;
@@ -141,7 +142,7 @@ export function createChatRunner(deps) {
                 && !hasMessageContent(immediateContent),
             );
             let finalContent = immediateContent;
-            let finalText = immediateText || "处理中...";
+            let finalText = immediateText || t("console.processing");
             let speakFinalText = true;
             const startupSpeech = hideImmediateReply
                 ? Promise.resolve()
@@ -154,13 +155,13 @@ export function createChatRunner(deps) {
                 updateMessage(
                     assistantMessageId,
                     finalContent,
-                    response.completed ? "Echo" : "处理中",
+                    response.completed ? "Echo" : t("console.processing"),
                 );
             }
 
             if (response.job_id && response.status === "running") {
                 setActiveBackgroundJob(response.job_id);
-                setRunStatus("Agent 正在后台处理...");
+                setRunStatus(t("console.agentRunningInBackground"));
                 startTracePanel(response.job_id);
 
                 const finalJob = await pollChatJob(response.job_id);
@@ -168,7 +169,7 @@ export function createChatRunner(deps) {
                 finalText = messageContentToText(
                     finalContent,
                     { includeImageMarker: false },
-                ).trim() || "任务已结束，但没有返回内容。";
+                ).trim() || t("console.jobEndedNoContent");
                 if (assistantMessageId) {
                     updateMessage(assistantMessageId, finalContent, "Echo");
                 } else {
@@ -181,17 +182,17 @@ export function createChatRunner(deps) {
                 }
 
                 if (finalJob.status === "cancelled") {
-                    setRunStatus("后台任务已停止");
+                    setRunStatus(t("console.backgroundJobStopped"));
                 } else if (finalJob.status === "waiting_for_input") {
-                    setRunStatus("等待你的补充信息");
+                    setRunStatus(t("console.waitingForYourInput"));
                 } else if (finalJob.status === "failed") {
-                    setRunStatus("后台任务失败");
+                    setRunStatus(t("console.backgroundJobFailed"));
                 } else {
-                    setRunStatus("回复已完成");
+                    setRunStatus(t("console.replyCompleted"));
                 }
             } else {
                 speakFinalText = false;
-                setRunStatus("回复已完成");
+                setRunStatus(t("console.replyCompleted"));
             }
 
             if (audioState.ttsEnabled && speakFinalText && finalText.trim()) {
@@ -213,8 +214,8 @@ export function createChatRunner(deps) {
             if (assistantMessageId && !streamedText.trim()) {
                 removeMessage(assistantMessageId);
             }
-            addMessage("system", `请求失败：${error.message || error}`, "状态");
-            setRunStatus(error.message || "请求失败");
+            addMessage("system", `${t("console.requestFailed")}: ${error.message || error}`, t("console.systemLabel"));
+            setRunStatus(error.message || t("console.requestFailed"));
         } finally {
             setActiveBackgroundJob("");
             setChatBusy(false);
@@ -241,7 +242,7 @@ export function createChatRunner(deps) {
             });
         }
 
-        throw new Error("Agent 后台任务等待超时");
+        throw new Error(t("console.backgroundJobTimeout"));
     }
 
     async function loadChatJobTrace(jobId) {
@@ -262,24 +263,24 @@ export function createChatRunner(deps) {
         if (DOM.stopAgentButton) {
             DOM.stopAgentButton.disabled = true;
         }
-        setRunStatus("正在停止后台任务...");
+        setRunStatus(t("console.stoppingBackgroundJob"));
 
         try {
             const payload = await cancelChatJob(jobId);
             if (payload.status === "cancelled") {
-                setRunStatus("后台任务已停止");
+                setRunStatus(t("console.backgroundJobStopped"));
                 return;
             }
             if (payload.status === "completed") {
-                setRunStatus("后台任务已完成");
+                setRunStatus(t("console.backgroundJobCompleted"));
                 return;
             }
             if (payload.status === "failed") {
-                setRunStatus("后台任务已失败");
+                setRunStatus(t("console.backgroundJobFailed"));
                 return;
             }
             if (payload.status === "waiting_for_input") {
-                setRunStatus("等待你的补充信息");
+                setRunStatus(t("console.waitingForYourInput"));
                 return;
             }
 
@@ -291,8 +292,8 @@ export function createChatRunner(deps) {
             if (DOM.stopAgentButton) {
                 DOM.stopAgentButton.disabled = false;
             }
-            addMessage("system", `停止后台任务失败：${error.message || error}`, "状态");
-            setRunStatus(error.message || "停止后台任务失败");
+            addMessage("system", `${t("console.stopBackgroundJobFailed")}: ${error.message || error}`, t("console.systemLabel"));
+            setRunStatus(error.message || t("console.stopBackgroundJobFailed"));
         }
     }
 

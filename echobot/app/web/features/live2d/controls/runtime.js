@@ -7,7 +7,7 @@ import {
     shouldIgnoreKeyboardEvent,
     shortcutTokensMatchPressed,
     syncModifierTokens,
-} from "./common.js";
+} from "./common.js?v=site-public-6";
 
 export function createLive2DControlRuntime(deps) {
     const {
@@ -17,6 +17,7 @@ export function createLive2DControlRuntime(deps) {
         renderLive2DControls,
         restoreHotkeyToDefault,
         setRunStatus,
+        t = (key) => key,
         toggleExpression,
         triggerHotkey,
     } = deps;
@@ -58,7 +59,7 @@ export function createLive2DControlRuntime(deps) {
             controllerState.activeHotkeyIds.add(hotkeyKey);
             event.preventDefault();
             void runHotkeyAction(hotkeyItem, {
-                sourceLabel: "键盘热键",
+                sourceLabel: t("console.live2dKeyboardHotkey"),
             });
         });
     }
@@ -114,8 +115,8 @@ export function createLive2DControlRuntime(deps) {
                 renderLive2DControls(currentLive2DConfig());
                 setRunStatus(
                     result.active
-                        ? `已启用表情：${result.name}`
-                        : `已关闭表情：${result.name}`,
+                        ? t("console.live2dExpressionEnabled", { name: result.name })
+                        : t("console.live2dExpressionDisabled", { name: result.name }),
                 );
                 return;
             }
@@ -126,7 +127,7 @@ export function createLive2DControlRuntime(deps) {
                     return;
                 }
                 await playMotion(motionItem, live2dConfig.selection_key);
-                setRunStatus(`已播放动作：${motionItem.name}`);
+                setRunStatus(t("console.live2dMotionPlayed", { name: motionItem.name }));
                 return;
             }
 
@@ -138,7 +139,7 @@ export function createLive2DControlRuntime(deps) {
                     return;
                 }
                 await runHotkeyAction(hotkeyItem, {
-                    sourceLabel: "热键",
+                    sourceLabel: t("console.hotkey"),
                 });
                 return;
             }
@@ -157,7 +158,7 @@ export function createLive2DControlRuntime(deps) {
         } catch (error) {
             console.error(error);
             renderLive2DControls(currentLive2DConfig());
-            setRunStatus(describeError(error));
+            setRunStatus(describeError(error, t));
         }
     }
 
@@ -171,27 +172,27 @@ export function createLive2DControlRuntime(deps) {
             const result = await triggerHotkey(hotkeyItem, live2dConfig);
             renderLive2DControls(currentLive2DConfig());
 
-            const sourceLabel = options.sourceLabel || "热键";
+            const sourceLabel = options.sourceLabel || t("console.hotkey");
             if (hotkeyItem.action === "ToggleExpression" && result.result) {
                 setRunStatus(
                     result.result.active
-                        ? `${sourceLabel}：启用 ${result.result.name}`
-                        : `${sourceLabel}：关闭 ${result.result.name}`,
+                        ? t("console.live2dHotkeyExpressionEnabled", { source: sourceLabel, name: result.result.name })
+                        : t("console.live2dHotkeyExpressionDisabled", { source: sourceLabel, name: result.result.name }),
                 );
                 return result;
             }
             if (hotkeyItem.action === "TriggerAnimation" && result.result) {
-                setRunStatus(`${sourceLabel}：播放 ${result.result.name}`);
+                setRunStatus(t("console.live2dHotkeyMotionPlayed", { source: sourceLabel, name: result.result.name }));
                 return result;
             }
             if (hotkeyItem.action === "RemoveAllExpressions") {
-                setRunStatus(`${sourceLabel}：已清空所有表情`);
+                setRunStatus(t("console.live2dHotkeyExpressionsCleared", { source: sourceLabel }));
             }
             return result;
         } catch (error) {
             console.error(error);
             renderLive2DControls(currentLive2DConfig());
-            setRunStatus(describeError(error));
+            setRunStatus(describeError(error, t));
             return null;
         }
     }

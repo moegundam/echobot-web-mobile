@@ -9,25 +9,35 @@ import {
     uploadChatFile,
     uploadChatImage,
 } from "./modules/api.js";
-import { wireAppEvents } from "./bootstrap/wire-events.js";
-import { createUiStatusController } from "./bootstrap/ui-status.js";
+import { wireAppEvents } from "./bootstrap/wire-events.js?v=site-public-6";
+import { createUiStatusController } from "./bootstrap/ui-status.js?v=site-public-6";
 import { appState } from "./core/store.js";
-import { createAsrModule } from "./features/asr.js";
-import { createChatModule } from "./features/chat/index.js";
-import { createLayoutModule } from "./features/layout/index.js";
-import { createLive2DModule } from "./features/live2d/index.js";
-import { createRolesModule } from "./features/roles.js";
-import { createSessionsModule } from "./features/sessions.js";
-import { createTtsModule } from "./features/tts.js";
+import { createAsrModule } from "./features/asr.js?v=site-public-6";
+import { createChatModule } from "./features/chat/index.js?v=site-public-6";
+import { createLayoutModule } from "./features/layout/index.js?v=site-public-6";
+import { createLive2DModule } from "./features/live2d/index.js?v=site-public-6";
+import { createRolesModule } from "./features/roles.js?v=site-public-6";
+import { createSessionsModule } from "./features/sessions.js?v=site-public-6";
+import { createTtsModule } from "./features/tts.js?v=site-public-6";
+import { initShellDisplayMode } from "./shell-display-mode.js?v=site-public-6";
+import { initShellI18n } from "./shell-i18n.js?v=site-public-6";
+import {
+    MODEL_PROFILE_UPDATE_STORAGE_KEY,
+    activeModelProfileFromConfig,
+    applyModelProfileToLocalPreferences,
+    modelProfileScopeFromConfig,
+} from "./model-profile-runtime.js?v=model-profile-2";
 import {
     addMessage,
     addSystemMessage,
     clearMessages,
+    configureMessageI18n,
     initializeMessageInteractions,
+    refreshMessagesLocalizedText,
     removeMessage,
     updateMessage,
-} from "./modules/messages.js";
-import { createTraceModule } from "./modules/traces.js";
+} from "./modules/messages.js?v=site-public-6";
+import { createTraceModule } from "./modules/traces.js?v=site-public-6";
 import {
     clamp,
     delay,
@@ -38,9 +48,42 @@ import {
 } from "./modules/utils.js";
 
 const status = createUiStatusController();
+const i18n = initShellI18n({
+    onChange: () => {
+        displayMode.refresh();
+        layout?.refreshSidebarLabels?.();
+        layout?.refreshLocalizedText?.();
+        live2d?.refreshLocalizedText?.();
+        tts?.refreshLocalizedText?.();
+        asr?.refreshLocalizedText?.();
+        sessions?.refreshLocalizedText?.();
+        roles?.refreshLocalizedText?.();
+        traces?.refreshLocalizedText?.();
+        chat?.refreshLocalizedText?.();
+        refreshMessagesLocalizedText();
+        status.refreshLocalizedText?.(i18n.t);
+    },
+});
+configureMessageI18n({ t: i18n.t });
+const displayMode = initShellDisplayMode({ t: i18n.t });
+let currentModelProfileScope = "";
+window.addEventListener("storage", (event) => {
+    if (event.key === MODEL_PROFILE_UPDATE_STORAGE_KEY) {
+        const eventScope = parseModelProfileUpdateScope(event.newValue);
+        if (
+            eventScope
+            && currentModelProfileScope
+            && eventScope !== currentModelProfileScope
+        ) {
+            return;
+        }
+        window.location.reload();
+    }
+});
 const layout = createLayoutModule({
     addMessage,
     formatTimestamp,
+    t: i18n.t,
     requestJson,
     setRunStatus: status.setRunStatus,
 });
@@ -50,6 +93,7 @@ const live2d = createLive2DModule({
     roundTo,
     responseToError,
     setRunStatus: status.setRunStatus,
+    t: i18n.t,
 });
 const tts = createTtsModule({
     addMessage,
@@ -60,6 +104,7 @@ const tts = createTtsModule({
     setConnectionState: status.setConnectionState,
     setRunStatus: status.setRunStatus,
     smoothValue,
+    t: i18n.t,
 });
 const asr = createAsrModule({
     addSystemMessage,
@@ -70,9 +115,11 @@ const asr = createAsrModule({
     responseToError,
     setRunStatus: status.setRunStatus,
     stopSpeechPlayback: tts.stopSpeechPlayback,
+    t: i18n.t,
 });
 
 tts.bindHooks({
+    syncAlwaysListenPauseState: asr.syncAlwaysListenPauseState,
     updateVoiceInputControls: asr.updateVoiceInputControls,
 });
 
@@ -86,14 +133,16 @@ const sessions = createSessionsModule({
     speakText: tts.speakText,
     setRunStatus: status.setRunStatus,
     stopSpeechPlayback: tts.stopSpeechPlayback,
+    t: i18n.t,
 });
 const roles = createRolesModule({
     addMessage,
     normalizeSessionName,
     requestJson,
     setRunStatus: status.setRunStatus,
+    t: i18n.t,
 });
-const traces = createTraceModule();
+const traces = createTraceModule({ t: i18n.t });
 const chat = createChatModule({
     addMessage,
     applySessionSummaries: sessions.applySessionSummaries,
@@ -154,6 +203,7 @@ async function initializePage() {
         roles,
         sessions,
         status,
+        t: i18n.t,
         tts,
     });
 
@@ -165,11 +215,15 @@ async function initializePage() {
     layout.restoreStageBackgroundPanelState();
     layout.restoreStageEffectsPanelState();
     layout.handleSettingsPanelToggle();
-    live2d.setStageMessage("正在加载 Live2D 模型…");
-    addSystemMessage("正在连接 EchoBot…");
+    live2d.setStageMessage(i18n.t("console.live2dLoading"));
+    addSystemMessage(i18n.t("console.status.connecting"));
 
     try {
         const config = await requestJson("/api/web/config");
+        currentModelProfileScope = modelProfileScopeFromConfig(config);
+        const activeModelProfile = activeModelProfileFromConfig(config);
+        applyModelProfileToLocalPreferences(activeModelProfile);
+        renderActiveModelProfile(activeModelProfile);
         appState.config = config;
         layout.applyRuntimeConfig(config.runtime);
         const activeLive2DConfig = live2d.applyConfigToUI(config);
@@ -188,14 +242,42 @@ async function initializePage() {
         asr.startAsrStatusPolling();
         traces.resetTracePanel();
 
-        status.setConnectionState("ready", "已连接");
-        status.setRunStatus("准备就绪");
+        status.setConnectionState("ready", i18n.t("console.status.ready"), "console.status.ready");
+        status.setRunStatus(i18n.t("console.ready"), "console.ready");
         status.setActiveBackgroundJob("");
     } catch (error) {
         console.error(error);
-        status.setConnectionState("error", "初始化失败");
-        status.setRunStatus(error.message || "初始化失败");
-        live2d.setStageMessage(error.message || "初始化失败");
-        addSystemMessage(`初始化失败：${error.message || error}`);
+        status.setConnectionState("error", i18n.t("console.status.error"), "console.status.error");
+        status.setRunStatus(error.message || i18n.t("console.status.error"));
+        live2d.setStageMessage(error.message || i18n.t("console.status.error"));
+        addSystemMessage(`${i18n.t("console.status.error")}: ${error.message || error}`);
     }
+}
+
+function parseModelProfileUpdateScope(value) {
+    try {
+        const payload = JSON.parse(String(value || "{}"));
+        return String(payload.scope || "").trim();
+    } catch (_error) {
+        return "";
+    }
+}
+
+function renderActiveModelProfile(profile) {
+    const badge = document.getElementById("model-profile-badge");
+    const link = document.getElementById("model-profile-link");
+    if (!badge || !link) {
+        return;
+    }
+
+    if (!profile) {
+        badge.hidden = true;
+        return;
+    }
+
+    const profileId = String(profile.profile_id || "").trim();
+    const code = profileId ? profileId.toUpperCase() : "";
+    const label = String(profile.label || code || "Default").trim();
+    link.textContent = code ? `${code} · ${label}` : label;
+    badge.hidden = false;
 }

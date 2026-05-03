@@ -19,7 +19,7 @@ def build_default_system_prompt(
     cron_store_path: str | Path | None = None,
     heartbeat_file_path: str | Path | None = None,
     heartbeat_interval_seconds: int | None = None,
-    shell_safety_mode: str = "danger-full-access",
+    shell_safety_mode: str = "workspace-write",
     file_write_enabled: bool = True,
     cron_mutation_enabled: bool = True,
     web_private_network_enabled: bool = False,

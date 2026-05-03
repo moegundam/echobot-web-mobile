@@ -51,6 +51,18 @@ class SessionAgentRunner:
         self._deleted_sessions: set[str] = set()
         self._deleted_sessions_guard = asyncio.Lock()
 
+    def set_provider(self, provider) -> None:
+        self._agent.provider = provider
+
+    def set_generation_defaults(
+        self,
+        *,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+    ) -> None:
+        self._default_temperature = temperature
+        self._default_max_tokens = max_tokens
+
     async def load_session(self, session_name: str) -> ChatSession:
         lock = await self._session_lock(session_name)
         async with lock:

@@ -7,25 +7,32 @@ const SKILL_TOOL_NAMES = new Set([
     "read_skill_resource",
 ]);
 
-export function createTraceModule() {
+export function createTraceModule(deps = {}) {
+    const t = typeof deps.t === "function" ? deps.t : (key, params = {}) => {
+        return String(key).replace(/\{([A-Za-z0-9_]+)\}/g, (_match, name) => {
+            return Object.prototype.hasOwnProperty.call(params, name) ? String(params[name]) : "";
+        });
+    };
     let currentJobId = "";
+    let lastPayload = null;
 
     function resetTracePanel() {
         currentJobId = "";
+        lastPayload = null;
 
         if (DOM.agentTracePanel) {
             DOM.agentTracePanel.hidden = true;
             DOM.agentTracePanel.open = false;
         }
         if (DOM.agentTraceSummaryText) {
-            DOM.agentTraceSummaryText.textContent = "等待后台任务";
+            DOM.agentTraceSummaryText.textContent = t("console.waitingBackgroundJob");
         }
         if (DOM.agentTraceCount) {
-            DOM.agentTraceCount.textContent = "0 条";
+            DOM.agentTraceCount.textContent = t("console.traceCount", { count: 0 });
         }
         if (DOM.agentTraceEvents) {
             DOM.agentTraceEvents.replaceChildren(
-                buildEmptyState("当前没有可显示的 trace。"),
+                buildEmptyState(t("console.traceEmpty")),
             );
         }
     }
@@ -54,6 +61,7 @@ export function createTraceModule() {
     }
 
     function renderTracePayload(payload) {
+        lastPayload = payload || null;
         if (
             !DOM.agentTracePanel
             || !DOM.agentTraceSummaryText
@@ -67,63 +75,77 @@ export function createTraceModule() {
         const events = Array.isArray(payload?.events) ? payload.events : [];
         DOM.agentTracePanel.hidden = false;
         DOM.agentTraceSummaryText.textContent = buildTraceSummaryText(
+            t,
             status,
             events.length,
         );
-        DOM.agentTraceCount.textContent = `${events.length} 条`;
+        DOM.agentTraceCount.textContent = t("console.traceCount", { count: events.length });
 
         if (!events.length) {
             DOM.agentTraceEvents.replaceChildren(
-                buildEmptyState(buildEmptyStateText(status)),
+                buildEmptyState(buildEmptyStateText(t, status)),
             );
             return;
         }
 
         DOM.agentTraceEvents.replaceChildren(
-            ...events.map((event, index) => buildTraceEventCard(event, index)),
+            ...events.map((event, index) => buildTraceEventCard(t, event, index)),
         );
+    }
+
+    function refreshLocalizedText() {
+        if (lastPayload) {
+            renderTracePayload(lastPayload);
+            return;
+        }
+        if (currentJobId) {
+            startTracePanel(currentJobId);
+            return;
+        }
+        resetTracePanel();
     }
 
     return {
         applyTracePayload: applyTracePayload,
+        refreshLocalizedText: refreshLocalizedText,
         resetTracePanel: resetTracePanel,
         startTracePanel: startTracePanel,
     };
 }
 
-function buildTraceSummaryText(status, eventCount) {
+function buildTraceSummaryText(t, status, eventCount) {
     if (status === "failed") {
-        return `后台任务失败，已记录 ${eventCount} 条事件`;
+        return t("console.traceSummaryFailed", { count: eventCount });
     }
     if (status === "cancelled") {
-        return `后台任务已停止，已记录 ${eventCount} 条事件`;
+        return t("console.traceSummaryCancelled", { count: eventCount });
     }
     if (status === "waiting_for_input") {
-        return `后台任务暂停中，等待你的补充信息，已记录 ${eventCount} 条事件`;
+        return t("console.traceSummaryWaiting", { count: eventCount });
     }
     if (status === "completed") {
-        return `后台任务已完成，共 ${eventCount} 条事件`;
+        return t("console.traceSummaryCompleted", { count: eventCount });
     }
     if (eventCount > 0) {
-        return `后台任务运行中，已记录 ${eventCount} 条事件`;
+        return t("console.traceSummaryRunning", { count: eventCount });
     }
-    return "后台任务已启动，等待第一条 trace…";
+    return t("console.traceSummaryStarted");
 }
 
-function buildEmptyStateText(status) {
+function buildEmptyStateText(t, status) {
     if (status === "failed") {
-        return "任务已失败，但暂时没有可显示的 trace。";
+        return t("console.traceEmptyFailed");
     }
     if (status === "cancelled") {
-        return "任务已停止，暂时没有更多 trace。";
+        return t("console.traceEmptyCancelled");
     }
     if (status === "waiting_for_input") {
-        return "Agent 正在等待你的补充信息。";
+        return t("console.traceEmptyWaiting");
     }
     if (status === "completed") {
-        return "任务已完成，但暂时没有可显示的 trace。";
+        return t("console.traceEmptyCompleted");
     }
-    return "Agent 已接管请求，正在等待第一条 trace。";
+    return t("console.traceEmptyStarted");
 }
 
 function buildEmptyState(text) {
@@ -133,7 +155,7 @@ function buildEmptyState(text) {
     return element;
 }
 
-function buildTraceEventCard(event, index) {
+function buildTraceEventCard(t, event, index) {
     const article = document.createElement("article");
     article.className = `agent-trace-event ${resolveTraceEventClassName(event)}`;
 
@@ -142,17 +164,17 @@ function buildTraceEventCard(event, index) {
 
     const title = document.createElement("strong");
     title.className = "agent-trace-event-title";
-    title.textContent = buildTraceEventTitle(event);
+    title.textContent = buildTraceEventTitle(t, event);
 
     const meta = document.createElement("span");
     meta.className = "muted-text agent-trace-event-meta";
-    meta.textContent = buildTraceEventMeta(event, index);
+    meta.textContent = buildTraceEventMeta(t, event, index);
 
     header.appendChild(title);
     header.appendChild(meta);
     article.appendChild(header);
 
-    const summary = buildTraceEventSummary(event);
+    const summary = buildTraceEventSummary(t, event);
     if (summary) {
         const summaryElement = document.createElement("p");
         summaryElement.className = "agent-trace-event-summary";
@@ -184,10 +206,10 @@ function resolveTraceEventClassName(event) {
     return "";
 }
 
-function buildTraceEventMeta(event, index) {
+function buildTraceEventMeta(t, event, index) {
     const parts = [`#${index + 1}`];
     if (Number.isFinite(event?.step)) {
-        parts.push(`第 ${event.step} 步`);
+        parts.push(t("console.traceStep", { step: event.step }));
     }
     const timeText = formatTraceTime(event?.created_at);
     if (timeText) {
@@ -196,19 +218,19 @@ function buildTraceEventMeta(event, index) {
     return parts.join(" · ");
 }
 
-function buildTraceEventTitle(event) {
+function buildTraceEventTitle(t, event) {
     const eventName = String(event?.event || "");
     if (eventName === "turn_started") {
-        return "开始处理";
+        return t("console.traceTitleStarted");
     }
     if (eventName === "turn_completed") {
         if (event?.status === "waiting_for_input") {
-            return "等待用户回复";
+            return t("console.traceTitleWaiting");
         }
-        return "处理完成";
+        return t("console.traceTitleCompleted");
     }
     if (eventName === "turn_failed") {
-        return "处理失败";
+        return t("console.traceTitleFailed");
     }
     if (eventName === "assistant_message") {
         const toolCalls = Array.isArray(event?.message?.tool_calls)
@@ -222,7 +244,7 @@ function buildTraceEventTitle(event) {
                 .map((item) => String(item?.name || "unknown-tool"))
                 .join(", ")}`;
         }
-        return "模型回复";
+        return t("console.traceTitleAssistantMessage");
     }
     if (eventName === "tool_result") {
         return buildToolResultTraceTitle(
@@ -237,39 +259,39 @@ function buildTraceEventTitle(event) {
     return eventName || "trace";
 }
 
-function buildTraceEventSummary(event) {
+function buildTraceEventSummary(t, event) {
     const eventName = String(event?.event || "");
     if (eventName === "turn_started") {
-        return "Agent 已接管当前请求。";
+        return t("console.traceEventStarted");
     }
     if (eventName === "assistant_message") {
         const toolCalls = Array.isArray(event?.message?.tool_calls)
             ? event.message.tool_calls
             : [];
         if (toolCalls.length > 0) {
-            return `计划调用 ${toolCalls.length} 个工具。`;
+            return t("console.traceToolPlan", { count: toolCalls.length });
         }
         const content = traceMessageText(event?.message).trim();
         if (content) {
             return buildExcerpt(content);
         }
-        return "模型返回了一条空消息。";
+        return t("console.traceAssistantEmpty");
     }
     if (eventName === "tool_result") {
-        return event?.is_error ? "工具执行失败。" : "工具执行完成。";
+        return event?.is_error ? t("console.traceToolFailed") : t("console.traceToolCompleted");
     }
     if (eventName === "turn_completed") {
         if (event?.status === "waiting_for_input") {
-            return "后台任务已暂停，等待你的补充信息。";
+            return t("console.traceTurnWaiting");
         }
         const steps = Number.isFinite(event?.steps) ? event.steps : null;
         if (steps !== null) {
-            return `后台任务已完成，共执行 ${steps} 步。`;
+            return t("console.traceTurnCompletedWithSteps", { steps });
         }
-        return "后台任务已完成。";
+        return t("console.traceTurnCompleted");
     }
     if (eventName === "turn_failed") {
-        return String(event?.error || "后台任务执行失败。");
+        return String(event?.error || t("console.traceTurnFailed"));
     }
     const customSummary = String(event?.summary || "").trim();
     if (customSummary) {
@@ -336,7 +358,8 @@ function formatTraceTime(createdAt) {
     if (Number.isNaN(date.getTime())) {
         return rawText;
     }
-    return date.toLocaleTimeString("zh-CN", { hour12: false });
+    const locale = document.documentElement.lang || undefined;
+    return date.toLocaleTimeString(locale, { hour12: false });
 }
 
 function buildToolCallTraceTitle(toolName) {

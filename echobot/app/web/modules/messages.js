@@ -10,9 +10,42 @@ import {
     clearMathTypesetting,
     scheduleMathTypesetting,
 } from "./math.js";
-import { buildMarkdownFragment } from "./markdown.js";
+import {
+    buildMarkdownFragment,
+    configureMarkdownI18n,
+} from "./markdown.js?v=site-public-6";
 
 let pendingScrollFrameId = 0;
+let messageT = (key) => key;
+
+export function configureMessageI18n(options = {}) {
+    if (typeof options.t === "function") {
+        messageT = options.t;
+        configureMarkdownI18n({ t: options.t });
+    }
+}
+
+export function refreshMessagesLocalizedText() {
+    if (!DOM.messages) {
+        return;
+    }
+
+    DOM.messages.querySelectorAll("[data-image-preview='true']").forEach((button) => {
+        const label = button.dataset.previewLabel || messageT("console.previewImage");
+        button.title = label;
+        button.setAttribute("aria-label", label);
+    });
+    DOM.messages.querySelectorAll(".message-image").forEach((image) => {
+        if (!image.getAttribute("alt")) {
+            image.alt = messageT("console.attachedImage");
+        }
+    });
+    DOM.messages.querySelectorAll(".message-file-meta").forEach((meta) => {
+        const downloadUrl = meta.dataset.downloadUrl || "";
+        const sizeBytes = Number(meta.dataset.sizeBytes || 0);
+        meta.textContent = buildFileAttachmentMeta(downloadUrl, sizeBytes);
+    });
+}
 
 export function addMessage(kind, content, label, options = {}) {
     const messageId = `msg-${++messageState.counter}`;
@@ -253,13 +286,14 @@ function buildImageBlock(imageUrl) {
     previewButton.className = "message-image-link";
     previewButton.dataset.imagePreview = "true";
     previewButton.dataset.imageUrl = imageUrl;
-    previewButton.title = "点击预览图片";
-    previewButton.setAttribute("aria-label", "预览图片");
+    previewButton.dataset.previewLabel = "";
+    previewButton.title = messageT("console.previewImage");
+    previewButton.setAttribute("aria-label", messageT("console.previewImage"));
 
     const image = document.createElement("img");
     image.className = "message-image";
     image.src = imageUrl;
-    image.alt = "Attached image";
+    image.alt = messageT("console.attachedImage");
     image.loading = "lazy";
 
     previewButton.appendChild(image);
@@ -271,7 +305,7 @@ function buildFileAttachmentBlock(fileAttachment) {
     const attachment = fileAttachment && typeof fileAttachment === "object"
         ? fileAttachment
         : {};
-    const fileName = String(attachment.name || "").trim() || "file";
+    const fileName = String(attachment.name || "").trim() || messageT("console.unnamedFile");
     const downloadUrl = String(attachment.download_url || "").trim();
     const sizeBytes = Number(attachment.size_bytes || 0);
 
@@ -300,6 +334,8 @@ function buildFileAttachmentBlock(fileAttachment) {
 
     const meta = document.createElement("div");
     meta.className = "message-file-meta";
+    meta.dataset.downloadUrl = downloadUrl;
+    meta.dataset.sizeBytes = String(sizeBytes || 0);
     meta.textContent = buildFileAttachmentMeta(downloadUrl, sizeBytes);
     if (meta.textContent) {
         body.appendChild(meta);
@@ -313,9 +349,9 @@ function buildFileAttachmentBlock(fileAttachment) {
 function buildFileAttachmentMeta(downloadUrl, sizeBytes) {
     const parts = [];
     if (downloadUrl) {
-        parts.push("点击下载");
+        parts.push(messageT("console.clickDownload"));
     } else {
-        parts.push("已上传");
+        parts.push(messageT("console.uploaded"));
     }
 
     const sizeText = formatFileSize(sizeBytes);

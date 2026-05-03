@@ -6,6 +6,7 @@ import logging
 from ..channels import InboundMessage, MessageBus, OutboundMessage
 from ..channels.types import DeliveryTarget
 from ..commands.bindings import GatewayCommandContext, dispatch_gateway_command
+from ..commands.route_sessions import parse_route_session_command
 from ..models import MessageContent, is_message_content_empty, message_content_to_text
 from ..runtime.scheduled_tasks import (
     build_cron_job_executor as build_shared_cron_job_executor,
@@ -98,6 +99,7 @@ class GatewayRuntime:
 
     async def _handle_inbound_message(self, message: InboundMessage) -> None:
         route_key = message.route_key
+        delete_session_name = await self._route_delete_session_name(message)
         command_result = await dispatch_gateway_command(
             GatewayCommandContext(
                 coordinator=self._context.coordinator,
@@ -111,6 +113,11 @@ class GatewayRuntime:
             message.text,
         )
         if command_result is not None:
+            if delete_session_name:
+                await self._discard_async_results_for_session(
+                    message,
+                    delete_session_name,
+                )
             await self._bus.publish_outbound(
                 OutboundMessage(
                     address=message.address,
@@ -128,6 +135,7 @@ class GatewayRuntime:
             message.address,
             message.metadata,
         )
+        immediate_response_sent = asyncio.Event()
         try:
             image_urls = (
                 list(message.image_urls)
@@ -150,21 +158,41 @@ class GatewayRuntime:
                 ),
                 completion_callback=self._completion_callback_for_session(
                     route_session.session_name,
+                    immediate_response_sent=immediate_response_sent,
                 ),
             )
             content: MessageContent = execution.response_content
+            if execution.delegated and not execution.completed:
+                try:
+                    if not is_message_content_empty(content):
+                        await self._bus.publish_outbound(
+                            OutboundMessage(
+                                address=message.address,
+                                content=content,
+                                metadata=dict(message.metadata),
+                            )
+                        )
+                finally:
+                    immediate_response_sent.set()
+                await self._session_service.touch_route_session(
+                    route_key,
+                    route_session.session_name,
+                    updated_at=execution.session.updated_at,
+                )
+                return
+            immediate_response_sent.set()
             await self._session_service.touch_route_session(
                 route_key,
                 route_session.session_name,
                 updated_at=execution.session.updated_at,
             )
-            if is_message_content_empty(content) and execution.delegated and not execution.completed:
-                return
             if is_message_content_empty(content):
                 content = "Model returned no text content."
         except ValueError as exc:
+            immediate_response_sent.set()
             content = str(exc)
         except RuntimeError as exc:
+            immediate_response_sent.set()
             content = f"Request failed: {exc}"
         await self._bus.publish_outbound(
             OutboundMessage(
@@ -177,19 +205,45 @@ class GatewayRuntime:
     def _completion_callback_for_session(
         self,
         session_name: str,
+        *,
+        immediate_response_sent: asyncio.Event | None = None,
     ):
         async def notify(job) -> None:
+            if immediate_response_sent is not None:
+                await immediate_response_sent.wait()
             await self._publish_session_response(
                 session_name,
                 job.final_response_content,
                 metadata={
                     "async_result": True,
+                    "echobot_session_name": session_name,
                     "job_id": job.job_id,
                     "job_status": job.status,
                 },
             )
 
         return notify
+
+    async def _route_delete_session_name(self, message: InboundMessage) -> str:
+        command = parse_route_session_command(message.text)
+        if command is None or command.action != "delete":
+            return ""
+
+        current = await self._session_service.current_route_session(message.route_key)
+        return current.session_name
+
+    async def _discard_async_results_for_session(
+        self,
+        message: InboundMessage,
+        session_name: str,
+    ) -> None:
+        await self._bus.discard_outbound(
+            lambda outbound: (
+                outbound.address == message.address
+                and bool(outbound.metadata.get("async_result"))
+                and outbound.metadata.get("echobot_session_name") == session_name
+            )
+        )
 
     def _build_cron_job_executor(self):
         return build_shared_cron_job_executor(

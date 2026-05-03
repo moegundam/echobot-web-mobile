@@ -8,7 +8,10 @@ export function createCronController(deps) {
         isSettingsPanelOpen,
         requestJson,
         setRunStatus = () => {},
+        t = (key) => key,
     } = deps;
+    let lastStatusPayload = null;
+    let lastJobs = null;
 
     function handleCronPanelToggle() {
         if (!DOM.cronPanel || !DOM.cronSummaryText) {
@@ -21,16 +24,16 @@ export function createCronController(deps) {
 
         if (!isExpanded || !settingsPanelOpen) {
             stopCronPolling();
-            DOM.cronSummaryText.textContent = isExpanded ? "已展开" : "已隐藏";
+            DOM.cronSummaryText.textContent = isExpanded ? t("console.expanded") : t("console.hidden");
             if (DOM.cronStatus) {
                 DOM.cronStatus.textContent = settingsPanelOpen
-                    ? "展开后加载 CRON 定时任务"
-                    : "展开设置面板后查看 CRON 定时任务";
+                    ? t("console.cronLoadAfterExpand")
+                    : t("console.cronOpenSettingsFirst");
             }
             return;
         }
 
-        DOM.cronSummaryText.textContent = "正在加载…";
+        DOM.cronSummaryText.textContent = t("console.loadingEllipsis");
         void refreshCronPanel();
         startCronPolling();
     }
@@ -60,16 +63,16 @@ export function createCronController(deps) {
         }
 
         try {
-            setCronPanelLoading(true, "正在加载 CRON 定时任务…");
+            setCronPanelLoading(true, t("console.cronLoading"));
             const { statusPayload, jobs } = await loadCronPanelData();
             renderCronPanel(statusPayload, jobs);
         } catch (error) {
             console.error(error);
             if (DOM.cronSummaryText) {
-                DOM.cronSummaryText.textContent = "加载失败";
+                DOM.cronSummaryText.textContent = t("console.loadFailed");
             }
             if (DOM.cronStatus) {
-                DOM.cronStatus.textContent = error.message || "CRON 加载失败";
+                DOM.cronStatus.textContent = error.message || t("console.cronLoadFailed");
             }
         } finally {
             setCronPanelLoading(false);
@@ -88,6 +91,8 @@ export function createCronController(deps) {
     }
 
     function renderCronPanel(statusPayload, jobs) {
+        lastStatusPayload = statusPayload || null;
+        lastJobs = Array.isArray(jobs) ? jobs : [];
         if (DOM.cronSummaryText) {
             DOM.cronSummaryText.textContent = buildCronSummaryText(statusPayload, jobs);
         }
@@ -99,25 +104,25 @@ export function createCronController(deps) {
 
     function buildCronSummaryText(statusPayload, jobs) {
         if (!statusPayload.enabled) {
-            return "调度器未运行";
+            return t("console.schedulerStopped");
         }
         if (!jobs || jobs.length === 0) {
-            return "没有任务";
+            return t("console.noJobs");
         }
-        return `${jobs.length} 个任务`;
+        return t("console.jobCount", { count: jobs.length });
     }
 
     function buildCronStatusText(statusPayload, jobs) {
-        const statusText = statusPayload.enabled ? "调度器运行中" : "调度器未运行";
+        const statusText = statusPayload.enabled ? t("console.schedulerRunning") : t("console.schedulerStopped");
         if (!jobs || jobs.length === 0) {
-            return `${statusText} · 当前没有 CRON 定时任务`;
+            return `${statusText} · ${t("console.cronEmpty")}`;
         }
 
         const nextRunText = formatTimestamp(statusPayload.next_run_at);
         if (!nextRunText) {
-            return `${statusText} · 共 ${jobs.length} 个任务`;
+            return `${statusText} · ${t("console.totalJobs", { count: jobs.length })}`;
         }
-        return `${statusText} · 共 ${jobs.length} 个任务 · 下次执行 ${nextRunText}`;
+        return `${statusText} · ${t("console.totalJobs", { count: jobs.length })} · ${t("console.nextRun", { time: nextRunText })}`;
     }
 
     function renderCronJobs(jobs) {
@@ -129,7 +134,7 @@ export function createCronController(deps) {
         if (!jobs || jobs.length === 0) {
             const empty = document.createElement("p");
             empty.className = "cron-empty";
-            empty.textContent = "当前没有 CRON 定时任务。";
+            empty.textContent = t("console.cronEmpty");
             DOM.cronJobs.appendChild(empty);
             return;
         }
@@ -148,7 +153,7 @@ export function createCronController(deps) {
 
         const title = document.createElement("h3");
         title.className = "cron-job-title";
-        title.textContent = job.name || "未命名任务";
+        title.textContent = job.name || t("console.unnamedJob");
 
         const idText = document.createElement("span");
         idText.className = "cron-job-id";
@@ -159,16 +164,16 @@ export function createCronController(deps) {
 
         const meta = document.createElement("div");
         meta.className = "cron-job-meta";
-        meta.appendChild(buildCronBadge(job.enabled ? "已启用" : "已停用", job.enabled ? "enabled" : "disabled"));
+        meta.appendChild(buildCronBadge(job.enabled ? t("console.enabled") : t("console.disabled"), job.enabled ? "enabled" : "disabled"));
         meta.appendChild(buildCronBadge(buildCronLastStatusLabel(job.last_status), cronStatusClassName(job.last_status)));
-        meta.appendChild(buildCronMetaText(`计划: ${job.schedule || "-"}`));
-        meta.appendChild(buildCronMetaText(`会话: ${job.session_name || "-"}`));
-        meta.appendChild(buildCronMetaText(`类型: ${job.payload_kind || "-"}`));
+        meta.appendChild(buildCronMetaText(t("console.scheduleMeta", { value: job.schedule || "-" })));
+        meta.appendChild(buildCronMetaText(t("console.sessionMeta", { value: job.session_name || "-" })));
+        meta.appendChild(buildCronMetaText(t("console.typeMeta", { value: job.payload_kind || "-" })));
 
         const times = document.createElement("div");
         times.className = "cron-job-times";
-        times.appendChild(buildCronMetaText(`下次: ${formatTimestamp(job.next_run_at) || "—"}`));
-        times.appendChild(buildCronMetaText(`上次: ${formatTimestamp(job.last_run_at) || "—"}`));
+        times.appendChild(buildCronMetaText(t("console.nextMeta", { value: formatTimestamp(job.next_run_at) || "-" })));
+        times.appendChild(buildCronMetaText(t("console.previousMeta", { value: formatTimestamp(job.last_run_at) || "-" })));
 
         container.appendChild(header);
         container.appendChild(meta);
@@ -180,7 +185,7 @@ export function createCronController(deps) {
         const cancelButton = document.createElement("button");
         cancelButton.type = "button";
         cancelButton.className = "ghost-button ghost-button-compact ghost-button-danger";
-        cancelButton.textContent = "取消";
+        cancelButton.textContent = t("console.cancel");
         cancelButton.disabled = panelState.cronLoading || !job.id;
         cancelButton.addEventListener("click", () => {
             void handleCancelCronJob(job);
@@ -192,7 +197,7 @@ export function createCronController(deps) {
         if (job.last_error) {
             const error = document.createElement("div");
             error.className = "cron-job-error";
-            error.textContent = `错误: ${job.last_error}`;
+            error.textContent = t("console.errorMeta", { value: job.last_error });
             container.appendChild(error);
         }
 
@@ -205,13 +210,13 @@ export function createCronController(deps) {
             return;
         }
 
-        const jobName = String(job?.name || "未命名任务");
-        if (!window.confirm(`确定取消 CRON 任务“${jobName}”吗？`)) {
+        const jobName = String(job?.name || t("console.unnamedJob"));
+        if (!window.confirm(t("console.cancelCronConfirm", { job: jobName }))) {
             return;
         }
 
         try {
-            setCronPanelLoading(true, `正在取消 CRON 任务：${jobName}…`);
+            setCronPanelLoading(true, t("console.cancellingCronJob", { job: jobName }));
             await requestJson(`/api/cron/jobs/${encodeURIComponent(jobId)}`, {
                 method: "DELETE",
             });
@@ -219,14 +224,14 @@ export function createCronController(deps) {
             const { statusPayload, jobs } = await loadCronPanelData();
             renderCronPanel(statusPayload, jobs);
 
-            const statusText = `已取消 CRON 任务：${jobName}`;
+            const statusText = t("console.cronJobCancelled", { job: jobName });
             if (DOM.cronStatus) {
                 DOM.cronStatus.textContent = statusText;
             }
             setRunStatus(statusText);
         } catch (error) {
             console.error(error);
-            const message = error.message || "取消 CRON 任务失败";
+            const message = error.message || t("console.cancelCronFailed");
             if (DOM.cronStatus) {
                 DOM.cronStatus.textContent = message;
             }
@@ -273,18 +278,18 @@ export function createCronController(deps) {
 
     function buildCronLastStatusLabel(status) {
         if (status === "ok") {
-            return "最近成功";
+            return t("console.lastOk");
         }
         if (status === "error") {
-            return "最近失败";
+            return t("console.lastError");
         }
         if (status === "running") {
-            return "运行中";
+            return t("console.running");
         }
         if (status === "skipped") {
-            return "已跳过";
+            return t("console.skipped");
         }
-        return "暂无状态";
+        return t("console.noStatus");
     }
 
     function cronStatusClassName(status) {
@@ -303,5 +308,18 @@ export function createCronController(deps) {
     return {
         handleCronPanelToggle,
         refreshCronPanel,
+        refreshLocalizedText() {
+            if (lastStatusPayload) {
+                renderCronPanel(lastStatusPayload, lastJobs);
+                return;
+            }
+            if (DOM.cronPanel && DOM.cronSummaryText) {
+                const isExpanded = DOM.cronPanel.open;
+                DOM.cronSummaryText.textContent = isExpanded ? t("console.expanded") : t("console.hidden");
+            }
+            if (DOM.cronStatus) {
+                DOM.cronStatus.textContent = t("console.cronLoadAfterExpand");
+            }
+        },
     };
 }

@@ -640,6 +640,15 @@ class GatewayRuntimeTests(unittest.IsolatedAsyncioTestCase):
                 "Switched route mode to: force_agent",
                 switched_to_agent.text,
             )
+            self.assertTrue(context.coordinator.delegated_ack_enabled)
+
+            original_touch_route_session = gateway._session_service.touch_route_session
+
+            async def slow_touch_route_session(*args, **kwargs):
+                await asyncio.sleep(0.05)
+                return await original_touch_route_session(*args, **kwargs)
+
+            gateway._session_service.touch_route_session = slow_touch_route_session
 
             await gateway.handle_inbound_message(
                 make_inbound("How are you today?", message_id=31),

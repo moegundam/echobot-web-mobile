@@ -110,6 +110,10 @@ class DecisionEngine:
         self._decider_agent = decider_agent
         self._max_tokens = max(int(max_tokens), 1)
 
+    def set_provider(self, provider) -> None:
+        if self._decider_agent is not None:
+            self._decider_agent.provider = provider
+
     async def decide(
         self,
         user_input: str,

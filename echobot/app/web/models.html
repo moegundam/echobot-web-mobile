@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>EchoBot Model Profiles</title>
+    <link rel="stylesheet" href="/web/assets/styles/shell-pages.css?v=site-public-6">
+</head>
+<body class="admin-page models-page" data-page-title-key="models.pageTitle">
+    <main id="models-root" class="admin-root models-root">
+        <header class="admin-header">
+            <div>
+                <h1 data-i18n-key="models.heading">Model Profiles</h1>
+                <p data-i18n-key="models.description">Character model routing</p>
+            </div>
+            <div class="shell-header-controls">
+                <div class="language-switcher" data-language-switcher></div>
+                <div class="display-mode-switcher" data-display-mode-switcher></div>
+            </div>
+        </header>
+        <nav class="admin-grid guide-nav" aria-label="Model profile quick links" data-i18n-aria-label-key="models.linksAria">
+            <a href="/admin" data-i18n-key="guide.backToAdmin">Back to Admin</a>
+            <a href="/console" data-i18n-key="admin.console">Console</a>
+            <a href="/admin/structure" data-i18n-key="admin.structure">Site Structure</a>
+            <a href="/admin/channels" data-i18n-key="admin.channels">Channels</a>
+            <a href="/admin/guide" data-i18n-key="admin.guide">Operation Guide</a>
+        </nav>
+        <section class="models-layout" aria-label="Model profile editor" data-i18n-aria-label-key="models.editorAria">
+            <aside class="model-profile-sidebar">
+                <button id="model-profile-create" class="model-profile-create" type="button" data-i18n-key="models.create">Add profile</button>
+                <div id="model-profile-list" class="model-profile-list"></div>
+            </aside>
+            <form id="model-profile-form" class="model-profile-form">
+                <div class="model-profile-form-header">
+                    <div>
+                        <h2 id="model-profile-title">Model profile</h2>
+                        <p id="model-profile-status">loading...</p>
+                    </div>
+                    <div class="model-profile-actions">
+                        <button id="model-profile-activate" type="button" data-i18n-key="models.activate">Activate</button>
+                        <button id="model-profile-save" type="submit" data-i18n-key="models.save">Save</button>
+                    </div>
+                </div>
+                <label>
+                    <span data-i18n-key="models.label">Label</span>
+                    <input id="model-profile-label" type="text" maxlength="80" autocomplete="off">
+                </label>
+                <section class="model-profile-section">
+                    <h3 data-i18n-key="models.chat">Chat model</h3>
+                    <div class="model-profile-field-grid">
+                        <label>
+                            <span data-i18n-key="models.provider">Provider</span>
+                            <input id="model-chat-provider" type="text" autocomplete="off">
+                        </label>
+                        <label>
+                            <span data-i18n-key="models.model">Model</span>
+                            <input id="model-chat-model" type="text" autocomplete="off">
+                        </label>
+                        <label>
+                            <span data-i18n-key="models.baseUrl">Base URL</span>
+                            <input id="model-chat-base-url" type="url" autocomplete="off">
+                        </label>
+                        <label>
+                            <span data-i18n-key="models.apiKey">API key</span>
+                            <input id="model-chat-api-key" type="password" autocomplete="off" data-i18n-placeholder-key="models.apiKeyPlaceholder">
+                            <small id="model-chat-api-key-status"></small>
+                        </label>
+                        <label class="model-profile-checkbox">
+                            <input id="model-chat-clear-api-key" type="checkbox">
+                            <span data-i18n-key="models.clearApiKey">Clear saved key</span>
+                        </label>
+                        <label>
+                            <span data-i18n-key="models.temperature">Temperature</span>
+                            <input id="model-chat-temperature" type="number" min="0" max="2" step="0.1">
+                        </label>
+                        <label>
+                            <span data-i18n-key="models.maxTokens">Max tokens</span>
+                            <input id="model-chat-max-tokens" type="number" min="1" step="1">
+                        </label>
+                    </div>
+                </section>
+                <section class="model-profile-section">
+                    <h3 data-i18n-key="models.tts">TTS model</h3>
+                    <div class="model-profile-field-grid">
+                        <label>
+                            <span data-i18n-key="models.provider">Provider</span>
+                            <select id="model-tts-provider"></select>
+                        </label>
+                        <label>
+                            <span data-i18n-key="models.model">Model</span>
+                            <input id="model-tts-model" type="text" autocomplete="off">
+                        </label>
+                        <label>
+                            <span data-i18n-key="models.baseUrl">Base URL</span>
+                            <input id="model-tts-base-url" type="url" autocomplete="off">
+                        </label>
+                        <label>
+                            <span data-i18n-key="models.apiKey">API key</span>
+                            <input id="model-tts-api-key" type="password" autocomplete="off" data-i18n-placeholder-key="models.apiKeyPlaceholder">
+                            <small id="model-tts-api-key-status"></small>
+                        </label>
+                        <label class="model-profile-checkbox">
+                            <input id="model-tts-clear-api-key" type="checkbox">
+                            <span data-i18n-key="models.clearApiKey">Clear saved key</span>
+                        </label>
+                        <label>
+                            <span data-i18n-key="models.voice">Voice</span>
+                            <input id="model-tts-voice" type="text" autocomplete="off">
+                        </label>
+                    </div>
+                </section>
+                <section class="model-profile-section">
+                    <h3 data-i18n-key="models.asr">ASR model</h3>
+                    <div class="model-profile-field-grid">
+                        <label>
+                            <span data-i18n-key="models.provider">Provider</span>
+                            <select id="model-asr-provider"></select>
+                        </label>
+                        <label>
+                            <span data-i18n-key="models.model">Model</span>
+                            <input id="model-asr-model" type="text" autocomplete="off">
+                        </label>
+                        <label>
+                            <span data-i18n-key="models.baseUrl">Base URL</span>
+                            <input id="model-asr-base-url" type="url" autocomplete="off">
+                        </label>
+                        <label>
+                            <span data-i18n-key="models.apiKey">API key</span>
+                            <input id="model-asr-api-key" type="password" autocomplete="off" data-i18n-placeholder-key="models.apiKeyPlaceholder">
+                            <small id="model-asr-api-key-status"></small>
+                        </label>
+                        <label class="model-profile-checkbox">
+                            <input id="model-asr-clear-api-key" type="checkbox">
+                            <span data-i18n-key="models.clearApiKey">Clear saved key</span>
+                        </label>
+                        <label>
+                            <span data-i18n-key="models.language">Language</span>
+                            <input id="model-asr-language" type="text" autocomplete="off">
+                        </label>
+                    </div>
+                </section>
+                <section class="model-profile-section">
+                    <h3 data-i18n-key="models.live2d">Live2D model</h3>
+                    <label>
+                        <span data-i18n-key="models.live2dSelection">Selection</span>
+                        <select id="model-live2d-selection"></select>
+                    </label>
+                </section>
+            </form>
+        </section>
+    </main>
+    <script type="module" src="/web/assets/models-app.js?v=site-public-6"></script>
+</body>
+</html>

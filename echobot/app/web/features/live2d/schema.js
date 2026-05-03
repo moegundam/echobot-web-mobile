@@ -145,7 +145,7 @@ function normalizeLive2DHotkeys(items) {
             .map((item) => ({
                 hotkey_key: String(item.hotkey_key || item.hotkey_id || ""),
                 hotkey_id: String(item.hotkey_id || ""),
-                name: String(item.name || item.action || "热键"),
+                name: String(item.name || item.action || "Hotkey"),
                 action: String(item.action || ""),
                 file: String(item.file || ""),
                 shortcut_tokens: Array.isArray(item.shortcut_tokens)

@@ -1,10 +1,11 @@
 import { DOM } from "../../core/dom.js";
+import { appState } from "../../core/store.js";
 import { readJson, removeStoredValue, writeJson } from "../../core/storage.js";
-import { createStageBackgroundController } from "./backgrounds.js";
-import { createLive2DConfigController } from "./config.js";
-import { createLive2DControlsController } from "./controls.js";
-import { createStageEffectsController } from "./effects.js";
-import { createLive2DModelController } from "./model.js";
+import { createStageBackgroundController } from "./backgrounds.js?v=site-public-6";
+import { createLive2DConfigController } from "./config.js?v=site-public-6";
+import { createLive2DControlsController } from "./controls.js?v=site-public-6";
+import { createStageEffectsController } from "./effects.js?v=site-public-6";
+import { createLive2DModelController } from "./model.js?v=site-public-6";
 import { createLive2DSceneController } from "./scene.js";
 
 export function createLive2DModule(deps) {
@@ -14,6 +15,7 @@ export function createLive2DModule(deps) {
         roundTo,
         responseToError,
         setRunStatus,
+        t = (key) => key,
     } = deps;
 
     function setStageMessage(text) {
@@ -22,6 +24,7 @@ export function createLive2DModule(deps) {
             return;
         }
 
+        delete DOM.stageMessage.dataset.i18nKey;
         DOM.stageMessage.textContent = message;
         DOM.stageMessage.hidden = message === "";
     }
@@ -32,6 +35,7 @@ export function createLive2DModule(deps) {
         clamp,
         roundTo,
         setRunStatus,
+        t,
         applyStageLightingVars(...args) {
             sceneController?.applyStageLightingVars(...args);
         },
@@ -45,6 +49,7 @@ export function createLive2DModule(deps) {
         roundTo,
         responseToError,
         setRunStatus,
+        t,
         applyStageEffectsToRuntime(...args) {
             effectsController.applyStageEffectsToRuntime(...args);
         },
@@ -56,6 +61,7 @@ export function createLive2DModule(deps) {
         readJson,
         removeStoredValue,
         setStageMessage,
+        t,
         writeJson,
     });
 
@@ -71,6 +77,7 @@ export function createLive2DModule(deps) {
         },
         requestJson,
         setRunStatus,
+        t,
         toggleExpression(...args) {
             return modelController.toggleExpression(...args);
         },
@@ -103,6 +110,7 @@ export function createLive2DModule(deps) {
         responseToError,
         setRunStatus,
         setStageMessage,
+        t,
         applyLive2DMouseFollowSetting(...args) {
             modelController.applyLive2DMouseFollowSetting(...args);
         },
@@ -162,6 +170,12 @@ export function createLive2DModule(deps) {
         initializePixiApplication: sceneController.initializePixiApplication,
         loadLive2DModel: modelController.loadLive2DModel,
         renderLive2DControls: controlsController.renderLive2DControls,
+        refreshLocalizedText() {
+            configController.refreshLocalizedText?.();
+            backgroundController.refreshLocalizedText?.();
+            effectsController.refreshLocalizedText?.();
+            controlsController.renderLive2DControls(appState.config && appState.config.live2d);
+        },
         resetLive2DViewToDefault: modelController.resetLive2DViewToDefault,
         setStageMessage,
     };

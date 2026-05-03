@@ -9,6 +9,7 @@ export function createLive2DModelController(deps) {
         readJson,
         removeStoredValue,
         setStageMessage,
+        t = (key) => key,
         writeJson,
     } = deps;
 
@@ -86,7 +87,7 @@ export function createLive2DModelController(deps) {
 
     function assertSelectionReady(selectionKey) {
         if (!getSelectionRuntimeState(selectionKey).canInteract) {
-            throw new Error("Live2D 模型尚未就绪。");
+            throw new Error(t("console.live2dRuntimeNotReady"));
         }
     }
 
@@ -97,11 +98,11 @@ export function createLive2DModelController(deps) {
         if (!live2dConfig.available || !live2dConfig.model_url) {
             disposeCurrentLive2DModel();
             clearSelectionState();
-            setStageMessage("未找到 Live2D 模型。请检查 .echobot/live2d 目录。");
+            setStageMessage(t("console.live2dModelMissing"));
             return false;
         }
 
-        setStageMessage("正在加载 Live2D 模型…");
+        setStageMessage(t("console.live2dLoading"));
 
         try {
             const model = await window.PIXI.live2d.Live2DModel.from(live2dConfig.model_url, {
@@ -136,9 +137,9 @@ export function createLive2DModelController(deps) {
             console.error(error);
             if (loadToken === live2dState.live2dLoadToken) {
                 restoreSelectionState();
-                setStageMessage(`模型加载失败：${error.message || error}`);
+                setStageMessage(t("console.live2dModelLoadFailedWithError", { error: error.message || error }));
             }
-            throw new Error(`加载 Live2D 模型失败：${error.message || error}`);
+            throw new Error(t("console.live2dModelLoadFailedWithError", { error: error.message || error }));
         }
     }
 
@@ -649,7 +650,7 @@ export function createLive2DModelController(deps) {
 
     function buildLive2DTransformSnapshot() {
         const model = live2dState.live2dModel;
-        if (!model) {
+        if (!model || !live2dState.pixiApp) {
             return null;
         }
 
@@ -659,6 +660,8 @@ export function createLive2DModelController(deps) {
                 x: roundTo(model.x, 2),
                 y: roundTo(model.y, 2),
                 scale: roundTo(model.scale.x, 4),
+                stageWidth: roundTo(live2dState.pixiApp.screen.width, 2),
+                stageHeight: roundTo(live2dState.pixiApp.screen.height, 2),
             },
         };
     }
@@ -670,11 +673,40 @@ export function createLive2DModelController(deps) {
             && typeof payload.x === "number"
             && typeof payload.y === "number"
             && typeof payload.scale === "number"
+            && canRestoreSavedLive2DTransform(payload)
         ) {
             return payload;
         }
 
         return null;
+    }
+
+    function canRestoreSavedLive2DTransform(payload) {
+        if (!live2dState.pixiApp) {
+            return false;
+        }
+
+        const savedWidth = Number(payload.stageWidth);
+        const savedHeight = Number(payload.stageHeight);
+        const currentWidth = Math.max(live2dState.pixiApp.screen.width, 1);
+        const currentHeight = Math.max(live2dState.pixiApp.screen.height, 1);
+        if (
+            !Number.isFinite(savedWidth)
+            || !Number.isFinite(savedHeight)
+            || savedWidth <= 0
+            || savedHeight <= 0
+        ) {
+            return false;
+        }
+
+        const widthRatio = savedWidth / currentWidth;
+        const heightRatio = savedHeight / currentHeight;
+        return (
+            widthRatio >= 0.72
+            && widthRatio <= 1.38
+            && heightRatio >= 0.72
+            && heightRatio <= 1.38
+        );
     }
 
     function clearSavedLive2DTransform() {
@@ -757,7 +789,7 @@ export function createLive2DModelController(deps) {
         const normalizedSelectionKey = resolveActionSelectionKey(selectionKey);
         const normalizedItem = normalizeExpressionItem(expressionItem);
         if (!normalizedItem) {
-            throw new Error("无效的 Live2D 表情。");
+            throw new Error(t("console.live2dInvalidExpression"));
         }
         assertSelectionReady(normalizedSelectionKey);
 
@@ -795,11 +827,11 @@ export function createLive2DModelController(deps) {
         const model = live2dState.live2dModel;
         const normalizedItem = normalizeMotionItem(motionItem);
         if (!model || !normalizedItem) {
-            throw new Error("无效的 Live2D 动作。");
+            throw new Error(t("console.live2dInvalidMotion"));
         }
         assertSelectionReady(normalizedSelectionKey);
         if (typeof model.motion !== "function") {
-            throw new Error("当前 Live2D 运行时不支持动作播放。");
+            throw new Error(t("console.live2dMotionUnsupported"));
         }
 
         await model.motion(normalizedItem.group, normalizedItem.index);
@@ -813,7 +845,7 @@ export function createLive2DModelController(deps) {
         const selectionKey = selectionKeyFromConfig(live2dConfig);
         const normalizedHotkey = normalizeHotkeyItem(hotkeyItem);
         if (!normalizedHotkey || !normalizedHotkey.supported) {
-            throw new Error("不支持的 Live2D 热键。");
+            throw new Error(t("console.live2dUnsupportedHotkey"));
         }
 
         if (normalizedHotkey.action === "ToggleExpression") {
@@ -821,7 +853,7 @@ export function createLive2DModelController(deps) {
                 (item) => item.file === normalizedHotkey.file,
             );
             if (!expressionItem) {
-                throw new Error(`未找到表情：${normalizedHotkey.file}`);
+                throw new Error(t("console.live2dExpressionNotFound", { file: normalizedHotkey.file }));
             }
             const result = await toggleExpression(expressionItem, selectionKey);
             return {
@@ -835,7 +867,7 @@ export function createLive2DModelController(deps) {
                 (item) => item.file === normalizedHotkey.file,
             );
             if (!motionItem) {
-                throw new Error(`未找到动作：${normalizedHotkey.file}`);
+                throw new Error(t("console.live2dMotionNotFound", { file: normalizedHotkey.file }));
             }
             const result = await playMotion(motionItem, selectionKey);
             return {
@@ -855,7 +887,7 @@ export function createLive2DModelController(deps) {
             };
         }
 
-        throw new Error(`不支持的 Live2D 热键动作：${normalizedHotkey.action}`);
+        throw new Error(t("console.live2dUnsupportedHotkeyAction", { action: normalizedHotkey.action }));
     }
 
     function isExpressionActive(selectionKey, file) {
@@ -929,7 +961,7 @@ export function createLive2DModelController(deps) {
             cache: "no-store",
         });
         if (!response.ok) {
-            throw new Error(`加载表情失败：${expressionItem.name}`);
+            throw new Error(t("console.live2dExpressionLoadFailed", { name: expressionItem.name }));
         }
 
         const payload = await response.json();

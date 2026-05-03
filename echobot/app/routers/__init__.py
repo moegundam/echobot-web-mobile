@@ -1,4 +1,17 @@
-from . import attachments, chat, channels, cron, health, heartbeat, roles, sessions, web
+from . import (
+    attachments,
+    chat,
+    channels,
+    cron,
+    health,
+    heartbeat,
+    model_profiles,
+    openwebui,
+    roles,
+    sessions,
+    stage,
+    web,
+)
 
 __all__ = [
     "attachments",
@@ -7,7 +20,10 @@ __all__ = [
     "cron",
     "health",
     "heartbeat",
+    "model_profiles",
+    "openwebui",
     "roles",
     "sessions",
+    "stage",
     "web",
 ]

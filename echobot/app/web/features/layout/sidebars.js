@@ -6,7 +6,9 @@ const SESSION_SIDEBAR_STORAGE_KEY = "echobot.web.session_sidebar_open";
 const ROLE_SIDEBAR_STORAGE_KEY = "echobot.web.role_sidebar_open";
 const LIVE2D_DRAWER_TABS = ["expression", "motion", "hotkey"];
 
-export function createSidebarController() {
+export function createSidebarController({ t } = {}) {
+    const translate = typeof t === "function" ? t : (key) => key;
+
     function ensureSidebarToggleButtons() {
         const sessionToggle = DOM.sessionSidebarToggle;
         if (!sessionToggle) {
@@ -27,11 +29,11 @@ export function createSidebarController() {
             roleToggle.id = "role-sidebar-toggle";
             roleToggle.type = "button";
             roleToggle.className = "ghost-button ghost-button-compact";
-            roleToggle.textContent = "角色卡";
             actions.appendChild(roleToggle);
         }
 
         DOM.roleSidebarToggle = roleToggle;
+        updateSidebarToggleLabels();
     }
 
     function stopSummaryButtonToggle(event) {
@@ -76,12 +78,10 @@ export function createSidebarController() {
             DOM.sessionSidebarBackdrop.hidden = !panelState.sessionSidebarOpen;
         }
         if (DOM.sessionSidebarToggle) {
-            DOM.sessionSidebarToggle.textContent = panelState.sessionSidebarOpen
-                ? "隐藏会话"
-                : "会话列表";
             DOM.sessionSidebarToggle.setAttribute("aria-expanded", String(panelState.sessionSidebarOpen));
         }
 
+        updateSidebarToggleLabels();
         writeBoolean(SESSION_SIDEBAR_STORAGE_KEY, panelState.sessionSidebarOpen);
     }
 
@@ -105,18 +105,30 @@ export function createSidebarController() {
             DOM.roleSidebarBackdrop.hidden = !panelState.roleSidebarOpen;
         }
         if (DOM.roleSidebarToggle) {
-            DOM.roleSidebarToggle.textContent = panelState.roleSidebarOpen
-                ? "隐藏角色卡"
-                : "角色卡";
             DOM.roleSidebarToggle.setAttribute("aria-expanded", String(panelState.roleSidebarOpen));
         }
 
+        updateSidebarToggleLabels();
         writeBoolean(ROLE_SIDEBAR_STORAGE_KEY, panelState.roleSidebarOpen);
+    }
+
+    function updateSidebarToggleLabels() {
+        if (DOM.sessionSidebarToggle) {
+            DOM.sessionSidebarToggle.textContent = panelState.sessionSidebarOpen
+                ? translate("console.hideSession")
+                : translate("console.sessionList");
+        }
+        if (DOM.roleSidebarToggle) {
+            DOM.roleSidebarToggle.textContent = panelState.roleSidebarOpen
+                ? translate("console.hideRoleCard")
+                : translate("console.roleCard");
+        }
     }
 
     function setLive2DDrawerOpen(isOpen) {
         panelState.live2dDrawerOpen = Boolean(isOpen);
 
+        document.body.classList.toggle("live2d-drawer-open", panelState.live2dDrawerOpen);
         if (DOM.live2dDrawer) {
             DOM.live2dDrawer.setAttribute("aria-hidden", String(!panelState.live2dDrawerOpen));
         }
@@ -157,6 +169,7 @@ export function createSidebarController() {
     return {
         ensureSidebarToggleButtons,
         initializeLive2DDrawer,
+        refreshSidebarLabels: updateSidebarToggleLabels,
         restoreRoleSidebarState,
         restoreSessionSidebarState,
         setLive2DDrawerOpen,

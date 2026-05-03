@@ -1,6 +1,6 @@
-import { createLive2DControlsPersistence } from "./controls/persistence.js";
-import { createLive2DControlsRenderer } from "./controls/render.js";
-import { createLive2DControlRuntime } from "./controls/runtime.js";
+import { createLive2DControlsPersistence } from "./controls/persistence.js?v=site-public-6";
+import { createLive2DControlsRenderer } from "./controls/render.js?v=site-public-6";
+import { createLive2DControlRuntime } from "./controls/runtime.js?v=site-public-6";
 
 export function createLive2DControlsController(deps) {
     const controllerState = {
@@ -16,12 +16,14 @@ export function createLive2DControlsController(deps) {
         controllerState: controllerState,
         requestJson: deps.requestJson,
         setRunStatus: deps.setRunStatus,
+        t: deps.t,
     });
 
     const renderer = createLive2DControlsRenderer({
         getSelectionRuntimeState: deps.getSelectionRuntimeState,
         isExpressionActive: deps.isExpressionActive,
         persistence: persistence,
+        t: deps.t,
     });
 
     const runtime = createLive2DControlRuntime({
@@ -31,6 +33,7 @@ export function createLive2DControlsController(deps) {
         renderLive2DControls: renderer.renderLive2DControls,
         restoreHotkeyToDefault: persistence.restoreHotkeyToDefault,
         setRunStatus: deps.setRunStatus,
+        t: deps.t,
         toggleExpression: deps.toggleExpression,
         triggerHotkey: deps.triggerHotkey,
     });

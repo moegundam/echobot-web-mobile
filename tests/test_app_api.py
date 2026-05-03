@@ -14,11 +14,14 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 from PIL import Image
+from starlette.websockets import WebSocketDisconnect
 
 from echobot import AgentCore, AgentTraceStore, LLMMessage, LLMResponse
 from echobot.attachments import AttachmentStore
 from echobot.asr import ASRStatusSnapshot, ProviderStatusSnapshot, TranscriptionResult
 from echobot.app import create_app
+from echobot.app.auth import DEFAULT_TRUSTED_USER_HEADER, user_storage_key
+from echobot.app.web_pages import WEB_PAGE_ROUTES
 from echobot.channels import ChannelAddress
 from echobot.orchestration import (
     ConversationCoordinator,
@@ -341,10 +344,11 @@ class FakeASRService:
 
 def build_test_context(options: RuntimeOptions) -> RuntimeContext:
     workspace = (options.workspace or Path(".")).resolve()
+    storage_root = _storage_root_for_options(options, workspace)
     agent = AgentCore(FakeProvider())
-    session_store = SessionStore(workspace / ".echobot" / "sessions")
-    agent_session_store = SessionStore(workspace / ".echobot" / "agent_sessions")
-    trace_store = AgentTraceStore(workspace / ".echobot" / "agent_traces")
+    session_store = SessionStore(storage_root / "sessions")
+    agent_session_store = SessionStore(storage_root / "agent_sessions")
+    trace_store = AgentTraceStore(storage_root / "agent_traces")
     session_runner = SessionAgentRunner(
         agent,
         agent_session_store,
@@ -368,7 +372,7 @@ def build_test_context(options: RuntimeOptions) -> RuntimeContext:
         )
     return RuntimeContext(
         workspace=workspace,
-        attachment_store=AttachmentStore(workspace / ".echobot" / "attachments"),
+        attachment_store=AttachmentStore(storage_root / "attachments"),
         supports_image_input=True,
         agent=agent,
         session_store=session_store,
@@ -376,26 +380,28 @@ def build_test_context(options: RuntimeOptions) -> RuntimeContext:
         session=None,
         tool_registry=None,
         skill_registry=None,
-        cron_service=CronService(workspace / ".echobot" / "cron" / "jobs.json"),
+        cron_service=CronService(storage_root / "cron" / "jobs.json"),
         heartbeat_service=heartbeat_service,
         session_runner=session_runner,
         coordinator=coordinator,
         role_registry=role_registry,
         memory_support=None,
-        heartbeat_file_path=workspace / ".echobot" / "HEARTBEAT.md",
+        heartbeat_file_path=storage_root / "HEARTBEAT.md",
         heartbeat_interval_seconds=60,
         tool_registry_factory=lambda *_args: None,
         runtime_controls=_runtime_controls(options),
         default_runtime_config=_default_runtime_config(options),
+        storage_root=storage_root,
     )
 
 
 def build_slow_agent_test_context(options: RuntimeOptions) -> RuntimeContext:
     workspace = (options.workspace or Path(".")).resolve()
+    storage_root = _storage_root_for_options(options, workspace)
     agent = AgentCore(SlowAgentProvider())
-    session_store = SessionStore(workspace / ".echobot" / "sessions")
-    agent_session_store = SessionStore(workspace / ".echobot" / "agent_sessions")
-    trace_store = AgentTraceStore(workspace / ".echobot" / "agent_traces")
+    session_store = SessionStore(storage_root / "sessions")
+    agent_session_store = SessionStore(storage_root / "agent_sessions")
+    trace_store = AgentTraceStore(storage_root / "agent_traces")
     session_runner = SessionAgentRunner(
         agent,
         agent_session_store,
@@ -419,7 +425,7 @@ def build_slow_agent_test_context(options: RuntimeOptions) -> RuntimeContext:
         )
     return RuntimeContext(
         workspace=workspace,
-        attachment_store=AttachmentStore(workspace / ".echobot" / "attachments"),
+        attachment_store=AttachmentStore(storage_root / "attachments"),
         supports_image_input=True,
         agent=agent,
         session_store=session_store,
@@ -427,26 +433,28 @@ def build_slow_agent_test_context(options: RuntimeOptions) -> RuntimeContext:
         session=None,
         tool_registry=None,
         skill_registry=None,
-        cron_service=CronService(workspace / ".echobot" / "cron" / "jobs.json"),
+        cron_service=CronService(storage_root / "cron" / "jobs.json"),
         heartbeat_service=heartbeat_service,
         session_runner=session_runner,
         coordinator=coordinator,
         role_registry=role_registry,
         memory_support=None,
-        heartbeat_file_path=workspace / ".echobot" / "HEARTBEAT.md",
+        heartbeat_file_path=storage_root / "HEARTBEAT.md",
         heartbeat_interval_seconds=60,
         tool_registry_factory=lambda *_args: None,
         runtime_controls=_runtime_controls(options),
         default_runtime_config=_default_runtime_config(options),
+        storage_root=storage_root,
     )
 
 
 def build_slow_ack_test_context(options: RuntimeOptions) -> RuntimeContext:
     workspace = (options.workspace or Path(".")).resolve()
+    storage_root = _storage_root_for_options(options, workspace)
     agent = AgentCore(FakeProvider())
-    session_store = SessionStore(workspace / ".echobot" / "sessions")
-    agent_session_store = SessionStore(workspace / ".echobot" / "agent_sessions")
-    trace_store = AgentTraceStore(workspace / ".echobot" / "agent_traces")
+    session_store = SessionStore(storage_root / "sessions")
+    agent_session_store = SessionStore(storage_root / "agent_sessions")
+    trace_store = AgentTraceStore(storage_root / "agent_traces")
     session_runner = SessionAgentRunner(
         agent,
         agent_session_store,
@@ -470,7 +478,7 @@ def build_slow_ack_test_context(options: RuntimeOptions) -> RuntimeContext:
         )
     return RuntimeContext(
         workspace=workspace,
-        attachment_store=AttachmentStore(workspace / ".echobot" / "attachments"),
+        attachment_store=AttachmentStore(storage_root / "attachments"),
         supports_image_input=True,
         agent=agent,
         session_store=session_store,
@@ -478,17 +486,18 @@ def build_slow_ack_test_context(options: RuntimeOptions) -> RuntimeContext:
         session=None,
         tool_registry=None,
         skill_registry=None,
-        cron_service=CronService(workspace / ".echobot" / "cron" / "jobs.json"),
+        cron_service=CronService(storage_root / "cron" / "jobs.json"),
         heartbeat_service=heartbeat_service,
         session_runner=session_runner,
         coordinator=coordinator,
         role_registry=role_registry,
         memory_support=None,
-        heartbeat_file_path=workspace / ".echobot" / "HEARTBEAT.md",
+        heartbeat_file_path=storage_root / "HEARTBEAT.md",
         heartbeat_interval_seconds=60,
         tool_registry_factory=lambda *_args: None,
         runtime_controls=_runtime_controls(options),
         default_runtime_config=_default_runtime_config(options),
+        storage_root=storage_root,
     )
 
 
@@ -504,6 +513,15 @@ def build_test_tts_service(_workspace: Path) -> TTSService:
 
 def build_test_asr_service(_workspace: Path) -> FakeASRService:
     return FakeASRService()
+
+
+def _storage_root_for_options(options: RuntimeOptions, workspace: Path) -> Path:
+    if options.storage_root is None:
+        return workspace / ".echobot"
+    storage_root = Path(options.storage_root).expanduser()
+    if storage_root.is_absolute():
+        return storage_root.resolve()
+    return (workspace / storage_root).resolve()
 
 
 def _delegated_ack_enabled(options: RuntimeOptions) -> bool:
@@ -960,6 +978,816 @@ class AppApiTests(unittest.TestCase):
             self.assertIn("telegram", config.json())
             self.assertEqual(200, roles.status_code)
             self.assertEqual(["default"], [item["name"] for item in roles.json()])
+
+    def test_trusted_user_header_is_required_when_enabled(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+
+            with patch.dict(
+                os.environ,
+                {
+                    "ECHOBOT_TRUSTED_USER_HEADER_ENABLED": "true",
+                    "ECHOBOT_TRUSTED_USER_REQUIRED": "true",
+                },
+                clear=False,
+            ):
+                app = create_app(
+                    runtime_options=RuntimeOptions(
+                        workspace=workspace,
+                        no_tools=True,
+                        no_skills=True,
+                        no_memory=True,
+                        no_heartbeat=True,
+                    ),
+                    channel_config_path=workspace / ".echobot" / "channels.json",
+                    context_builder=build_test_context,
+                )
+
+            with TestClient(app) as client:
+                missing = client.get("/api/health")
+                invalid = client.get(
+                    "/api/health",
+                    headers={DEFAULT_TRUSTED_USER_HEADER: "alpha/../beta"},
+                )
+                authorized = client.get(
+                    "/api/health",
+                    headers={DEFAULT_TRUSTED_USER_HEADER: "alpha@example.test"},
+                )
+
+            self.assertEqual(401, missing.status_code)
+            self.assertEqual("Trusted user header is required", missing.json()["detail"])
+            self.assertEqual(401, invalid.status_code)
+            self.assertEqual("Trusted user header is invalid", invalid.json()["detail"])
+            self.assertEqual(200, authorized.status_code)
+            self.assertEqual("alpha@example.test", authorized.json()["trusted_user"])
+
+    def test_trusted_user_header_protects_product_routes_and_api_docs(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+
+            with patch.dict(
+                os.environ,
+                {
+                    "ECHOBOT_TRUSTED_USER_HEADER_ENABLED": "true",
+                    "ECHOBOT_TRUSTED_USER_REQUIRED": "true",
+                },
+                clear=False,
+            ):
+                app = create_app(
+                    runtime_options=RuntimeOptions(
+                        workspace=workspace,
+                        no_tools=True,
+                        no_skills=True,
+                        no_memory=True,
+                        no_heartbeat=True,
+                    ),
+                    channel_config_path=workspace / ".echobot" / "channels.json",
+                    context_builder=build_test_context,
+                )
+
+            protected_routes = [
+                "/stage?session_name=demo",
+                "/console",
+                "/messenger",
+                "/admin",
+                "/admin/guide",
+                "/admin/structure",
+                "/admin/channels",
+                "/admin/openwebui",
+                "/admin/models",
+                "/docs",
+                "/redoc",
+                "/openapi.json",
+            ]
+            headers = {DEFAULT_TRUSTED_USER_HEADER: "alpha@example.test"}
+
+            with TestClient(app) as client:
+                missing = [client.get(path) for path in protected_routes]
+                authorized = [client.get(path, headers=headers) for path in protected_routes]
+
+            self.assertTrue(all(response.status_code == 401 for response in missing))
+            self.assertTrue(all(response.status_code == 200 for response in authorized))
+            self.assertIn('id="stage-root"', authorized[0].text)
+            self.assertIn("data-display-mode-switcher", authorized[0].text)
+            self.assertIn("data-language-switcher", authorized[1].text)
+            self.assertIn("data-display-mode-switcher", authorized[1].text)
+            self.assertIn('id="structure-root"', authorized[5].text)
+            self.assertIn('id="messenger-root"', authorized[2].text)
+            self.assertIn("data-display-mode-switcher", authorized[2].text)
+            self.assertIn('id="admin-root"', authorized[3].text)
+            self.assertIn("data-display-mode-switcher", authorized[3].text)
+            self.assertIn('id="guide-root"', authorized[4].text)
+            self.assertIn("data-display-mode-switcher", authorized[4].text)
+            self.assertIn('id="channels-root"', authorized[6].text)
+            self.assertIn("data-display-mode-switcher", authorized[6].text)
+            self.assertIn('id="openwebui-root"', authorized[7].text)
+            self.assertIn("data-display-mode-switcher", authorized[7].text)
+            self.assertIn('id="models-root"', authorized[8].text)
+            self.assertIn("data-display-mode-switcher", authorized[8].text)
+
+    def test_web_page_route_registry_serves_known_shells(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            app = create_app(
+                runtime_options=RuntimeOptions(
+                    workspace=workspace,
+                    no_tools=True,
+                    no_skills=True,
+                    no_memory=True,
+                    no_heartbeat=True,
+                ),
+                channel_config_path=workspace / ".echobot" / "channels.json",
+                context_builder=build_test_context,
+            )
+
+            expected_markers = {
+                "/web": 'class="page-shell"',
+                "/console": 'class="page-shell"',
+                "/stage": 'id="stage-root"',
+                "/messenger": 'id="messenger-root"',
+                "/admin": 'id="admin-root"',
+                "/admin/guide": 'id="guide-root"',
+                "/admin/structure": 'id="structure-root"',
+                "/admin/channels": 'id="channels-root"',
+                "/admin/openwebui": 'id="openwebui-root"',
+                "/admin/models": 'id="models-root"',
+            }
+
+            with TestClient(app) as client:
+                route_paths = [route.path for route in WEB_PAGE_ROUTES]
+                responses = {
+                    path: client.get(path)
+                    for path in route_paths
+                }
+
+            self.assertEqual(list(expected_markers), route_paths)
+            self.assertTrue(
+                all(response.status_code == 200 for response in responses.values()),
+            )
+            for path, marker in expected_markers.items():
+                self.assertIn(marker, responses[path].text)
+
+    def test_openwebui_bridge_uses_bearer_token_and_narrow_tool_spec(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+
+            with patch.dict(
+                os.environ,
+                {
+                    "ECHOBOT_TRUSTED_USER_HEADER_ENABLED": "true",
+                    "ECHOBOT_TRUSTED_USER_REQUIRED": "true",
+                    "ECHOBOT_OPENWEBUI_BRIDGE_TOKEN": "bridge-secret",
+                },
+                clear=False,
+            ):
+                app = create_app(
+                    runtime_options=RuntimeOptions(
+                        workspace=workspace,
+                        no_tools=True,
+                        no_skills=True,
+                        no_memory=True,
+                        no_heartbeat=True,
+                    ),
+                    channel_config_path=workspace / ".echobot" / "channels.json",
+                    context_builder=build_test_context,
+                )
+
+                with TestClient(app) as client:
+                    status_missing_user = client.get("/api/openwebui/status")
+                    status_authorized = client.get(
+                        "/api/openwebui/status",
+                        headers={DEFAULT_TRUSTED_USER_HEADER: "alpha@example.test"},
+                    )
+                    missing_token = client.get("/api/openwebui/tools/openapi.json")
+                    invalid_token = client.get(
+                        "/api/openwebui/tools/openapi.json",
+                        headers={"Authorization": "Bearer wrong-secret"},
+                    )
+                    tool_spec = client.get(
+                        "/api/openwebui/tools/openapi.json",
+                        headers={"Authorization": "Bearer bridge-secret"},
+                    )
+
+            self.assertEqual(401, status_missing_user.status_code)
+            self.assertEqual(200, status_authorized.status_code)
+            self.assertFalse(status_authorized.json()["operator_agent_enabled"])
+            self.assertEqual(401, missing_token.status_code)
+            self.assertEqual("Open WebUI bridge token is invalid", missing_token.json()["detail"])
+            self.assertEqual(401, invalid_token.status_code)
+            self.assertEqual(200, tool_spec.status_code)
+            self.assertEqual(
+                {
+                    "/api/openwebui/stage/events",
+                    "/api/openwebui/chat",
+                    "/api/openwebui/sessions",
+                },
+                set(tool_spec.json()["paths"].keys()),
+            )
+            self.assertNotIn("/openapi.json", tool_spec.json()["paths"])
+            self.assertNotIn("/api/health", tool_spec.json()["paths"])
+
+    def test_model_profiles_are_user_scoped_and_apply_to_console_runtime(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+
+            with patch.dict(
+                os.environ,
+                {
+                    "ECHOBOT_TRUSTED_USER_HEADER_ENABLED": "true",
+                    "ECHOBOT_TRUSTED_USER_REQUIRED": "true",
+                    "LLM_API_KEY": "test-key",
+                    "LLM_MODEL": "base-chat-model",
+                    "LLM_BASE_URL": "http://base-llm.test/v1",
+                    "ECHOBOT_TTS_PROVIDER": "edge",
+                    "ECHOBOT_ASR_PROVIDER": "sherpa-sense-voice",
+                    "ECHOBOT_ASR_SHERPA_AUTO_DOWNLOAD": "false",
+                    "ECHOBOT_VAD_SILERO_AUTO_DOWNLOAD": "false",
+                },
+                clear=False,
+            ):
+                app = create_app(
+                    runtime_options=RuntimeOptions(
+                        workspace=workspace,
+                        no_tools=True,
+                        no_skills=True,
+                        no_memory=True,
+                        no_heartbeat=True,
+                    ),
+                    channel_config_path=workspace / ".echobot" / "channels.json",
+                )
+
+                alpha_headers = {DEFAULT_TRUSTED_USER_HEADER: "alpha@example.test"}
+                beta_headers = {DEFAULT_TRUSTED_USER_HEADER: "beta@example.test"}
+                alpha_storage = (
+                    workspace
+                    / ".echobot"
+                    / "users"
+                    / user_storage_key("alpha@example.test")
+                )
+
+                with TestClient(app) as client:
+                    initial = client.get("/api/model-profiles", headers=alpha_headers)
+                    base_config = client.get("/api/web/config", headers=alpha_headers)
+                    live2d_key = base_config.json()["live2d"]["models"][0]["selection_key"]
+                    updated = client.patch(
+                        "/api/model-profiles/b",
+                        headers=alpha_headers,
+                        json={
+                            "label": "Streamer B",
+                            "chat": {
+                                "provider": "private-litellm",
+                                "model": "profile-chat-model",
+                                "base_url": "http://provider.test/v1",
+                                "temperature": 0.4,
+                                "max_tokens": 2048,
+                                "api_key": "profile-chat-key",
+                            },
+                            "tts": {
+                                "provider": "openai-compatible",
+                                "model": "tts-profile-model",
+                                "base_url": "http://tts.test/v1",
+                                "voice": "voice-profile",
+                                "api_key": "profile-tts-key",
+                            },
+                            "asr": {
+                                "provider": "openai-transcriptions",
+                                "model": "asr-profile-model",
+                                "base_url": "http://asr.test/v1",
+                                "language": "zh",
+                                "api_key": "profile-asr-key",
+                            },
+                            "live2d": {
+                                "selection_key": live2d_key,
+                            },
+                        },
+                    )
+                    created = client.post(
+                        "/api/model-profiles",
+                        headers=alpha_headers,
+                        json={
+                            "label": "Streamer Custom",
+                            "source_profile_id": "b",
+                        },
+                    )
+                    duplicate = client.post(
+                        "/api/model-profiles",
+                        headers=alpha_headers,
+                        json={
+                            "label": "Streamer Custom",
+                        },
+                    )
+                    activated = client.post(
+                        f"/api/model-profiles/{created.json()['profile_id']}/activate",
+                        headers=alpha_headers,
+                    )
+                    console_config = client.get("/api/web/config", headers=alpha_headers)
+                    beta_profiles = client.get("/api/model-profiles", headers=beta_headers)
+                    runtime = app.state.runtime
+                    alpha_runtime = next(
+                        item
+                        for item in runtime._user_runtimes.values()
+                        if item.user_id == "alpha@example.test"
+                    )
+                    alpha_provider_model = (
+                        alpha_runtime.context.agent.provider.settings.model
+                    )
+                    alpha_provider_base_url = (
+                        alpha_runtime.context.agent.provider.settings.base_url
+                    )
+                    alpha_provider_api_key = (
+                        alpha_runtime.context.agent.provider.settings.api_key
+                    )
+
+            self.assertEqual(200, initial.status_code)
+            self.assertEqual("a", initial.json()["active_profile_id"])
+            self.assertEqual(
+                ["a", "b", "c", "d", "e"],
+                [item["profile_id"] for item in initial.json()["profiles"]],
+            )
+
+            self.assertEqual(200, updated.status_code)
+            self.assertEqual("Streamer B", updated.json()["label"])
+            self.assertEqual("profile-chat-model", updated.json()["chat"]["model"])
+            self.assertNotIn("api_key", updated.json()["chat"])
+            self.assertTrue(updated.json()["chat"]["api_key_configured"])
+            self.assertEqual("profile", updated.json()["chat"]["api_key_source"])
+            self.assertTrue(updated.json()["tts"]["api_key_configured"])
+            self.assertTrue(updated.json()["asr"]["api_key_configured"])
+
+            self.assertEqual(200, created.status_code)
+            self.assertEqual("streamer-custom", created.json()["profile_id"])
+            self.assertEqual("Streamer Custom", created.json()["label"])
+            self.assertEqual("profile-chat-model", created.json()["chat"]["model"])
+            self.assertEqual("http://provider.test/v1", created.json()["chat"]["base_url"])
+            self.assertNotIn("api_key", created.json()["chat"])
+            self.assertEqual("environment", created.json()["chat"]["api_key_source"])
+            self.assertFalse(created.json()["tts"]["api_key_configured"])
+            self.assertFalse(created.json()["asr"]["api_key_configured"])
+
+            self.assertEqual(200, duplicate.status_code)
+            self.assertEqual("streamer-custom-2", duplicate.json()["profile_id"])
+
+            self.assertEqual(200, activated.status_code)
+            self.assertEqual("streamer-custom", activated.json()["active_profile_id"])
+
+            self.assertEqual(200, console_config.status_code)
+            console_profiles = console_config.json()["model_profiles"]
+            self.assertEqual("streamer-custom", console_profiles["active_profile_id"])
+            active_profile = next(
+                item
+                for item in console_profiles["profiles"]
+                if item["profile_id"] == "streamer-custom"
+            )
+            self.assertEqual("profile-chat-model", active_profile["chat"]["model"])
+            self.assertEqual(live2d_key, active_profile["live2d"]["selection_key"])
+            self.assertEqual("openai-compatible", console_config.json()["tts"]["default_provider"])
+            self.assertEqual(
+                "openai-transcriptions",
+                console_config.json()["asr"]["selected_asr_provider"],
+            )
+
+            stored_text = (alpha_storage / "model_profiles.json").read_text(
+                encoding="utf-8",
+            )
+            self.assertIn("profile-chat-model", stored_text)
+            self.assertIn("streamer-custom", stored_text)
+            self.assertIn("streamer-custom-2", stored_text)
+            self.assertNotIn("profile-chat-key", stored_text)
+            self.assertNotIn("profile-tts-key", stored_text)
+            self.assertNotIn("profile-asr-key", stored_text)
+            self.assertNotIn("api_key", stored_text)
+            secret_text = (alpha_storage / "model_profile_secrets.json").read_text(
+                encoding="utf-8",
+            )
+            self.assertIn("profile-chat-key", secret_text)
+            self.assertIn("profile-tts-key", secret_text)
+            self.assertIn("profile-asr-key", secret_text)
+
+            self.assertEqual("profile-chat-model", alpha_provider_model)
+            self.assertEqual("http://provider.test/v1", alpha_provider_base_url)
+            self.assertEqual("test-key", alpha_provider_api_key)
+
+            self.assertEqual(200, beta_profiles.status_code)
+            self.assertEqual("a", beta_profiles.json()["active_profile_id"])
+            self.assertNotIn(
+                "streamer-custom",
+                [item["profile_id"] for item in beta_profiles.json()["profiles"]],
+            )
+            beta_b_profile = next(
+                item
+                for item in beta_profiles.json()["profiles"]
+                if item["profile_id"] == "b"
+            )
+            self.assertEqual("Profile B", beta_b_profile["label"])
+
+    def test_openwebui_bridge_targets_user_scoped_stage_and_chat(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+
+            with patch.dict(
+                os.environ,
+                {
+                    "ECHOBOT_TRUSTED_USER_HEADER_ENABLED": "true",
+                    "ECHOBOT_TRUSTED_USER_REQUIRED": "true",
+                    "ECHOBOT_OPENWEBUI_BRIDGE_TOKEN": "bridge-secret",
+                },
+                clear=False,
+            ):
+                app = create_app(
+                    runtime_options=RuntimeOptions(
+                        workspace=workspace,
+                        no_tools=True,
+                        no_skills=True,
+                        no_memory=True,
+                        no_heartbeat=True,
+                    ),
+                    channel_config_path=workspace / ".echobot" / "channels.json",
+                    context_builder=build_test_context,
+                )
+
+                auth_headers = {"Authorization": "Bearer bridge-secret"}
+                with TestClient(app) as client:
+                    stage_event = client.post(
+                        "/api/openwebui/stage/events",
+                        headers=auth_headers,
+                        json={
+                            "target_user_id": "alpha@example.test",
+                            "session_name": "demo",
+                            "text": "hello from Open WebUI",
+                            "speaker": "Operator",
+                        },
+                    )
+                    chat = client.post(
+                        "/api/openwebui/chat",
+                        headers=auth_headers,
+                        json={
+                            "target_user_id": "alpha@example.test",
+                            "session_name": "demo",
+                            "prompt": "ping",
+                        },
+                    )
+                    alpha_sessions = client.get(
+                        "/api/openwebui/sessions?target_user_id=alpha@example.test",
+                        headers=auth_headers,
+                    )
+                    beta_sessions = client.get(
+                        "/api/openwebui/sessions?target_user_id=beta@example.test",
+                        headers=auth_headers,
+                    )
+                    force_agent = client.post(
+                        "/api/openwebui/chat",
+                        headers=auth_headers,
+                        json={
+                            "target_user_id": "alpha@example.test",
+                            "session_name": "demo",
+                            "prompt": "run tools",
+                            "route_mode": "force_agent",
+                        },
+                    )
+
+                    runtime = app.state.runtime
+                    alpha_history = runtime.stage_event_broker.history(
+                        user_storage_key("alpha@example.test"),
+                        "demo",
+                    )
+                    beta_history = runtime.stage_event_broker.history(
+                        user_storage_key("beta@example.test"),
+                        "demo",
+                    )
+
+            self.assertEqual(200, stage_event.status_code)
+            self.assertEqual("assistant_final", stage_event.json()["kind"])
+            self.assertEqual("openwebui", stage_event.json()["source"])
+            self.assertEqual(["hello from Open WebUI"], [item.text for item in alpha_history])
+            self.assertEqual([], beta_history)
+            self.assertEqual(200, chat.status_code)
+            self.assertEqual("demo", chat.json()["session_name"])
+            self.assertEqual("pong", chat.json()["response"])
+            self.assertEqual(200, alpha_sessions.status_code)
+            self.assertIn("demo", [item["name"] for item in alpha_sessions.json()])
+            self.assertEqual(200, beta_sessions.status_code)
+            self.assertNotIn("demo", [item["name"] for item in beta_sessions.json()])
+            self.assertEqual(403, force_agent.status_code)
+            self.assertEqual(
+                "Open WebUI operator-agent mode is disabled",
+                force_agent.json()["detail"],
+            )
+
+    def test_trusted_user_header_isolates_sessions_jobs_and_attachments(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+
+            with patch.dict(
+                os.environ,
+                {
+                    "ECHOBOT_TRUSTED_USER_HEADER_ENABLED": "true",
+                    "ECHOBOT_TRUSTED_USER_REQUIRED": "true",
+                },
+                clear=False,
+            ):
+                app = create_app(
+                    runtime_options=RuntimeOptions(
+                        workspace=workspace,
+                        no_tools=True,
+                        no_skills=True,
+                        no_memory=True,
+                        no_heartbeat=True,
+                    ),
+                    channel_config_path=workspace / ".echobot" / "channels.json",
+                    context_builder=build_test_context,
+                )
+
+            alpha_headers = {DEFAULT_TRUSTED_USER_HEADER: "alpha@example.test"}
+            beta_headers = {DEFAULT_TRUSTED_USER_HEADER: "beta@example.test"}
+
+            with TestClient(app) as client:
+                alpha_session = client.post(
+                    "/api/sessions",
+                    json={"name": "demo"},
+                    headers=alpha_headers,
+                )
+                alpha_reply = client.post(
+                    "/api/chat",
+                    json={
+                        "session_name": "demo",
+                        "prompt": "ping",
+                    },
+                    headers=alpha_headers,
+                )
+                alpha_upload = client.post(
+                    "/api/attachments/files",
+                    files={
+                        "file": (
+                            "note.txt",
+                            make_chat_text_bytes(),
+                            "text/plain",
+                        )
+                    },
+                    headers=alpha_headers,
+                )
+                alpha_job = client.post(
+                    "/api/chat",
+                    json={
+                        "session_name": "demo",
+                        "prompt": "Please set a cron reminder",
+                    },
+                    headers=alpha_headers,
+                )
+                alpha_jobs = client.get(
+                    "/api/chat/jobs?session_name=demo",
+                    headers=alpha_headers,
+                )
+                beta_sessions = client.get("/api/sessions", headers=beta_headers)
+                beta_demo = client.get("/api/sessions/demo", headers=beta_headers)
+                beta_jobs = client.get(
+                    "/api/chat/jobs?session_name=demo",
+                    headers=beta_headers,
+                )
+                beta_download = client.get(
+                    alpha_upload.json()["download_url"],
+                    headers=beta_headers,
+                )
+
+            self.assertEqual(200, alpha_session.status_code)
+            self.assertEqual(200, alpha_reply.status_code)
+            self.assertEqual("pong", alpha_reply.json()["response"])
+            self.assertEqual(200, alpha_upload.status_code)
+            self.assertIn(
+                f".echobot/users/{user_storage_key('alpha@example.test')}/attachments/",
+                alpha_upload.json()["workspace_path"],
+            )
+            self.assertEqual(200, alpha_job.status_code)
+            self.assertTrue(alpha_job.json()["job_id"])
+            self.assertEqual(200, alpha_jobs.status_code)
+            self.assertEqual(1, len(alpha_jobs.json()["jobs"]))
+            self.assertEqual(200, beta_sessions.status_code)
+            self.assertNotIn("demo", [item["name"] for item in beta_sessions.json()])
+            self.assertEqual(404, beta_demo.status_code)
+            self.assertEqual(200, beta_jobs.status_code)
+            self.assertEqual([], beta_jobs.json()["jobs"])
+            self.assertEqual(404, beta_download.status_code)
+
+    def test_trusted_user_header_applies_to_asr_websocket(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+
+            with patch.dict(
+                os.environ,
+                {
+                    "ECHOBOT_TRUSTED_USER_HEADER_ENABLED": "true",
+                    "ECHOBOT_TRUSTED_USER_REQUIRED": "true",
+                },
+                clear=False,
+            ):
+                app = create_app(
+                    runtime_options=RuntimeOptions(
+                        workspace=workspace,
+                        no_tools=True,
+                        no_skills=True,
+                        no_memory=True,
+                        no_heartbeat=True,
+                    ),
+                    channel_config_path=workspace / ".echobot" / "channels.json",
+                    context_builder=build_test_context,
+                    tts_service_builder=build_test_tts_service,
+                    asr_service_builder=build_test_asr_service,
+                )
+
+            with TestClient(app) as client:
+                with self.assertRaises(WebSocketDisconnect):
+                    with client.websocket_connect("/api/web/asr/ws"):
+                        pass
+
+                with client.websocket_connect(
+                    "/api/web/asr/ws",
+                    headers={DEFAULT_TRUSTED_USER_HEADER: "alpha@example.test"},
+                ) as websocket:
+                    ready = websocket.receive_json()
+
+            self.assertEqual("ready", ready["type"])
+            self.assertEqual(16000, ready["sample_rate"])
+
+    def test_trusted_user_header_isolates_asr_provider_selection(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+
+            with patch.dict(
+                os.environ,
+                {
+                    "ECHOBOT_TRUSTED_USER_HEADER_ENABLED": "true",
+                    "ECHOBOT_TRUSTED_USER_REQUIRED": "true",
+                },
+                clear=False,
+            ):
+                app = create_app(
+                    runtime_options=RuntimeOptions(
+                        workspace=workspace,
+                        no_tools=True,
+                        no_skills=True,
+                        no_memory=True,
+                        no_heartbeat=True,
+                    ),
+                    channel_config_path=workspace / ".echobot" / "channels.json",
+                    context_builder=build_test_context,
+                    tts_service_builder=build_test_tts_service,
+                    asr_service_builder=build_test_asr_service,
+                )
+
+            alpha_headers = {DEFAULT_TRUSTED_USER_HEADER: "alpha@example.test"}
+            beta_headers = {DEFAULT_TRUSTED_USER_HEADER: "beta@example.test"}
+
+            with TestClient(app) as client:
+                alpha_initial = client.get("/api/web/config", headers=alpha_headers)
+                beta_initial = client.get("/api/web/config", headers=beta_headers)
+                updated = client.patch(
+                    "/api/web/asr/provider",
+                    json={"provider": "backup-asr"},
+                    headers=alpha_headers,
+                )
+                alpha_config = client.get("/api/web/config", headers=alpha_headers)
+                beta_config = client.get("/api/web/config", headers=beta_headers)
+
+            self.assertEqual(200, alpha_initial.status_code)
+            self.assertEqual("fake-asr", alpha_initial.json()["asr"]["selected_asr_provider"])
+            self.assertEqual(200, beta_initial.status_code)
+            self.assertEqual("fake-asr", beta_initial.json()["asr"]["selected_asr_provider"])
+            self.assertEqual(200, updated.status_code)
+            self.assertEqual("backup-asr", updated.json()["selected_asr_provider"])
+            self.assertEqual(200, alpha_config.status_code)
+            self.assertEqual("backup-asr", alpha_config.json()["asr"]["selected_asr_provider"])
+            self.assertEqual(200, beta_config.status_code)
+            self.assertEqual("fake-asr", beta_config.json()["asr"]["selected_asr_provider"])
+
+            alpha_settings_path = (
+                workspace
+                / ".echobot"
+                / "users"
+                / user_storage_key("alpha@example.test")
+                / "runtime_settings.json"
+            )
+            beta_settings_path = (
+                workspace
+                / ".echobot"
+                / "users"
+                / user_storage_key("beta@example.test")
+                / "runtime_settings.json"
+            )
+            alpha_settings = json.loads(alpha_settings_path.read_text(encoding="utf-8"))
+            self.assertEqual("backup-asr", alpha_settings["selected_asr_provider"])
+            if beta_settings_path.exists():
+                beta_settings = json.loads(beta_settings_path.read_text(encoding="utf-8"))
+                self.assertNotIn("selected_asr_provider", beta_settings)
+
+    def test_stage_event_api_validates_and_scopes_events(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+
+            with patch.dict(
+                os.environ,
+                {
+                    "ECHOBOT_TRUSTED_USER_HEADER_ENABLED": "true",
+                    "ECHOBOT_TRUSTED_USER_REQUIRED": "true",
+                },
+                clear=False,
+            ):
+                app = create_app(
+                    runtime_options=RuntimeOptions(
+                        workspace=workspace,
+                        no_tools=True,
+                        no_skills=True,
+                        no_memory=True,
+                        no_heartbeat=True,
+                    ),
+                    channel_config_path=workspace / ".echobot" / "channels.json",
+                    context_builder=build_test_context,
+                )
+
+            alpha_headers = {DEFAULT_TRUSTED_USER_HEADER: "alpha@example.test"}
+            beta_headers = {DEFAULT_TRUSTED_USER_HEADER: "beta@example.test"}
+
+            with TestClient(app) as client:
+                wrong_content_type = client.post(
+                    "/api/stage/events",
+                    data="{}",
+                    headers={
+                        **alpha_headers,
+                        "content-type": "text/plain",
+                    },
+                )
+                malformed_json = client.post(
+                    "/api/stage/events",
+                    content=b"{",
+                    headers={
+                        **alpha_headers,
+                        "content-type": "application/json",
+                    },
+                )
+                too_large_text = client.post(
+                    "/api/stage/events",
+                    json={
+                        "kind": "assistant_final",
+                        "session_name": "demo",
+                        "text": "x" * 8193,
+                    },
+                    headers=alpha_headers,
+                )
+                too_large_metadata = client.post(
+                    "/api/stage/events",
+                    json={
+                        "kind": "assistant_final",
+                        "session_name": "demo",
+                        "text": "hello",
+                        "metadata": {"payload": "x" * 4097},
+                    },
+                    headers=alpha_headers,
+                )
+                alpha_event = client.post(
+                    "/api/stage/events",
+                    json={
+                        "kind": "assistant_final",
+                        "session_name": "demo",
+                        "text": "hello stage",
+                        "speaker": "Echo",
+                        "source": "messenger",
+                    },
+                    headers=alpha_headers,
+                )
+                beta_event = client.post(
+                    "/api/stage/events",
+                    json={
+                        "kind": "assistant_final",
+                        "session_name": "demo",
+                        "text": "beta stage",
+                        "source": "messenger",
+                    },
+                    headers=beta_headers,
+                )
+
+                runtime = app.state.runtime
+                alpha_history = runtime.stage_event_broker.history(
+                    user_storage_key("alpha@example.test"),
+                    "demo",
+                )
+                beta_history = runtime.stage_event_broker.history(
+                    user_storage_key("beta@example.test"),
+                    "demo",
+                )
+                alpha_other_session = runtime.stage_event_broker.history(
+                    user_storage_key("alpha@example.test"),
+                    "other",
+                )
+
+            self.assertEqual(415, wrong_content_type.status_code)
+            self.assertEqual(400, malformed_json.status_code)
+            self.assertEqual(400, too_large_text.status_code)
+            self.assertEqual(400, too_large_metadata.status_code)
+            self.assertEqual(200, alpha_event.status_code)
+            self.assertEqual("evt_000001", alpha_event.json()["event_id"])
+            self.assertEqual("assistant_final", alpha_event.json()["kind"])
+            self.assertEqual(200, beta_event.status_code)
+            self.assertEqual(["hello stage"], [item.text for item in alpha_history])
+            self.assertEqual(["beta stage"], [item.text for item in beta_history])
+            self.assertEqual([], alpha_other_session)
 
     def test_session_and_chat_endpoints_share_runtime_state(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1988,10 +2816,15 @@ class AppApiTests(unittest.TestCase):
                 self.assertTrue(job_id)
 
                 trace_response = None
-                for _ in range(20):
+                for _ in range(100):
                     trace_response = client.get(f"/api/chat/jobs/{job_id}/trace")
-                    events = trace_response.json()["events"]
-                    if events and events[-1]["event"] == "turn_completed":
+                    payload = trace_response.json()
+                    events = payload["events"]
+                    if (
+                        payload["status"] == "completed"
+                        and events
+                        and events[-1]["event"] == "turn_completed"
+                    ):
                         break
                     time.sleep(0.01)
 
@@ -2277,7 +3110,7 @@ class AppApiTests(unittest.TestCase):
             self.assertTrue(heartbeat.json()["enabled"])
             self.assertEqual(60, heartbeat.json()["interval_seconds"])
             self.assertEqual(
-                str(workspace / ".echobot" / "HEARTBEAT.md"),
+                str((workspace / ".echobot" / "HEARTBEAT.md").resolve()),
                 heartbeat.json()["file_path"],
             )
             self.assertEqual("# HEARTBEAT.md\n\n- [ ] Check inbox\n", heartbeat.json()["content"])
@@ -2361,8 +3194,10 @@ class AppApiTests(unittest.TestCase):
                 self.assertIn('id="message-image-dialog-image"', page.text)
                 self.assertNotIn('id="message-image-dialog-link"', page.text)
                 self.assertIn("EchoBot Web Console", page.text)
-                self.assertIn("HEARTBEAT 周期任务", page.text)
-                self.assertIn("CRON 定时任务", page.text)
+                self.assertIn('data-i18n-key="console.heartbeatJobs"', page.text)
+                self.assertIn("HEARTBEAT Jobs", page.text)
+                self.assertIn('data-i18n-key="console.cronJobs"', page.text)
+                self.assertIn("CRON Jobs", page.text)
 
                 self.assertEqual(200, config.status_code)
                 payload = config.json()
@@ -2370,7 +3205,7 @@ class AppApiTests(unittest.TestCase):
                 self.assertEqual("auto", payload["route_mode"])
                 self.assertTrue(payload["runtime"]["delegated_ack_enabled"])
                 self.assertEqual(
-                    "danger-full-access",
+                    DEFAULT_SHELL_SAFETY_MODE,
                     payload["runtime"]["shell_safety_mode"],
                 )
                 self.assertTrue(payload["runtime"]["file_write_enabled"])
@@ -2642,7 +3477,7 @@ class AppApiTests(unittest.TestCase):
 
             self.assertEqual(200, reset.status_code)
             self.assertFalse(reset.json()["delegated_ack_enabled"])
-            self.assertEqual("danger-full-access", reset.json()["shell_safety_mode"])
+            self.assertEqual(DEFAULT_SHELL_SAFETY_MODE, reset.json()["shell_safety_mode"])
             self.assertTrue(reset.json()["file_write_enabled"])
             self.assertTrue(reset.json()["cron_mutation_enabled"])
             self.assertFalse(reset.json()["web_private_network_enabled"])
@@ -2650,7 +3485,7 @@ class AppApiTests(unittest.TestCase):
             self.assertEqual(200, config.status_code)
             self.assertFalse(config.json()["runtime"]["delegated_ack_enabled"])
             self.assertEqual(
-                "danger-full-access",
+                DEFAULT_SHELL_SAFETY_MODE,
                 config.json()["runtime"]["shell_safety_mode"],
             )
             self.assertTrue(config.json()["runtime"]["file_write_enabled"])
@@ -2679,7 +3514,7 @@ class AppApiTests(unittest.TestCase):
             self.assertEqual(200, restarted_config.status_code)
             self.assertFalse(restarted_config.json()["runtime"]["delegated_ack_enabled"])
             self.assertEqual(
-                "danger-full-access",
+                DEFAULT_SHELL_SAFETY_MODE,
                 restarted_config.json()["runtime"]["shell_safety_mode"],
             )
             self.assertTrue(restarted_config.json()["runtime"]["file_write_enabled"])

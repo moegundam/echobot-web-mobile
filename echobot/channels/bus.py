@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 
 from .types import InboundMessage, OutboundMessage
 
@@ -21,6 +22,29 @@ class MessageBus:
 
     async def consume_outbound(self) -> OutboundMessage:
         return await self._outbound.get()
+
+    async def discard_outbound(
+        self,
+        predicate: Callable[[OutboundMessage], bool],
+    ) -> int:
+        kept_messages: list[OutboundMessage] = []
+        discarded_count = 0
+
+        while True:
+            try:
+                message = self._outbound.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+
+            if predicate(message):
+                discarded_count += 1
+                continue
+            kept_messages.append(message)
+
+        for message in kept_messages:
+            self._outbound.put_nowait(message)
+
+        return discarded_count
 
     @property
     def inbound_size(self) -> int:

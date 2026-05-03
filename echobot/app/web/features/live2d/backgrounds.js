@@ -21,6 +21,7 @@ export function createStageBackgroundController(deps) {
         roundTo,
         responseToError,
         setRunStatus,
+        t = (key) => key,
         applyStageEffectsToRuntime,
     } = deps;
 
@@ -46,7 +47,7 @@ export function createStageBackgroundController(deps) {
         if (!backgrounds.some((item) => item.key === defaultBackgroundKey)) {
             backgrounds.unshift({
                 key: defaultBackgroundKey,
-                label: "不使用背景",
+                label: t("console.noStageBackground"),
                 url: "",
                 kind: "none",
             });
@@ -248,7 +249,7 @@ export function createStageBackgroundController(deps) {
         if (backgrounds.length === 0) {
             const option = document.createElement("option");
             option.value = "default";
-            option.textContent = "不使用背景";
+            option.textContent = t("console.noStageBackground");
             DOM.stageBackgroundSelect.appendChild(option);
         }
 
@@ -463,12 +464,17 @@ export function createStageBackgroundController(deps) {
         }
 
         if (!backgroundOption || !backgroundOption.url) {
-            DOM.stageBackgroundDetail.textContent = "当前未使用背景";
+            DOM.stageBackgroundDetail.textContent = t("console.noStageBackgroundActive");
             return;
         }
 
         const normalizedTransform = normalizeStageBackgroundTransform(transform);
-        DOM.stageBackgroundDetail.textContent = `当前背景：${backgroundOption.label || backgroundOption.key} · 位置 ${normalizedTransform.positionX}% / ${normalizedTransform.positionY}% · 缩放 ${normalizedTransform.scale}%`;
+        DOM.stageBackgroundDetail.textContent = t("console.stageBackgroundDetail", {
+            background: backgroundOption.label || backgroundOption.key,
+            x: normalizedTransform.positionX,
+            y: normalizedTransform.positionY,
+            scale: normalizedTransform.scale,
+        });
     }
 
     function updateStageBackgroundControls(options = {}) {
@@ -512,10 +518,10 @@ export function createStageBackgroundController(deps) {
         applyStageBackgroundByKey(appState.config.stage, backgroundKey);
         const selectedOption = currentStageBackgroundOption();
         if (!selectedOption || !selectedOption.url) {
-            setRunStatus("已切换为不使用背景");
+            setRunStatus(t("console.noStageBackgroundSelected"));
             return;
         }
-        setRunStatus(`已切换舞台背景：${selectedOption.label || selectedOption.key}`);
+        setRunStatus(t("console.stageBackgroundSwitched", { background: selectedOption.label || selectedOption.key }));
     }
 
     function handleStageBackgroundReset() {
@@ -527,7 +533,7 @@ export function createStageBackgroundController(deps) {
             appState.config.stage,
             appState.config.stage.default_background_key,
         );
-        setRunStatus("已切换为不使用背景");
+        setRunStatus(t("console.noStageBackgroundSelected"));
     }
 
     function handleStageBackgroundTransformInput() {
@@ -562,7 +568,7 @@ export function createStageBackgroundController(deps) {
         syncStageBackgroundTransformInputs(selectedOption, nextTransform);
         updateStageBackgroundDetail(selectedOption, nextTransform);
         updateStageBackgroundControls();
-        setRunStatus(`已重置背景取景：${selectedOption.label || selectedOption.key}`);
+        setRunStatus(t("console.stageBackgroundFramingReset", { background: selectedOption.label || selectedOption.key }));
     }
 
     async function handleStageBackgroundUpload() {
@@ -582,7 +588,7 @@ export function createStageBackgroundController(deps) {
         );
 
         updateStageBackgroundControls({ isUploading: true });
-        setRunStatus("正在上传舞台背景…");
+        setRunStatus(t("console.stageBackgroundUploading"));
 
         try {
             const formData = new FormData();
@@ -608,11 +614,11 @@ export function createStageBackgroundController(deps) {
                 ? uploadedOption.key
                 : nextStageConfig.default_background_key;
             applyStageBackgroundByKey(nextStageConfig, nextKey);
-            setRunStatus(`已上传舞台背景：${uploadedOption ? uploadedOption.label : file.name}`);
+            setRunStatus(t("console.stageBackgroundUploaded", { background: uploadedOption ? uploadedOption.label : file.name }));
         } catch (error) {
             console.error(error);
             applyStageBackgroundByKey(previousStageConfig, live2dState.selectedStageBackgroundKey);
-            setRunStatus(error.message || "舞台背景上传失败");
+            setRunStatus(error.message || t("console.stageBackgroundUploadFailed"));
         } finally {
             updateStageBackgroundControls();
         }
@@ -770,6 +776,10 @@ export function createStageBackgroundController(deps) {
         handleStageBackgroundTransformReset,
         handleStageBackgroundUpload,
         normalizeStageConfig,
+        refreshLocalizedText() {
+            renderStageBackgroundOptions(appState.config && appState.config.stage, live2dState.selectedStageBackgroundKey);
+            updateStageBackgroundDetail(currentStageBackgroundOption(), live2dState.currentStageBackgroundTransform);
+        },
         renderStageBackgroundOptions,
         resolveInitialStageBackgroundKey,
         syncPixiStageBackground,

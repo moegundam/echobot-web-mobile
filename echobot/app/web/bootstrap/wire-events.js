@@ -11,6 +11,7 @@ export function wireAppEvents(features) {
         sessions,
         tts,
         status,
+        t = (key) => key,
     } = features;
     const form = document.getElementById("chat-form");
     form.addEventListener("submit", chat.handleChatSubmit);
@@ -179,11 +180,11 @@ export function wireAppEvents(features) {
 
     DOM.resetViewButton.addEventListener("click", () => {
         live2d.resetLive2DViewToDefault();
-        status.setRunStatus("已重置模型位置");
+        status.setRunStatus(t("console.modelPositionReset"));
     });
     DOM.stopAudioButton.addEventListener("click", () => {
         tts.stopSpeechPlayback();
-        status.setRunStatus("已停止语音");
+        status.setRunStatus(t("console.audioStopped"));
     });
     bindOptionalClick(DOM.stopAgentButton, chat.handleStopBackgroundJob);
     bindOptionalClick(DOM.recordButton, asr.handleRecordButtonClick);
@@ -209,6 +210,12 @@ export function wireAppEvents(features) {
 
     document.body.addEventListener("pointerdown", () => {
         void tts.ensureAudioContextReady();
+    });
+    document.addEventListener("visibilitychange", () => {
+        void asr.handlePageHidden();
+    });
+    window.addEventListener("pagehide", () => {
+        void asr.handlePageHidden();
     });
     window.addEventListener("beforeunload", asr.handleBeforeUnload);
 }

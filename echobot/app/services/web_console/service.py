@@ -17,17 +17,23 @@ class WebConsoleService:
         workspace: Path,
         tts_service: TTSService,
         asr_service: ASRService,
+        *,
+        storage_root: Path | None = None,
     ) -> None:
         self._tts_service = tts_service
         self._asr_service = asr_service
         app_root = Path(__file__).resolve().parents[2]
-        self._runtime_settings_service = WebRuntimeSettingsService(workspace)
+        root = storage_root or workspace / ".echobot"
+        self._runtime_settings_service = WebRuntimeSettingsService(
+            workspace,
+            storage_root=root,
+        )
         self._live2d_service = Live2DService(
-            workspace / ".echobot" / "live2d",
+            root / "live2d",
             app_root / "builtin_live2d",
         )
         self._stage_background_service = StageBackgroundService(
-            workspace / ".echobot" / "web" / "backgrounds",
+            root / "web" / "backgrounds",
             app_root / "builtin_stage_backgrounds",
         )
 

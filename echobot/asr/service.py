@@ -38,6 +38,25 @@ class ASRService:
     def selected_asr_provider(self) -> str:
         return self._selected_asr_provider
 
+    async def replace_asr_provider(
+        self,
+        provider_name: str,
+        provider: ASRProvider,
+        *,
+        select: bool = False,
+    ) -> None:
+        normalized_name = provider_name.strip()
+        if not normalized_name:
+            raise ValueError("ASR provider name must not be empty")
+
+        previous_provider = self._asr_providers.get(normalized_name)
+        self._asr_providers[normalized_name] = provider
+        if select:
+            self._selected_asr_provider = normalized_name
+            await self.on_startup()
+        if previous_provider is not None and previous_provider is not provider:
+            await previous_provider.close()
+
     def asr_provider_names(self) -> list[str]:
         return sorted(self._asr_providers)
 

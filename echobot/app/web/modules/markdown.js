@@ -1,3 +1,11 @@
+let markdownT = (key) => key;
+
+export function configureMarkdownI18n(options = {}) {
+    if (typeof options.t === "function") {
+        markdownT = options.t;
+    }
+}
+
 export function buildMarkdownFragment(markdownText, depth = 0) {
     const normalizedText = String(markdownText || "").replace(/\r\n?/g, "\n");
     const lines = normalizedText.split("\n");
@@ -951,13 +959,14 @@ function appendImageToken(container, token) {
     previewButton.className = "message-image-link message-markdown-image-link";
     previewButton.dataset.imagePreview = "true";
     previewButton.dataset.imageUrl = safeUrl;
-    previewButton.title = token.alt || "Preview image";
-    previewButton.setAttribute("aria-label", token.alt || "Preview image");
+    previewButton.dataset.previewLabel = token.alt || "";
+    previewButton.title = token.alt || markdownT("console.previewImage");
+    previewButton.setAttribute("aria-label", token.alt || markdownT("console.previewImage"));
 
     const image = document.createElement("img");
     image.className = "message-image message-markdown-image";
     image.src = safeUrl;
-    image.alt = token.alt || "Markdown image";
+    image.alt = token.alt || markdownT("console.markdownImage");
     image.loading = "lazy";
 
     previewButton.appendChild(image);

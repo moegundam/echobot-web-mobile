@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>EchoBot Stage</title>
+    <link rel="stylesheet" href="/web/assets/styles/shell-pages.css?v=site-public-6">
+</head>
+<body class="stage-page" data-page-title-key="stage.pageTitle">
+    <main id="stage-root" class="stage-root">
+        <section id="stage-surface" class="stage-surface" aria-label="EchoBot stage" data-i18n-aria-label-key="stage.aria">
+            <div class="stage-orbit stage-orbit-a" aria-hidden="true"></div>
+            <div class="stage-orbit stage-orbit-b" aria-hidden="true"></div>
+            <div class="stage-toolbar">
+                <div class="stage-toolbar-controls">
+                    <div class="language-switcher stage-language-switcher" data-language-switcher></div>
+                    <div class="display-mode-switcher stage-display-mode-switcher" data-display-mode-switcher></div>
+                </div>
+                <button id="stage-audio-enable" class="stage-audio-button" type="button">
+                    Enable audio
+                </button>
+            </div>
+            <div id="stage-canvas-host" class="stage-canvas-host"></div>
+            <div class="stage-subtitle-panel">
+                <p id="stage-subtitle" class="stage-subtitle">Waiting for stage events...</p>
+                <div class="stage-meta-row">
+                    <span id="stage-session-label">session: default</span>
+                    <span id="stage-status">connecting</span>
+                </div>
+            </div>
+        </section>
+    </main>
+    <script src="/web/assets/vendor/pixi.min.js"></script>
+    <script src="/web/assets/vendor/live2dcubismcore.min.js"></script>
+    <script src="/web/assets/vendor/cubism4.min.js"></script>
+    <script type="module" src="/web/assets/stage-app.js?v=site-public-6"></script>
+</body>
+</html>

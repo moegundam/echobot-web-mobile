@@ -58,7 +58,7 @@ export const panelState = {
 
 export const runtimeState = {
     delegatedAckEnabled: true,
-    shellSafetyMode: "danger-full-access",
+    shellSafetyMode: "workspace-write",
     fileWriteEnabled: true,
     cronMutationEnabled: true,
     webPrivateNetworkEnabled: false,

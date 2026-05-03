@@ -4,388 +4,237 @@
 
 </div>
 
-# EchoBot: Your Anime AI Companion
+# EchoBot Web Mobile Management Edition
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-> [中文文档 / Chinese README](./README.md)
+> Traditional Chinese version: [README.md](./README.md)
 
-**EchoBot** is an anime-style AI companion with Live2D support. It offers immersive role-play and emotional companionship, while quietly handling complex Agent productivity tasks like coding and file management in the background (๑>ᴗ<๑).
+`moegundam/echobot-web-mobile` is a private management edition based on [KdaiP/EchoBot](https://github.com/KdaiP/EchoBot). Its goal is to extend the original EchoBot into a Web/Mobile version suitable for local development, mobile testing, 10-user private testing, Stage display, Messenger chat entry, Console operations, and Admin management.
 
-Whether you're using the web UI (with real-time voice and Live2D interaction) or chat platforms (QQ and Telegram supported), your companion is always ready to respond~
+EchoBot remains the implementation base. [Open-LLM-VTuber/Open-LLM-VTuber](https://github.com/Open-LLM-VTuber/Open-LLM-VTuber) is not merged into this backend. It is used only as a reference for Live2D, ASR/TTS, VTuber interaction design, and desktop-companion style UX.
 
-<p align="center">
-  <img src="./assets/webui_1.png" alt="EchoBot WebUI Preview">
-</p>
+## Sources And Attribution
 
-> The Live2D model shown in the demo is from: [【Free Model】Take this cute puppy home for free!](https://www.bilibili.com/video/BV1LM41137vK)
+| Type | Project | How this edition uses it |
+|---|---|---|
+| Upstream base | [KdaiP/EchoBot](https://github.com/KdaiP/EchoBot) | Main repository source for Agent/runtime/WebUI/Live2D/ASR/TTS/Channel foundations |
+| Interaction reference | [Open-LLM-VTuber/Open-LLM-VTuber](https://github.com/Open-LLM-VTuber/Open-LLM-VTuber) | Reference only for Live2D, voice interaction, and VTuber UX; its backend is not merged |
+| Original license | MIT License | The original `LICENSE` is preserved; copyright belongs to KdaiP |
 
----
+Any future third-party project, model, asset, or document reference must state its source, license, and purpose in the README, the relevant documentation, or the asset directory.
 
-## ✨ Core Features
+## What This Edition Adds To Original EchoBot
 
-* **🎭 Immersive Live2D Interaction**: Real-time Live2D rendering and voice conversation in the browser.
-* **🧠 Decision-Roleplay-Agent Three-Layer Architecture**: Fully decouples role-play from tool execution for fast responses without breaking character.
-* **🛠️ Serious Productivity**: Local file read/write, scheduled and periodic tasks, Skills, and long-term memory — actually gets things done.
-* **🌐 Multi-Platform Support**: Ready-to-use WebUI with seamless integration for QQ and Telegram.
+### 1. Layered Web Product Entrances
 
----
+Original EchoBot mainly used `/web` as the operation page. This edition adds and organizes multiple product entrances:
 
-## 🏗️ Core Architecture
+| Page | Path | Purpose |
+|---|---|---|
+| Stage | `/stage?session_name=<name>` | Display-only character view, subtitles, TTS, and Live2D lip sync |
+| Messenger | `/messenger` | Lightweight chat entry, defaulting to `chat_only` |
+| Console | `/console` | Operator workbench, carrying the original `/web` control surface |
+| Compatible Web | `/web` | Preserved legacy entry, mapped to Console |
+| Admin | `/admin` | Admin index, health, API docs, jobs, and management pages |
+| Operation Guide | `/admin/guide` | Operation, setup, expected outcomes, failure signs, and troubleshooting |
+| Site Structure | `/admin/structure` | Route map, Console sections, and API namespace boundaries |
+| Model Profiles | `/admin/models` | Create, rename, and activate role/model profiles |
+| Channels | `/admin/channels` | Planning entry for Telegram, QQ, LINE, Discord, WhatsApp, and gateway adapters |
+| Open WebUI Bridge | `/admin/openwebui` | Narrow OpenAPI bridge instructions for Open WebUI |
 
-Typical AI Agents are slow and token-heavy by nature due to large tool lists and skill systems. Mixing character settings with task instructions leads to "character dilution" and degrades execution efficiency.
+### 2. Mobile And Desktop Display Modes
 
-EchoBot uses a **Decision - Roleplay - Agent** three-layer architecture to solve this:
+This edition adds consistent language and display controls:
 
-### 1. 🧠 Decision Layer
+- Languages: English, Traditional Chinese, Simplified Chinese.
+- Display modes: Auto, Mobile, Portrait, Landscape, Desktop / Dense.
+- Console, Stage, Messenger, and Admin pages share the same switching pattern.
+- `/console` adapts its operation layout based on device and selected display mode.
 
-Accurately and quickly identifies user intent.
+### 3. Sitewide Language Switching
 
-* **Hybrid Intent Recognition**: Dual-engine using `Rules + Lightweight LLM`. Clear commands bypass the large model and trigger background tasks directly; ambiguous intent is classified by a lightweight LLM.
-* **Smart Dispatch**: Casual chat is routed to the **Roleplay Layer**; complex tasks silently wake the **Agent Core** while the Roleplay Layer notifies the user that the task has started.
+The original static DOM translation approach has been expanded to dynamic modules:
 
-### 2. 🎭 Roleplay Layer
+- ASR, TTS, sessions, roles, Live2D, traces, attachments, and messages refresh when the language changes.
+- Dynamic buttons, placeholders, titles, aria labels, status text, and error messages are no longer hard-coded inside feature modules.
+- The default language is English, with Traditional Chinese and Simplified Chinese available.
 
-Focused purely on emotional value and immersion (๑˃̵ᴗ˂̵) ♡.
+### 4. Cloudflare Local Tunnel Testing Deployment
 
-* **Clean Context**: Strips away tool-use metadata, optimized for text/voice generation — ensuring vivid tone, instant replies, and no out-of-character moments.
-* **Context Awareness**: Intelligently switches dialogue based on system state (e.g., idle chat, task started, task completed).
+A Local Tunnel profile was added for private testing: EchoBot runs locally or on a Mac host, while Cloudflare Tunnel + Access provides HTTPS and login.
 
-### 3. ⚙️ Agent Core
+Related files:
 
-Runs silently in the background to complete assigned tasks.
+- [`docs/deployment/local-tunnel.md`](./docs/deployment/local-tunnel.md)
+- [`docs/deployment/cloudflared-local-tunnel.example.yml`](./docs/deployment/cloudflared-local-tunnel.example.yml)
+- [`.env.local-tunnel.example`](./.env.local-tunnel.example)
 
-* **Full Agent Capabilities**: Integrated tool chains (Tools), skill libraries (Skills), and long/short-term memory (Memory).
-* **System-Level Access**: Can read/write local files and interact with the operating system.
-* **Async Collaboration**: Automatically summarizes results when done and has your anime companion personally deliver the report to you.
-
----
-
-## 🔄 Workflow Examples
-
-**Scenario A: Casual Chat**
-> 🧑‍💻 **You**: "Good morning!"
-> 🤖 **Decision Layer**: (Classified as casual chat) ➔ Forwarded to Roleplay Layer.
-> 🌸 **Roleplay Layer**: "Good morning~ Let's have a great day today nya~"
-
-**Scenario B: Complex Task Request**
-> 🧑‍💻 **You**: "Write me a Python web scraper."
-> 🤖 **Decision Layer**: (Rule matched) ➔ Triggers dual-track operation.
-> 🌸 **Roleplay Layer** (instant reply): "Got it! I'll write that scraper for you right meow~"
-> ⚙️ **Agent Core** (silent background execution): Search ➔ Write code ➔ Test code ➔ Return results.
-> 🌸 **Roleplay Layer**: "Here it is! I worked really hard on this scraper, take a look~ [attached code file]"
-
----
-
-## 🚀 Quick Start
-
-💡 *Tip: Want to get up and running fast? Just hand this repo to a Coding Agent like Codex, Claude Code, or Cursor for one-click setup (≧∇≦)/*
-
-### Install Dependencies
-
-Python 3.11 or higher is recommended.
+Recommended Local Tunnel command:
 
 ```shell
+python -m echobot app --host 127.0.0.1 --port 8000
+```
+
+For local development, use another port when needed:
+
+```shell
+python -m echobot app --host 127.0.0.1 --port 8001
+```
+
+### 5. Cloudflare Access Trusted-User Boundary
+
+This edition adds trusted-header support so private-test data can be isolated by logged-in identity:
+
+- Default trusted user header: `Cf-Access-Authenticated-User-Email`
+- When enabled, protected pages, API docs, `/api/*`, and the ASR WebSocket require a trusted user id.
+- Sessions, history, jobs, attachments, and settings are stored under `.echobot/users/<user_id>/...`.
+- Different users should not see each other's sessions, history, jobs, attachments, or Stage events.
+
+### 6. Stage Event Broker
+
+A user/session scoped Stage event flow was added:
+
+- `GET /api/stage/events?session_name=<name>`: subscribe to Stage events over SSE.
+- `POST /api/stage/events`: publish subtitles and stage events.
+- Broker v1 is in-memory and keyed by trusted user plus session.
+- Stage updates subtitles on `assistant_delta` and performs final subtitle/TTS behavior on `assistant_final`.
+
+### 7. Open WebUI Bridge Interface
+
+The bridge interface is implemented, but Open WebUI does not need to be connected yet:
+
+- `GET /api/openwebui/tools/openapi.json`
+- `GET /api/openwebui/sessions`
+- `POST /api/openwebui/stage/events`
+- `POST /api/openwebui/chat`
+
+Security design:
+
+- The bridge uses a server-to-server Bearer token.
+- The full site `/openapi.json` is not exposed to Open WebUI.
+- The default route mode is `chat_only`.
+- Operator-agent mode must be explicitly enabled before higher-risk routing is allowed.
+
+### 8. Model Profiles
+
+A model profile management page was added:
+
+- Default A-E profiles.
+- Users can keep adding profiles.
+- Profile names are user-defined.
+- Each profile can configure chat, TTS, ASR, Live2D provider/model/base URL/API key values.
+- Activating a profile updates the model settings used by Console.
+
+### 9. Deployment And Architecture Documentation
+
+This edition adds planning, site structure, and reference documents:
+
+- [`docs/implementation/echobot-web-mobile-integration-plan.md`](./docs/implementation/echobot-web-mobile-integration-plan.md)
+- [`docs/implementation/echobot-web-site-structure.md`](./docs/implementation/echobot-web-site-structure.md)
+- [`docs/implementation/open-llm-vtuber-reference-gap.md`](./docs/implementation/open-llm-vtuber-reference-gap.md)
+
+## Current Status And Public-Repo Notes
+
+Completed so far:
+
+- The EchoBot base has been organized into a Web/Mobile management edition while preserving the compatible `/web` entry.
+- `/stage`, `/messenger`, `/console`, `/admin`, and the Admin guide/structure/models/Open WebUI/channels pages have been added.
+- English, Traditional Chinese, and Simplified Chinese switching is applied to static pages and the main dynamic UI.
+- Mobile/tablet/desktop display modes have been added, with 360x800, 390x844, 430x932, and 768x1024 viewport checks expected to avoid horizontal overflow.
+- First-version interfaces and documentation exist for Cloudflare Local Tunnel, trusted-user isolation, Stage Event Broker, Open WebUI bridge APIs, and Model Profiles.
+- The public-facing safety default is now `ECHOBOT_SHELL_SAFETY_MODE=workspace-write`.
+
+Not finished or still planned:
+
+- Telegram, QQ, LINE, Discord, WhatsApp, and other external chat platforms are currently planning entries under `/admin/channels`; production bot gateways are not wired yet.
+- The EchoBot-side narrow Open WebUI bridge API and documentation page exist, but Open WebUI does not need to be connected yet.
+- `/admin` v1 is mostly an index, guide, and status surface. It is not a complete production SaaS admin console.
+- Stage / Live2D / ASR / TTS integration direction is preserved, but real-device microphone and long-running voice interaction checks still need HTTPS plus real-device validation.
+- Multi-user private testing should use Cloudflare Access or a trusted reverse proxy. Do not expose the local service anonymously to the public internet.
+
+A public repository means the code and documentation are browseable. It does not mean this system is safe to deploy anonymously. Before internet deployment, read [`SECURITY.md`](./SECURITY.md) and enable the trusted-user security boundary.
+
+## Quick Start
+
+### 1. Install Dependencies
+
+Python 3.11 or newer is recommended.
+
+```shell
+python -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### Configure .env
+### 2. Create Configuration
 
-Copy `.env.example` and rename it to `.env`, then fill in your LLM provider info (OpenAI-compatible format):
+```shell
+cp .env.example .env
+```
+
+Common OpenAI-compatible configuration:
 
 ```text
 LLM_API_KEY=your_api_key_here
-LLM_MODEL=deepseek-chat
-LLM_BASE_URL=https://api.deepseek.com/v1
+LLM_MODEL=your-model-name
+LLM_BASE_URL=https://your-provider.example/v1
 ```
 
-### Start the Service
+Configure local models, remote private model services, and API keys in your own `.env` file or secret manager. Do not put real hosts, tailnet IPs, model inventories, or keys into a public repository.
 
-The following command starts both the chat platform gateway and the web UI:
+### 3. Start The Local Server
 
 ```shell
-python -m echobot app
+python -m echobot app --host 127.0.0.1 --port 8000
 ```
 
-### Start Using
+If port 8000 is already in use:
 
-Open your browser and visit the address below to meet your companion (≧◡≦) ♡:
+```shell
+python -m echobot app --host 127.0.0.1 --port 8001
+```
+
+### 4. Open The Pages
 
 ```text
-http://127.0.0.1:8000/web
+http://127.0.0.1:8000/console
+http://127.0.0.1:8000/stage?session_name=demo
+http://127.0.0.1:8000/messenger
+http://127.0.0.1:8000/admin
 ```
 
----
+## Tests
 
-## 🎨 Customization
+```shell
+python -m pytest
+```
 
-### 👗 Import / Switch Live2D Models
+This branch has been verified with:
 
-A complete Live2D asset is typically a folder containing `.model3.json` and related files. The project ships with 2 built-in Live2D assets. You can upload or switch models directly from the web control panel:
+- 10 routes × mobile/desktop × 3 languages browser checks.
+- i18n key coverage.
+- API route/auth tests.
+- Full pytest: `292 passed`.
 
-<p align="center">
-  <img src="./assets/webui_live2d.png" width="50%">
-</p>
+## Project Rules
 
-After uploading, the companion automatically copies the folder to `.echobot/live2d`. You can also manually copy a Live2D asset folder there — it will be loaded on next startup.
+1. Preserve the upstream EchoBot MIT License and copyright.
+2. Any third-party source used by README, docs, assets, models, or code must state its source, license, and purpose.
+3. Secrets must not be committed, including LLM keys, Cloudflare tokens, Open WebUI bridge tokens, and chat platform bot tokens.
+4. Private testing should use Cloudflare Access or a trusted reverse proxy first; do not expose the system anonymously by default.
+5. `/messenger` and external chat gateways default to `chat_only`; tool-capable Agent behavior needs a separate approval gate.
+6. User data is stored under `.echobot/users/<user_id>/...` by default and must not be mixed across users.
+7. New pages must support English, Traditional Chinese, and Simplified Chinese.
+8. Major features need documentation and tests, with at least one rerunnable minimum verification path.
 
-Eye-tracking (mouse follow) is enabled by default and can be toggled in the panel.
+## License
 
-### 🖼️ Import / Switch Backgrounds
+This project follows the upstream EchoBot MIT License. See [`LICENSE`](./LICENSE).
 
-Upload your favorite background images via the web control panel:
-
-<p align="center">
-  <img src="./assets/webui_background.png" width="50%">
-</p>
-
-### 🖼️ Image Upload & Download
-
-For vision-capable models (e.g., `qwen3.5-plus` and `kimi-k2.5`), you can send images directly to your companion, and your companion can send images back to you as well.
-
-> 💡 **Tip**: If your model does not support image input, set `ECHOBOT_LLM_SUPPORTS_IMAGE_INPUT=false` in the project's `.env` file to reduce accidental image-related actions by the assistant.
-
-<p align="center">
-  <img src="./assets/webui_image_1.png" width="77%">
-  <img src="./assets/webui_image_2.png" width="22%">
-</p>
-
-> The Live2D model shown in the demo is from: [【Ultra-Detailed Live2D Bulk Model】This bunny is so cute, I just have to eat you up!](https://www.bilibili.com/video/BV1YG6zYzEnN)
-
-### 📁 File Upload & Download
-
-Beyond images, your companion can also help you handle various types of files:
-
-<p align="center">
-  <img src="./assets/webui_file.png" width="100%">
-</p>
-
-### ⏰ Scheduled & Periodic Tasks
-
-Your companion can remember important things and execute them on time:
-
-* **Cron Tasks**: Triggered at a specific time. Simply tell your companion "remind me to attend the meeting in 30 minutes" and a task will be created automatically.
-  * Task data is stored in `.echobot/cron/jobs.json`.
-* **Heartbeat Tasks**: Triggered at a fixed interval, defaulting to every 30 minutes.
-  * Adjust the interval via `ECHOBOT_HEARTBEAT_INTERVAL_SECONDS` in `.env` (in seconds).
-  * Edit the heartbeat task file from the web panel or directly at `.echobot/HEARTBEAT.md`.
-
-<p align="center">
-  <img src="./assets/webui_cron.png" height="300" alt="Cron Jobs">
-  <img src="./assets/webui_heartbeat.png" height="300" alt="Heartbeat Jobs">
-</p>
-
-### 🚦 Router Mode
-
-Switch the working mode manually in the web UI based on your needs:
-
-🤖 **Auto (Default)**: Intelligently identifies intent and decides whether to invoke the background Agent (≧◡≦) ♡.
-
-💬 **Chat Only**: Fully disables background tasks to prevent accidental triggers — perfect for companionship (⁄ ⁄•⁄ω⁄•⁄ ⁄).
-
-🛠️ **Force Agent**: Become a relentless productivity machine — skips intent recognition and forces all messages through the background task pipeline (ง๑ •̀_•́)ง.
-
-<p align="center">
-<img src="./assets/webui_router.png" width="60%" alt="Router Mode">
-</p>
-
-### 🎙️ Voice Features (TTS & ASR)
-
-EchoBot's web UI supports half-duplex voice interaction. Switch voice backends flexibly from the control panel:
-
-**🗣️ Text-to-Speech (TTS):**
-
-Two free backends are supported:
-
-* [edge-tts](https://github.com/rany2/edge-tts): Online synthesis, free with no API key required.
-* [kokoro-multi-lang-v1_1](https://k2-fsa.github.io/sherpa/onnx/tts/all/Chinese-English/kokoro-multi-lang-v1_1.html): Local offline synthesis; model weights are downloaded automatically on first launch.
-
-<p align="center">
-  <img src="./assets/webui_tts.png" width="75%">
-</p>
-
-**🎙️ Speech Recognition (ASR):**
-
-Powered by the [SenseVoice](https://k2-fsa.github.io/sherpa/onnx/sense-voice/index.html) model via sherpa-onnx — fully local and offline; model weights are downloaded automatically on first launch.
-
-EchoBot's web UI supports half-duplex voice interaction (microphone is muted during playback to prevent echo). Both "Push to Talk" and "Always-On Mic" modes are supported.
-
-### 🔌 Advanced: Custom Voice Models
-
-EchoBot supports TTS and ASR interfaces that follow the **OpenAI-compatible API**, so you can replace the built-in voice models with your own local or cloud services:
-
-<p align="center">
-<img src="./assets/webui_custom_1.png" width="50%" alt="Custom Voice Model Settings">
-</p>
-
-**🗣️ Custom TTS:**
-
-Supports services compatible with the `OpenAI Speech API`.
-
-For example, you can use [vLLM Omni Speech](https://docs.vllm.ai/projects/vllm-omni/en/latest/serving/speech_api/) to deploy speech synthesis models such as `Qwen3-TTS` or `Fish Speech S2 Pro` locally. After starting the vLLM service, configure the endpoint URL and model name in `.env`:
+Original copyright:
 
 ```text
-ECHOBOT_TTS_OPENAI_MODEL=Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice
-ECHOBOT_TTS_OPENAI_BASE_URL=http://localhost:8091/v1
+Copyright (c) 2026 KdaiP
 ```
-
-**🎙️ Custom ASR:**
-
-Supports services compatible with the `OpenAI Transcriptions API`.
-
-For example, follow the [vLLM documentation](https://docs.vllm.com.cn/projects/recipes/en/latest/Qwen/Qwen3-ASR.html) to deploy `Qwen3-ASR`. After starting the vLLM service, configure the endpoint URL and model name in `.env`:
-
-```text
-ECHOBOT_ASR_OPENAI_MODEL=Qwen/Qwen3-ASR-0.6B
-ECHOBOT_ASR_OPENAI_BASE_URL=http://localhost:8080/v1
-```
-
-### 💡 Lighting & Effects
-
-Adjust filters, lighting, and particle effects from the web control panel. Hold `Alt + Click` on a slider to reset it to its default value.
-
-| Category | Parameters | Description |
-|---|---|---|
-| Toggles | Global Enable, Background Blur, Lighting, Light Drift, Air Particles | Enable or disable each rendering effect |
-| Rendering | Background Blur (0–16), Hue (-180°–180°), Saturation (0–200%), Contrast (0–200%) | Adjust color and depth of field |
-| Lighting Detail | Light X/Y (0–100%), Glow Intensity (0–160%), Vignette (0–60%), Grain (0–40%) | Control light source, vignette, and noise |
-| Particle System | Density (0–100%), Opacity (0–160%), Size (40–240%), Speed (0–260%) | Control floating dust particles |
-
-<p align="center">
-  <img src="./assets/webui_light.png" width="50%">
-</p>
-
-Lighting effects enabled:
-
-<p align="center">
-  <img src="./assets/webui_light_on.png">
-</p>
-
-Lighting effects disabled:
-
-<p align="center">
-  <img src="./assets/webui_light_off.png">
-</p>
-
-> The Live2D model shown in the demo is from: [Live2D Official Free Sample](https://www.live2d.com/zh-CHS/learn/sample/)
-
----
-
-## 📱 Chat Platform Integration
-
-### 🐧 QQ Integration
-
-Open the [QQ Open Platform](https://q.qq.com) and click the bot creation entry:
-
-<p align="center">
-  <img src="./assets/channel_qq_1.png">
-</p>
-
-Click "Create Bot" to get your `AppID` and `AppSecret`:
-
-<p align="center">
-  <img src="./assets/channel_qq_2.png">
-</p>
-
-Configure the QQ platform info in `.echobot/channels.json`:
-
-```
-"enabled": true
-"app_id": "your AppID",
-"client_secret": "your AppSecret"
-```
-
-Restart the service and you can chat with your companion directly in QQ~
-
-<p align="center">
-  <img src="./assets/channel_qq_3.jpg" width="50%">
-</p>
-
-### ✈️ Telegram Integration
-
-Search for `@BotFather` in Telegram and open the official account (verified with a blue checkmark).
-
-Send the command `/newbot` and follow the prompts to create a bot and get your `bot_token`.
-
-Configure the Telegram platform info in `.echobot/channels.json`:
-
-```
-"enabled": true
-"bot_token": "your bot_token",
-"allow_from": ["your user ID"]
-```
-
----
-
-## 💻 Terminal & Chat Platform Commands
-
-When running in the terminal or interacting via a chat platform, the following built-in commands are available for session management and persona switching~
-
-### 📁 Session Management
-
-| Command | Usage | Description |
-|---|---|---|
-| `/new` | `/new [title]` | Create a new session (optional title) |
-| `/ls` | `/ls` | List all sessions |
-| `/switch` | `/switch <number>` | Switch to the specified session |
-| `/rename` | `/rename <title>` | Rename the current session |
-| `/delete` | `/delete` | Delete the current session |
-| `/current` | `/current` | View current session info |
-| `/help` | `/help` | Show global command help |
-
-### 🎭 Role Management
-
-| Command | Usage | Description |
-|---|---|---|
-| `/role` | `/role` | View current character card |
-| `/role list` | `/role list` | List all character cards |
-| `/role current` | `/role current` | View current character card details |
-| `/role set` | `/role set <name>` | Switch to a specified character card |
-| `/role help` | `/role help` | Show role command help |
-
-### 🧭 Route Mode
-
-These route mode commands use the same session routing setting as the route mode switch in the web UI~
-
-| Command | Usage | Description |
-|---|---|---|
-| `/route` | `/route` | Show the current route mode for this session |
-| `/route current` | `/route current` | Show the current route mode for this session |
-| `/route auto` | `/route auto` | Switch to automatic routing |
-| `/route chat` | `/route chat` | Switch to chat-only mode |
-| `/route agent` | `/route agent` | Switch to force-agent mode |
-| `/route set` | `/route set <auto\|chat_only\|force_agent>` | Set the route mode explicitly |
-| `/route help` | `/route help` | Show route mode command help |
-
-### ⚙️ Runtime Configuration
-
-| Command | Usage | Description |
-|---|---|---|
-| `/runtime` | `/runtime` | List runtime settings and current values |
-| `/runtime list` | `/runtime list` | List runtime settings and current values |
-| `/runtime get` | `/runtime get <name>` | Show one runtime setting |
-| `/runtime set` | `/runtime set <name> <value>` | Update one runtime setting |
-| `/runtime help` | `/runtime help` | Show runtime command help |
-
-Example: use `delegated_ack_enabled` to control whether EchoBot sends a quick notice before a background task starts.
-
-```text
-/runtime get delegated_ack_enabled
-/runtime set delegated_ack_enabled on
-/runtime set delegated_ack_enabled off
-```
-
-- When set to `on`: EchoBot sends a short "started working" style message first, then sends the final result when the task finishes.
-- When set to `off`: the background task runs silently until the final result is ready.
-
----
-
-## 💖 Acknowledgements
-
-Standing on the shoulders of giants is what makes this companion so smart and adorable! EchoBot was inspired by and built upon the following excellent open-source projects (deep bow 🙇‍♀️):
-
-* **[nanobot](https://github.com/HKUDS/nanobot)**
-* **[CoPaw](https://github.com/agentscope-ai/CoPaw)**
-* **[Open-LLM-VTuber](https://github.com/Open-LLM-VTuber/Open-LLM-VTuber)**
-* **[AstrBot](https://github.com/AstrBotDevs/AstrBot)**

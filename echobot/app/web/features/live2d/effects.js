@@ -174,6 +174,7 @@ export function createStageEffectsController(deps) {
         clamp,
         roundTo,
         setRunStatus,
+        t = (key) => key,
         applyStageLightingVars,
         updateStageAtmosphereFrame,
     } = deps;
@@ -458,7 +459,7 @@ export function createStageEffectsController(deps) {
 
     function handleStageEffectsReset() {
         applyStageEffectsSettings(DEFAULT_STAGE_EFFECT_SETTINGS);
-        setRunStatus("已重置光影参数");
+        setRunStatus(t("console.stageEffectsReset"));
     }
 
     function renderStageEffectsDetail(settings) {
@@ -467,24 +468,42 @@ export function createStageEffectsController(deps) {
         }
 
         if (!settings.enabled) {
-            DOM.stageEffectsDetail.textContent = "当前已关闭全部光影效果";
+            DOM.stageEffectsDetail.textContent = t("console.stageEffectsAllOff");
             return;
         }
 
         const blurText = settings.backgroundBlurEnabled
-            ? `模糊 ${settings.backgroundBlur}`
-            : "模糊关闭";
+            ? t("console.stageEffectBlur", { value: settings.backgroundBlur })
+            : t("console.stageEffectBlurOff");
         const lightText = settings.lightEnabled
-            ? `光位 ${settings.lightX}% / ${settings.lightY}%`
-            : "光位关闭";
+            ? t("console.stageEffectLight", { x: settings.lightX, y: settings.lightY })
+            : t("console.stageEffectLightOff");
         const floatText = settings.lightEnabled && settings.lightFloatEnabled
-            ? "光位漂移开启"
-            : "光位漂移关闭";
+            ? t("console.stageEffectLightFloatOn")
+            : t("console.stageEffectLightFloatOff");
         const particleText = settings.particlesEnabled
-            ? `粒子 ${settings.particleDensity}% / 透明 ${settings.particleOpacity}% / 尺寸 ${settings.particleSize}% / 速度 ${settings.particleSpeed}%`
-            : "粒子关闭";
-        const colorText = `色调 ${settings.hue}\u00B0 / 饱和 ${settings.saturation}% / 对比 ${settings.contrast}%`;
-        DOM.stageEffectsDetail.textContent = `${blurText} · ${lightText} · ${floatText} · ${particleText} · 光晕 ${settings.glowStrength}% · 暗角 ${settings.vignetteStrength}% · 颗粒 ${settings.grainStrength}% · ${colorText}`;
+            ? t("console.stageEffectParticles", {
+                density: settings.particleDensity,
+                opacity: settings.particleOpacity,
+                size: settings.particleSize,
+                speed: settings.particleSpeed,
+            })
+            : t("console.stageEffectParticlesOff");
+        const colorText = t("console.stageEffectColor", {
+            hue: settings.hue,
+            saturation: settings.saturation,
+            contrast: settings.contrast,
+        });
+        DOM.stageEffectsDetail.textContent = [
+            blurText,
+            lightText,
+            floatText,
+            particleText,
+            t("console.stageEffectGlow", { value: settings.glowStrength }),
+            t("console.stageEffectVignette", { value: settings.vignetteStrength }),
+            t("console.stageEffectGrain", { value: settings.grainStrength }),
+            colorText,
+        ].join(" · ");
     }
 
     return {
@@ -494,5 +513,8 @@ export function createStageEffectsController(deps) {
         handleStageEffectsReset,
         loadSavedStageEffectsSettings,
         normalizeStageEffectsSettings,
+        refreshLocalizedText() {
+            renderStageEffectsDetail(live2dState.stageEffects || DEFAULT_STAGE_EFFECT_SETTINGS);
+        },
     };
 }

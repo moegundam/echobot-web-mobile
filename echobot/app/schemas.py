@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from ..models import LLMMessage, normalize_message_content
 from ..orchestration import (
@@ -235,6 +235,98 @@ class UpdateRoleRequest(BaseModel):
     prompt: str
 
 
+class StrictSchemaModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class ChatModelProfileConfigModel(StrictSchemaModel):
+    provider: str = "openai-compatible"
+    model: str = ""
+    base_url: str = ""
+    temperature: float | None = Field(default=None, ge=0, le=2)
+    max_tokens: int | None = Field(default=None, ge=1, le=200000)
+    api_key_configured: bool = False
+    api_key_source: str = ""
+
+
+class TTSModelProfileConfigModel(StrictSchemaModel):
+    provider: str = ""
+    model: str = ""
+    base_url: str = ""
+    voice: str = ""
+    api_key_configured: bool = False
+    api_key_source: str = ""
+
+
+class ASRModelProfileConfigModel(StrictSchemaModel):
+    provider: str = ""
+    model: str = ""
+    base_url: str = ""
+    language: str = ""
+    api_key_configured: bool = False
+    api_key_source: str = ""
+
+
+class Live2DModelProfileConfigModel(StrictSchemaModel):
+    selection_key: str = ""
+
+
+class ModelProfileModel(StrictSchemaModel):
+    profile_id: str
+    label: str
+    chat: ChatModelProfileConfigModel = Field(default_factory=ChatModelProfileConfigModel)
+    tts: TTSModelProfileConfigModel = Field(default_factory=TTSModelProfileConfigModel)
+    asr: ASRModelProfileConfigModel = Field(default_factory=ASRModelProfileConfigModel)
+    live2d: Live2DModelProfileConfigModel = Field(default_factory=Live2DModelProfileConfigModel)
+    updated_at: str = ""
+
+
+class ModelProfilesResponse(StrictSchemaModel):
+    active_profile_id: str = "a"
+    profiles: list[ModelProfileModel] = Field(default_factory=list)
+
+
+class CreateModelProfileRequest(StrictSchemaModel):
+    label: str
+    source_profile_id: str | None = None
+
+
+class UpdateChatModelProfileConfigRequest(StrictSchemaModel):
+    provider: str = "openai-compatible"
+    model: str = ""
+    base_url: str = ""
+    temperature: float | None = Field(default=None, ge=0, le=2)
+    max_tokens: int | None = Field(default=None, ge=1, le=200000)
+    api_key: str | None = None
+    clear_api_key: bool = False
+
+
+class UpdateTTSModelProfileConfigRequest(StrictSchemaModel):
+    provider: str = ""
+    model: str = ""
+    base_url: str = ""
+    voice: str = ""
+    api_key: str | None = None
+    clear_api_key: bool = False
+
+
+class UpdateASRModelProfileConfigRequest(StrictSchemaModel):
+    provider: str = ""
+    model: str = ""
+    base_url: str = ""
+    language: str = ""
+    api_key: str | None = None
+    clear_api_key: bool = False
+
+
+class UpdateModelProfileRequest(StrictSchemaModel):
+    label: str | None = None
+    chat: UpdateChatModelProfileConfigRequest | None = None
+    tts: UpdateTTSModelProfileConfigRequest | None = None
+    asr: UpdateASRModelProfileConfigRequest | None = None
+    live2d: Live2DModelProfileConfigModel | None = None
+
+
 class TTSRequest(BaseModel):
     text: str
     provider: str | None = None
@@ -381,7 +473,7 @@ class WebStageConfigModel(BaseModel):
 
 class WebRuntimeConfigModel(BaseModel):
     delegated_ack_enabled: bool = True
-    shell_safety_mode: str = "danger-full-access"
+    shell_safety_mode: str = "workspace-write"
     file_write_enabled: bool = True
     cron_mutation_enabled: bool = True
     web_private_network_enabled: bool = False
@@ -391,6 +483,8 @@ class WebConfigResponse(BaseModel):
     session_name: str = "default"
     role_name: str = "default"
     route_mode: RouteMode = DEFAULT_ROUTE_MODE
+    model_profile_scope: str = "default"
+    model_profiles: ModelProfilesResponse = Field(default_factory=ModelProfilesResponse)
     runtime: WebRuntimeConfigModel = Field(default_factory=WebRuntimeConfigModel)
     live2d: WebLive2DConfigModel = Field(default_factory=WebLive2DConfigModel)
     stage: WebStageConfigModel = Field(default_factory=WebStageConfigModel)

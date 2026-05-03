@@ -1168,6 +1168,17 @@ class OpenAICompatibleSettingsTests(unittest.TestCase):
         self.assertEqual("https://example.com/v1", settings.base_url)
         self.assertEqual(30.0, settings.timeout)
 
+    def test_from_env_uses_defaults_for_optional_values(self) -> None:
+        settings = OpenAICompatibleSettings.from_env(
+            env={
+                "LLM_API_KEY": "test-key",
+                "LLM_MODEL": "test-model",
+            }
+        )
+
+        self.assertEqual("https://api.openai.com/v1", settings.base_url)
+        self.assertEqual(60.0, settings.timeout)
+
     def test_from_env_requires_api_key_and_model(self) -> None:
         with self.assertRaisesRegex(ValueError, "LLM_API_KEY"):
             OpenAICompatibleSettings.from_env(env={"LLM_MODEL": "test-model"})

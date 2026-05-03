@@ -4,6 +4,11 @@ import { writeHeartbeatPanelState } from "./panels.js";
 
 export function createHeartbeatController(deps) {
     const { isSettingsPanelOpen, requestJson } = deps;
+    const t = typeof deps.t === "function" ? deps.t : (key, params = {}) => {
+        return String(key).replace(/\{([A-Za-z0-9_]+)\}/g, (_match, name) => {
+            return Object.prototype.hasOwnProperty.call(params, name) ? String(params[name]) : "";
+        });
+    };
 
     function handleHeartbeatPanelToggle() {
         if (!DOM.heartbeatPanel || !DOM.heartbeatSummaryText) {
@@ -16,16 +21,16 @@ export function createHeartbeatController(deps) {
 
         if (!isExpanded) {
             DOM.heartbeatSummaryText.textContent = panelState.heartbeatDirty
-                ? "有未保存修改"
-                : "已隐藏";
+                ? t("console.unsavedChanges")
+                : t("console.hidden");
             renderHeartbeatState();
             return;
         }
 
         if (!settingsPanelOpen) {
             DOM.heartbeatSummaryText.textContent = panelState.heartbeatDirty
-                ? "有未保存修改"
-                : "已展开";
+                ? t("console.unsavedChanges")
+                : t("console.expanded");
             renderHeartbeatState();
             return;
         }
@@ -35,7 +40,7 @@ export function createHeartbeatController(deps) {
             return;
         }
 
-        DOM.heartbeatSummaryText.textContent = "正在加载…";
+        DOM.heartbeatSummaryText.textContent = t("console.loadingEllipsis");
         void refreshHeartbeatPanel();
     }
 
@@ -57,7 +62,7 @@ export function createHeartbeatController(deps) {
         panelState.heartbeatLoading = true;
         updateHeartbeatControls();
         if (DOM.heartbeatStatus) {
-            DOM.heartbeatStatus.textContent = "正在加载 HEARTBEAT 周期任务…";
+            DOM.heartbeatStatus.textContent = t("console.heartbeatLoading");
         }
 
         try {
@@ -66,10 +71,10 @@ export function createHeartbeatController(deps) {
         } catch (error) {
             console.error(error);
             if (DOM.heartbeatSummaryText) {
-                DOM.heartbeatSummaryText.textContent = "加载失败";
+                DOM.heartbeatSummaryText.textContent = t("console.loadFailed");
             }
             if (DOM.heartbeatStatus) {
-                DOM.heartbeatStatus.textContent = error.message || "HEARTBEAT 加载失败";
+                DOM.heartbeatStatus.textContent = error.message || t("console.heartbeatLoadFailed");
             }
         } finally {
             panelState.heartbeatLoading = false;
@@ -85,7 +90,7 @@ export function createHeartbeatController(deps) {
         panelState.heartbeatSaving = true;
         updateHeartbeatControls();
         if (DOM.heartbeatStatus) {
-            DOM.heartbeatStatus.textContent = "正在保存 HEARTBEAT 周期任务…";
+            DOM.heartbeatStatus.textContent = t("console.heartbeatSaving");
         }
 
         try {
@@ -102,10 +107,10 @@ export function createHeartbeatController(deps) {
         } catch (error) {
             console.error(error);
             if (DOM.heartbeatSummaryText) {
-                DOM.heartbeatSummaryText.textContent = "保存失败";
+                DOM.heartbeatSummaryText.textContent = t("console.saveFailed");
             }
             if (DOM.heartbeatStatus) {
-                DOM.heartbeatStatus.textContent = error.message || "HEARTBEAT 保存失败";
+                DOM.heartbeatStatus.textContent = error.message || t("console.heartbeatSaveFailed");
             }
         } finally {
             panelState.heartbeatSaving = false;
@@ -156,49 +161,49 @@ export function createHeartbeatController(deps) {
         const settingsPanelOpen = isSettingsPanelOpen();
 
         if (panelState.heartbeatDirty) {
-            return "有未保存修改";
+            return t("console.unsavedChanges");
         }
         if (!isExpanded) {
-            return "已隐藏";
+            return t("console.hidden");
         }
         if (!settingsPanelOpen) {
-            return "已展开";
+            return t("console.expanded");
         }
         if (!payload) {
-            return "展开后加载";
+            return t("console.loadAfterExpand");
         }
         if (!payload.enabled) {
-            return payload.has_meaningful_content ? "已配置但未启用" : "未启用";
+            return payload.has_meaningful_content ? t("console.configuredDisabled") : t("console.disabled");
         }
         if (!payload.has_meaningful_content) {
-            return "当前无有效任务";
+            return t("console.noValidTasks");
         }
-        return `每 ${payload.interval_seconds || 0} 秒检查`;
+        return t("console.heartbeatIntervalSummary", { seconds: payload.interval_seconds || 0 });
     }
 
     function buildHeartbeatStatusText(payload) {
         if (!isSettingsPanelOpen()) {
-            return "展开设置面板后查看 HEARTBEAT 周期任务";
+            return t("console.heartbeatOpenSettingsFirst");
         }
         if (!payload) {
-            return "展开后加载 HEARTBEAT 周期任务";
+            return t("console.heartbeatLoadAfterExpand");
         }
         if (panelState.heartbeatDirty) {
-            return "内容已修改，保存后会更新 HEARTBEAT 周期任务";
+            return t("console.heartbeatDirtyStatus");
         }
 
-        const stateText = payload.enabled ? "HEARTBEAT 运行中" : "HEARTBEAT 未启用";
+        const stateText = payload.enabled ? t("console.heartbeatRunning") : t("console.heartbeatDisabled");
         const contentText = payload.has_meaningful_content
-            ? "文件中有有效任务"
-            : "文件中暂无有效任务";
+            ? t("console.heartbeatHasTasks")
+            : t("console.heartbeatNoTasks");
         return `${stateText} · ${contentText}`;
     }
 
     function buildHeartbeatMetaText(payload) {
         if (!payload) {
-            return "间隔会在加载后显示";
+            return t("console.heartbeatMetaLoading");
         }
-        return `间隔 ${payload.interval_seconds || 0} 秒`;
+        return t("console.heartbeatIntervalMeta", { seconds: payload.interval_seconds || 0 });
     }
 
     function updateHeartbeatControls() {
@@ -219,6 +224,7 @@ export function createHeartbeatController(deps) {
         handleHeartbeatInputChange,
         handleHeartbeatPanelToggle,
         refreshHeartbeatPanel,
+        refreshLocalizedText: renderHeartbeatState,
         saveHeartbeat,
     };
 }

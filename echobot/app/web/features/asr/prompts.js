@@ -2,7 +2,10 @@ import { DOM } from "../../core/dom.js";
 import { asrState, audioState, chatState } from "../../core/store.js";
 
 export function createVoicePromptQueue(deps) {
-    const { setRunStatus } = deps;
+    const {
+        setRunStatus,
+        t = (key) => key,
+    } = deps;
 
     function enqueueVoicePrompt(text, sourceLabel) {
         const prompt = String(text || "").trim();
@@ -12,7 +15,7 @@ export function createVoicePromptQueue(deps) {
 
         asrState.voicePromptQueue.push({
             text: prompt,
-            sourceLabel: sourceLabel || "语音",
+            sourceLabel: sourceLabel || t("console.voiceSource"),
         });
         void drainVoicePromptQueue();
     }
@@ -37,7 +40,7 @@ export function createVoicePromptQueue(deps) {
         }
 
         DOM.promptInput.value = nextPrompt.text;
-        setRunStatus(`${nextPrompt.sourceLabel}已识别，准备发送...`);
+        setRunStatus(t("console.voiceRecognizedSending", { source: nextPrompt.sourceLabel }));
         chatForm.requestSubmit();
     }
 

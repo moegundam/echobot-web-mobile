@@ -24,7 +24,7 @@ from ..schemas import (
     WebStageConfigModel,
 )
 from ..services.web_console import Live2DUploadFile
-from ..state import get_app_runtime
+from ..state import get_app_runtime, get_app_runtime_for_websocket
 from ...runtime.settings import RuntimeSettingsManager
 
 
@@ -54,6 +54,11 @@ async def get_web_config(
         route_mode=route_mode,
         runtime_config=runtime_snapshot,
     )
+    payload["model_profile_scope"] = _model_profile_scope(runtime)
+    if runtime.model_profile_service is not None:
+        payload["model_profiles"] = await asyncio.to_thread(
+            runtime.model_profile_service.list_profiles,
+        )
     return WebConfigResponse(**payload)
 
 
@@ -318,7 +323,9 @@ async def transcribe_audio(
 
 @router.websocket("/web/asr/ws")
 async def asr_websocket(websocket: WebSocket) -> None:
-    runtime = getattr(websocket.app.state, "runtime", None)
+    runtime = await get_app_runtime_for_websocket(websocket)
+    if runtime is None:
+        return
     if runtime is None or runtime.web_console_service is None:
         await websocket.close(code=1011, reason="EchoBot runtime is not ready")
         return
@@ -387,4 +394,15 @@ def _runtime_settings_manager(runtime) -> RuntimeSettingsManager:
         runtime.context.workspace,
         coordinator=runtime.context.coordinator,
         runtime_controls=runtime.context.runtime_controls,
+        storage_root=runtime.context.storage_root,
     )
+
+
+def _model_profile_scope(runtime) -> str:
+    storage_root = getattr(runtime, "storage_root", None)
+    if storage_root is not None:
+        return storage_root.name or "default"
+    if runtime.context is not None:
+        root = runtime.context.storage_root or runtime.context.workspace / ".echobot"
+        return root.name or "default"
+    return "default"

@@ -9,6 +9,16 @@ export function createUiStatusController() {
         roles: null,
         sessions: null,
     };
+    const localizedStatus = {
+        connection: {
+            key: "",
+            params: {},
+        },
+        run: {
+            key: "",
+            params: {},
+        },
+    };
 
     function bindFeatures(nextFeatures) {
         Object.assign(features, nextFeatures || {});
@@ -57,18 +67,42 @@ export function createUiStatusController() {
         updateComposerBackgroundJobState();
     }
 
-    function setConnectionState(kind, text) {
+    function setConnectionState(kind, text, key = "", params = {}) {
         if (!DOM.connectionBadge) {
             return;
         }
 
         DOM.connectionBadge.className = `status-badge status-${kind}`;
+        delete DOM.connectionBadge.dataset.i18nKey;
+        localizedStatus.connection.key = String(key || "");
+        localizedStatus.connection.params = params || {};
         DOM.connectionBadge.textContent = text;
     }
 
-    function setRunStatus(text) {
+    function setRunStatus(text, key = "", params = {}) {
         if (DOM.runStatus) {
+            delete DOM.runStatus.dataset.i18nKey;
+            localizedStatus.run.key = String(key || "");
+            localizedStatus.run.params = params || {};
             DOM.runStatus.textContent = text;
+        }
+    }
+
+    function refreshLocalizedText(t) {
+        if (typeof t !== "function") {
+            return;
+        }
+        if (DOM.connectionBadge && localizedStatus.connection.key) {
+            DOM.connectionBadge.textContent = t(
+                localizedStatus.connection.key,
+                localizedStatus.connection.params,
+            );
+        }
+        if (DOM.runStatus && localizedStatus.run.key) {
+            DOM.runStatus.textContent = t(
+                localizedStatus.run.key,
+                localizedStatus.run.params,
+            );
         }
     }
 
@@ -113,6 +147,7 @@ export function createUiStatusController() {
         bindFeatures,
         setActiveBackgroundJob,
         setChatBusy,
+        refreshLocalizedText,
         setConnectionState,
         setRunStatus,
     };

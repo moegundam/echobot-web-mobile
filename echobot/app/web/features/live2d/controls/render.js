@@ -5,13 +5,14 @@ import {
     filterStandaloneHotkeys,
     findAttachedHotkeys,
     normalizeLive2DConfig,
-} from "./common.js";
+} from "./common.js?v=site-public-6";
 
 export function createLive2DControlsRenderer(deps) {
     const {
         getSelectionRuntimeState,
         isExpressionActive,
         persistence,
+        t = (key) => key,
     } = deps;
 
     function renderLive2DControls(live2dConfig) {
@@ -26,8 +27,12 @@ export function createLive2DControlsRenderer(deps) {
 
     function renderDiscoverySummary(config, runtimeState) {
         const countsLabel = config.available
-            ? `表情 ${config.expressions.length} 项 | 动作 ${config.motions.length} 项 | 热键 ${config.hotkeys.length} 项`
-            : "模型不可用";
+            ? t("console.live2dCounts", {
+                expressions: config.expressions.length,
+                motions: config.motions.length,
+                hotkeys: config.hotkeys.length,
+            })
+            : t("console.live2dModelUnavailable");
         const hint = buildRuntimeHint(config, runtimeState);
 
         if (DOM.live2dDiscoverySummary) {
@@ -50,7 +55,7 @@ export function createLive2DControlsRenderer(deps) {
         if (!config.available || config.expressions.length === 0) {
             replaceControlListChildren(
                 DOM.live2dExpressionList,
-                [buildEmptyState("未发现表情文件。")],
+                [buildEmptyState(t("console.live2dNoExpressions"))],
             );
             return;
         }
@@ -62,7 +67,7 @@ export function createLive2DControlsRenderer(deps) {
                     item: expressionItem,
                     selectionKey: config.selection_key,
                     kind: "expression",
-                    actionLabel: "切换",
+                    actionLabel: t("console.live2dToggle"),
                     actionName: "trigger-expression",
                     noteEnabled: config.annotations_writable && runtimeState.canInteract,
                     actionEnabled: runtimeState.canInteract,
@@ -82,7 +87,7 @@ export function createLive2DControlsRenderer(deps) {
         if (!config.available || config.motions.length === 0) {
             replaceControlListChildren(
                 DOM.live2dMotionList,
-                [buildEmptyState("未发现动作文件。")],
+                [buildEmptyState(t("console.live2dNoMotions"))],
             );
             return;
         }
@@ -94,7 +99,7 @@ export function createLive2DControlsRenderer(deps) {
                     item: motionItem,
                     selectionKey: config.selection_key,
                     kind: "motion",
-                    actionLabel: "播放",
+                    actionLabel: t("console.live2dPlay"),
                     actionName: "play-motion",
                     noteEnabled: config.annotations_writable && runtimeState.canInteract,
                     actionEnabled: runtimeState.canInteract,
@@ -115,7 +120,7 @@ export function createLive2DControlsRenderer(deps) {
         if (!config.available || standaloneHotkeys.length === 0) {
             replaceControlListChildren(
                 DOM.live2dHotkeyList,
-                [buildEmptyState("未发现独立热键。")],
+                [buildEmptyState(t("console.live2dNoHotkeys"))],
             );
             return;
         }
@@ -139,15 +144,15 @@ export function createLive2DControlsRenderer(deps) {
 
     function buildRuntimeHint(config, runtimeState) {
         if (!config.available) {
-            return "当前无法使用这些控制项。";
+            return t("console.live2dControlsUnavailable");
         }
         if (runtimeState.isLoading && runtimeState.isPendingSelection) {
-            return "模型加载中，控制项暂时禁用。";
+            return t("console.live2dControlsLoading");
         }
         if (!runtimeState.canInteract) {
-            return "运行时尚未就绪，控制项暂时禁用。";
+            return t("console.live2dRuntimeNotReady");
         }
-        return config.annotations_writable ? "" : "内置模型为只读。";
+        return config.annotations_writable ? "" : t("console.live2dBuiltinReadonly");
     }
 
     function buildAnnotatableCard(options) {
@@ -205,8 +210,8 @@ export function createLive2DControlsRenderer(deps) {
         noteInput.rows = 3;
         noteInput.value = persistence.readAnnotationDraftValue(selectionKey, kind, item.file, item.note || "");
         noteInput.placeholder = kind === "motion"
-            ? "添加动作备注。"
-            : "添加表情备注。";
+            ? t("console.live2dMotionNotePlaceholder")
+            : t("console.live2dExpressionNotePlaceholder");
         noteInput.disabled = !noteEnabled;
         noteInput.dataset.live2dSelectionKey = selectionKey;
         noteInput.dataset.live2dKind = kind;
@@ -221,8 +226,8 @@ export function createLive2DControlsRenderer(deps) {
                     buildAttachedHotkeyEditor(hotkeyItem, hotkeysWritable, {
                         selectionKey: selectionKey,
                         title: hotkeys.length > 1
-                            ? (hotkeyItem.name || `热键 ${index + 1}`)
-                            : "热键",
+                            ? (hotkeyItem.name || t("console.live2dHotkeyNumber", { number: index + 1 }))
+                            : t("console.hotkey"),
                     }),
                 );
             });
@@ -245,7 +250,9 @@ export function createLive2DControlsRenderer(deps) {
         input.className = "live2d-switch-input";
         input.checked = active;
         input.disabled = !enabled;
-        input.setAttribute("aria-label", `${active ? "Disable" : "Enable"} ${title}`);
+        input.setAttribute("aria-label", active
+            ? t("console.live2dDisableControl", { title })
+            : t("console.live2dEnableControl", { title }));
         toggle.appendChild(input);
 
         const track = document.createElement("span");
@@ -267,7 +274,7 @@ export function createLive2DControlsRenderer(deps) {
 
         const title = document.createElement("span");
         title.className = "live2d-attached-hotkey-title";
-        title.textContent = String(options.title || "热键");
+        title.textContent = String(options.title || t("console.hotkey"));
         header.appendChild(title);
 
         wrapper.appendChild(header);
@@ -275,7 +282,7 @@ export function createLive2DControlsRenderer(deps) {
         if (!hotkeyItem.supported) {
             const meta = document.createElement("p");
             meta.className = "live2d-control-card-meta";
-            meta.textContent = "当前不支持这个热键动作。";
+            meta.textContent = t("console.live2dHotkeyUnsupported");
             wrapper.appendChild(meta);
         }
 
@@ -305,7 +312,7 @@ export function createLive2DControlsRenderer(deps) {
 
         const title = document.createElement("h4");
         title.className = "live2d-control-card-title";
-        title.textContent = hotkeyItem.name || hotkeyItem.action || "热键";
+        title.textContent = hotkeyItem.name || hotkeyItem.action || t("console.hotkey");
         header.appendChild(title);
 
         const triggerButton = document.createElement("button");
@@ -314,13 +321,13 @@ export function createLive2DControlsRenderer(deps) {
         triggerButton.dataset.live2dAction = "trigger-hotkey";
         triggerButton.dataset.live2dHotkeyId = hotkeyItem.hotkey_id;
         triggerButton.dataset.live2dHotkeyKey = buildHotkeyKey(hotkeyItem);
-        triggerButton.textContent = "执行";
+        triggerButton.textContent = t("console.execute");
         triggerButton.disabled = !hotkeyItem.supported || !actionEnabled;
         header.appendChild(triggerButton);
 
         card.appendChild(header);
 
-        const metaText = buildHotkeyMetaText(hotkeyItem);
+        const metaText = buildHotkeyMetaText(hotkeyItem, t);
         if (metaText) {
             const meta = document.createElement("p");
             meta.className = "live2d-control-card-meta";
@@ -352,7 +359,7 @@ export function createLive2DControlsRenderer(deps) {
         shortcutInput.className = "live2d-hotkey-input";
         shortcutInput.autocomplete = "off";
         shortcutInput.readOnly = true;
-        shortcutInput.placeholder = "聚焦后直接按下热键。";
+        shortcutInput.placeholder = t("console.live2dHotkeyInputPlaceholder");
         shortcutInput.disabled = !enabled;
         shortcutInput.dataset.live2dSelectionKey = selectionKey;
         shortcutInput.dataset.live2dHotkeyKey = buildHotkeyKey(hotkeyItem);
@@ -364,10 +371,10 @@ export function createLive2DControlsRenderer(deps) {
         clearButton.dataset.live2dAction = "reset-hotkey";
         clearButton.dataset.live2dHotkeyKey = buildHotkeyKey(hotkeyItem);
         clearButton.dataset.live2dSelectionKey = selectionKey;
-        clearButton.textContent = "x";
+        clearButton.textContent = "×";
         clearButton.disabled = !enabled;
-        clearButton.setAttribute("aria-label", "恢复默认热键");
-        clearButton.title = "恢复默认热键";
+        clearButton.setAttribute("aria-label", t("console.live2dRestoreDefaultHotkey"));
+        clearButton.title = t("console.live2dRestoreDefaultHotkey");
         shell.appendChild(clearButton);
 
         persistence.setHotkeyInputValue(
@@ -390,7 +397,7 @@ export function createLive2DControlsRenderer(deps) {
         if (!Array.isArray(hotkeyItem.shortcut_tokens) || hotkeyItem.shortcut_tokens.length === 0) {
             badge.className += " live2d-hotkey-badge-unsassigned";
         }
-        badge.textContent = hotkeyItem.shortcut_label || "未分配";
+        badge.textContent = hotkeyItem.shortcut_label || t("console.unassigned");
         shortcuts.appendChild(badge);
 
         return shortcuts;

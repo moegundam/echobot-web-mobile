@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>EchoBot Open WebUI Bridge</title>
+    <link rel="stylesheet" href="/web/assets/styles/shell-pages.css?v=site-public-6">
+</head>
+<body class="admin-page openwebui-page" data-page-title-key="openwebui.pageTitle">
+    <main id="openwebui-root" class="admin-root guide-root openwebui-root">
+        <header class="admin-header guide-header">
+            <div>
+                <h1 data-i18n-key="openwebui.heading">Open WebUI Bridge</h1>
+                <p data-i18n-key="openwebui.description">Operator workbench interface for EchoBot sessions and Stage.</p>
+            </div>
+            <div class="shell-header-controls">
+                <div class="language-switcher" data-language-switcher></div>
+                <div class="display-mode-switcher" data-display-mode-switcher></div>
+            </div>
+        </header>
+        <nav class="admin-grid guide-nav" aria-label="Open WebUI quick links" data-i18n-aria-label-key="openwebui.linksAria">
+            <a href="/admin" data-i18n-key="openwebui.backToAdmin">Back to Admin</a>
+            <a href="/admin/guide" data-i18n-key="openwebui.openGuide">Operation Guide</a>
+            <a href="/stage?session_name=default" data-session-link data-i18n-key="openwebui.openStage">Open Stage</a>
+            <a href="/messenger?session_name=default" data-session-link data-i18n-key="openwebui.openMessenger">Open Messenger</a>
+            <a href="/admin/channels" data-i18n-key="admin.channels">Channels</a>
+        </nav>
+        <section class="openwebui-status-panel" aria-label="Bridge status" data-i18n-aria-label-key="openwebui.statusAria">
+            <h2 data-i18n-key="openwebui.statusHeading">Bridge Status</h2>
+            <div id="openwebui-status-grid" class="openwebui-status-grid"></div>
+        </section>
+        <section id="openwebui-content" class="guide-content" aria-live="polite" aria-label="Open WebUI setup content" data-i18n-aria-label-key="openwebui.contentAria"></section>
+    </main>
+    <script type="module" src="/web/assets/openwebui-app.js?v=site-public-6"></script>
+</body>
+</html>

@@ -28,14 +28,16 @@ from .base import LLMProvider
 logger = logging.getLogger(__name__)
 _THINKING_TAG_PATTERN = re.compile(r"<think>(.*?)</think>", re.DOTALL)
 _REASONING_RESPONSE_FIELDS = ("reasoning_content", "reasoning")
+_DEFAULT_BASE_URL = "https://api.openai.com/v1"
+_DEFAULT_TIMEOUT_SECONDS = 60.0
 
 
 @dataclass(slots=True)
 class OpenAICompatibleSettings:
     api_key: str
     model: str
-    base_url: str = "https://api.openai.com/v1"
-    timeout: float = 60.0
+    base_url: str = _DEFAULT_BASE_URL
+    timeout: float = _DEFAULT_TIMEOUT_SECONDS
     extra_headers: dict[str, str] = field(default_factory=dict)
     extra_body: dict[str, Any] = field(default_factory=dict)
 
@@ -56,8 +58,12 @@ class OpenAICompatibleSettings:
 
         api_key = _get_required_env(source, api_key_name)
         model = _get_required_env(source, model_name)
-        base_url = _get_optional_env(source, base_url_name, default=cls.base_url)
-        timeout_text = _get_optional_env(source, timeout_name, default=str(cls.timeout))
+        base_url = _get_optional_env(source, base_url_name, default=_DEFAULT_BASE_URL)
+        timeout_text = _get_optional_env(
+            source,
+            timeout_name,
+            default=str(_DEFAULT_TIMEOUT_SECONDS),
+        )
         extra_body_text = _get_optional_env(source, extra_body_name)
 
         try:

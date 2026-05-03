@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>EchoBot Admin</title>
+    <link rel="stylesheet" href="/web/assets/styles/shell-pages.css?v=site-public-6">
+</head>
+<body class="admin-page" data-page-title-key="admin.pageTitle">
+    <main id="admin-root" class="admin-root">
+        <header class="admin-header">
+            <div>
+                <h1 data-i18n-key="admin.heading">EchoBot Admin</h1>
+                <p data-i18n-key="admin.description">Read-only admin index</p>
+            </div>
+            <div class="shell-header-controls">
+                <div class="language-switcher" data-language-switcher></div>
+                <div class="display-mode-switcher" data-display-mode-switcher></div>
+            </div>
+        </header>
+        <section class="admin-grid" aria-label="Admin links" data-i18n-aria-label-key="admin.linksAria">
+            <a href="/api/health" data-i18n-key="admin.health">Health</a>
+            <a href="/docs" data-i18n-key="admin.docs">Swagger Docs</a>
+            <a href="/redoc" data-i18n-key="admin.redoc">ReDoc</a>
+            <a href="/openapi.json" data-i18n-key="admin.openapi">OpenAPI JSON</a>
+            <a href="/api/chat/jobs" data-i18n-key="admin.chatJobs">Chat Jobs</a>
+            <a href="/stage?session_name=default" data-session-link data-i18n-key="guide.openStage">Open Stage</a>
+            <a href="/messenger?session_name=default" data-session-link data-i18n-key="guide.openMessenger">Open Messenger</a>
+            <a href="/console" data-i18n-key="admin.console">Console</a>
+            <a href="/admin/models" data-i18n-key="admin.modelProfiles">Model Profiles</a>
+            <a href="/admin/channels" data-i18n-key="admin.channels">Channels</a>
+            <a href="/admin/structure" data-i18n-key="admin.structure">Site Structure</a>
+            <a href="/admin/guide" data-i18n-key="admin.guide">Operation Guide</a>
+            <a href="/admin/openwebui" data-i18n-key="admin.openwebui">Open WebUI Bridge</a>
+        </section>
+        <section class="admin-health">
+            <h2 data-i18n-key="admin.healthSnapshot">Health Snapshot</h2>
+            <pre id="admin-health-output">loading...</pre>
+        </section>
+    </main>
+    <script type="module" src="/web/assets/admin-app.js?v=site-public-6"></script>
+</body>
+</html>

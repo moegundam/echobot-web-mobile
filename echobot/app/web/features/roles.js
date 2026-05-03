@@ -12,6 +12,7 @@ export function createRolesModule(deps) {
         normalizeSessionName,
         requestJson,
         setRunStatus,
+        t = (key) => key,
     } = deps;
 
     let sessionHooks = {
@@ -53,7 +54,7 @@ export function createRolesModule(deps) {
             return;
         }
 
-        setRoleControlsBusy(true, options.silent ? null : "正在加载角色卡…");
+        setRoleControlsBusy(true, options.silent ? null : t("console.roleLoading"));
         try {
             const payload = await requestJson("/api/roles");
             roleState.roles = Array.isArray(payload) ? payload : [];
@@ -65,8 +66,8 @@ export function createRolesModule(deps) {
             console.error(error);
             renderRoleSelectOptions();
             if (!options.silent) {
-                setRoleStatus(error.message || "角色卡加载失败");
-                addMessage("system", `角色卡加载失败：${error.message || error}`, "状态");
+                setRoleStatus(error.message || t("console.roleLoadFailed"));
+                addMessage("system", `${t("console.roleLoadFailed")}: ${error.message || error}`, t("console.systemLabel"));
             }
         } finally {
             setRoleControlsBusy(false);
@@ -89,8 +90,8 @@ export function createRolesModule(deps) {
             console.error(error);
             roleState.currentRoleCard = null;
             if (!options.silent) {
-                setRoleStatus(error.message || "角色卡详情加载失败");
-                addMessage("system", `角色卡详情加载失败：${error.message || error}`, "状态");
+                setRoleStatus(error.message || t("console.roleDetailLoadFailed"));
+                addMessage("system", `${t("console.roleDetailLoadFailed")}: ${error.message || error}`, t("console.systemLabel"));
             }
         }
 
@@ -107,7 +108,7 @@ export function createRolesModule(deps) {
         if (roleSummaries.length === 0) {
             const option = document.createElement("option");
             option.value = "default";
-            option.textContent = "default";
+            option.textContent = t("console.defaultRoleOption");
             DOM.roleSelect.appendChild(option);
             DOM.roleSelect.disabled = true;
             return;
@@ -133,7 +134,7 @@ export function createRolesModule(deps) {
     function buildRoleOptionLabel(roleSummary) {
         const name = String((roleSummary && roleSummary.name) || "default");
         if (name === "default") {
-            return `${name}（默认）`;
+            return t("console.defaultRoleOption", { role: name });
         }
         return name;
     }
@@ -144,16 +145,16 @@ export function createRolesModule(deps) {
         if (DOM.rolePromptPreview) {
             DOM.rolePromptPreview.textContent = roleCard && roleCard.prompt
                 ? roleCard.prompt
-                : "暂无角色卡内容。";
+                : t("console.noRoleContent");
         }
 
         if (DOM.roleStatus) {
             if (!roleCard) {
-                DOM.roleStatus.textContent = "暂无角色卡详情。";
+                DOM.roleStatus.textContent = t("console.noRoleDetail");
             } else if (!roleCard.editable) {
-                DOM.roleStatus.textContent = `当前角色：${roleCard.name}（只读）`;
+                DOM.roleStatus.textContent = t("console.currentRoleReadonly", { role: roleCard.name });
             } else {
-                DOM.roleStatus.textContent = `当前角色：${roleCard.name}`;
+                DOM.roleStatus.textContent = t("console.currentRoleStatus", { role: roleCard.name });
             }
         }
 
@@ -234,17 +235,17 @@ export function createRolesModule(deps) {
         }
 
         closeRoleEditor();
-        setRoleControlsBusy(true, "正在切换角色卡…");
+        setRoleControlsBusy(true, t("console.switchingRole"));
         try {
             await setCurrentSessionRole(nextRoleName, { silent: true });
             await refreshCurrentRoleCard({ silent: true });
-            setRunStatus(`已切换角色卡：${roleState.currentRoleName}`);
+            setRunStatus(t("console.roleSwitched", { role: roleState.currentRoleName }));
             setRoleStatus("");
         } catch (error) {
             console.error(error);
             renderRoleSelectOptions();
-            setRoleStatus(error.message || "切换角色卡失败");
-            addMessage("system", `切换角色卡失败：${error.message || error}`, "状态");
+            setRoleStatus(error.message || t("console.roleSwitchFailed"));
+            addMessage("system", `${t("console.roleSwitchFailed")}: ${error.message || error}`, t("console.systemLabel"));
         } finally {
             setRoleControlsBusy(false);
         }
@@ -266,7 +267,7 @@ export function createRolesModule(deps) {
         );
         sessionHooks.applySessionDetail(sessionDetail);
         if (!options.silent) {
-            setRunStatus(`已切换角色卡：${sessionDetail.role_name || roleName}`);
+            setRunStatus(t("console.roleSwitched", { role: sessionDetail.role_name || roleName }));
         }
         return sessionDetail;
     }
@@ -283,12 +284,12 @@ export function createRolesModule(deps) {
         roleState.roleEditorMode = mode;
         DOM.roleEditor.hidden = false;
         if (mode === "create") {
-            DOM.roleEditorTitle.textContent = "新建角色卡";
+            DOM.roleEditorTitle.textContent = t("console.newRoleCard");
             DOM.roleNameInput.value = "";
             DOM.rolePromptInput.value = "";
             DOM.roleNameInput.focus();
         } else {
-            DOM.roleEditorTitle.textContent = `编辑角色卡：${roleState.currentRoleCard.name}`;
+            DOM.roleEditorTitle.textContent = t("console.editRoleCard", { role: roleState.currentRoleCard.name });
             DOM.roleNameInput.value = roleState.currentRoleCard.name || "";
             DOM.rolePromptInput.value = roleState.currentRoleCard.prompt || "";
             DOM.rolePromptInput.focus();
@@ -308,7 +309,7 @@ export function createRolesModule(deps) {
             DOM.rolePromptInput.value = "";
         }
         if (DOM.roleEditorTitle) {
-            DOM.roleEditorTitle.textContent = "角色卡编辑";
+            DOM.roleEditorTitle.textContent = t("console.roleEditor");
         }
         updateRoleActionState();
     }
@@ -335,17 +336,17 @@ export function createRolesModule(deps) {
         const isCreateMode = roleState.roleEditorMode === "create";
         let shouldRefreshRoleList = false;
         if (!prompt) {
-            setRoleStatus("角色卡内容不能为空。");
+            setRoleStatus(t("console.rolePromptRequired"));
             return;
         }
         if (isCreateMode && !roleName) {
-            setRoleStatus("角色名不能为空。");
+            setRoleStatus(t("console.roleNameRequired"));
             return;
         }
 
         setRoleControlsBusy(
             true,
-            isCreateMode ? "正在创建角色卡…" : "正在保存角色卡…",
+            isCreateMode ? t("console.creatingRole") : t("console.savingRole"),
         );
         try {
             let roleDetail;
@@ -385,13 +386,13 @@ export function createRolesModule(deps) {
             setRoleStatus("");
             setRunStatus(
                 isCreateMode
-                    ? `已创建角色卡：${roleDetail.name}`
-                    : `已保存角色卡：${roleDetail.name}`,
+                    ? t("console.roleCreated", { role: roleDetail.name })
+                    : t("console.roleSaved", { role: roleDetail.name }),
             );
         } catch (error) {
             console.error(error);
-            setRoleStatus(error.message || "保存角色卡失败");
-            addMessage("system", `保存角色卡失败：${error.message || error}`, "状态");
+            setRoleStatus(error.message || t("console.saveRoleFailed"));
+            addMessage("system", `${t("console.saveRoleFailed")}: ${error.message || error}`, t("console.systemLabel"));
         } finally {
             setRoleControlsBusy(false);
         }
@@ -411,12 +412,12 @@ export function createRolesModule(deps) {
         ) {
             return;
         }
-        if (!window.confirm(`确定删除角色卡“${roleCard.name}”吗？`)) {
+        if (!window.confirm(t("console.deleteRoleConfirm", { role: roleCard.name }))) {
             return;
         }
 
         let shouldRefreshRoleList = false;
-        setRoleControlsBusy(true, "正在删除角色卡…");
+        setRoleControlsBusy(true, t("console.deletingRole"));
         try {
             await requestJson(`/api/roles/${encodeURIComponent(roleCard.name)}`, {
                 method: "DELETE",
@@ -427,11 +428,11 @@ export function createRolesModule(deps) {
             sessionHooks.applySessionDetail(sessionDetail);
             await refreshCurrentRoleCard({ silent: true });
             setRoleStatus("");
-            setRunStatus(`已删除角色卡：${roleCard.name}`);
+            setRunStatus(t("console.roleDeleted", { role: roleCard.name }));
         } catch (error) {
             console.error(error);
-            setRoleStatus(error.message || "删除角色卡失败");
-            addMessage("system", `删除角色卡失败：${error.message || error}`, "状态");
+            setRoleStatus(error.message || t("console.deleteRoleFailed"));
+            addMessage("system", `${t("console.deleteRoleFailed")}: ${error.message || error}`, t("console.systemLabel"));
         } finally {
             setRoleControlsBusy(false);
         }
@@ -453,5 +454,14 @@ export function createRolesModule(deps) {
         openRoleEditor: openRoleEditor,
         closeRoleEditor: closeRoleEditor,
         updateRoleActionState: updateRoleActionState,
+        refreshLocalizedText() {
+            renderRoleSelectOptions();
+            renderCurrentRoleCard();
+            if (roleState.roleEditorMode === "create" && DOM.roleEditorTitle) {
+                DOM.roleEditorTitle.textContent = t("console.newRoleCard");
+            } else if (roleState.roleEditorMode === "edit" && DOM.roleEditorTitle && roleState.currentRoleCard) {
+                DOM.roleEditorTitle.textContent = t("console.editRoleCard", { role: roleState.currentRoleCard.name });
+            }
+        },
     };
 }

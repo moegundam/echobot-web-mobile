@@ -1,0 +1,13 @@
+# Copy to ~/.cloudflared/echobot-web-mobile.yml and replace the placeholders.
+
+tunnel: <TUNNEL-UUID-OR-NAME>
+credentials-file: <HOME>/.cloudflared/<TUNNEL-UUID>.json
+
+ingress:
+  - hostname: echobot.example.com
+    service: http://127.0.0.1:8000
+    originRequest:
+      httpHostHeader: echobot.example.com
+      connectTimeout: 30s
+      noTLSVerify: false
+  - service: http_status:404

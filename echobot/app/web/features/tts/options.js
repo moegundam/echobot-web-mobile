@@ -3,6 +3,11 @@ import { appState, audioState } from "../../core/store.js";
 
 export function createTtsOptionsController(deps) {
     const { requestJson } = deps;
+    const t = typeof deps.t === "function" ? deps.t : (key, params = {}) => {
+        return String(key).replace(/\{([A-Za-z0-9_]+)\}/g, (_match, name) => {
+            return Object.prototype.hasOwnProperty.call(params, name) ? String(params[name]) : "";
+        });
+    };
 
     function loadSavedTtsProvider() {
         return String(window.localStorage.getItem("echobot.web.tts.provider") || "").trim();
@@ -67,7 +72,7 @@ export function createTtsOptionsController(deps) {
             option.value = providerStatus.name;
             option.textContent = providerStatus.available
                 ? providerStatus.label
-                : `${providerStatus.label} (未就绪)`;
+                : t("console.providerNotReady", { provider: providerStatus.label });
             DOM.ttsProviderSelect.appendChild(option);
         });
 
@@ -79,12 +84,12 @@ export function createTtsOptionsController(deps) {
 
     function buildTtsDetail(providerStatus) {
         if (!providerStatus) {
-            return "当前没有可用的 TTS provider";
+            return t("console.noTtsProvider");
         }
         if (providerStatus.available) {
-            return `${providerStatus.label} 已启用`;
+            return t("console.providerEnabled", { provider: providerStatus.label });
         }
-        return providerStatus.detail || `${providerStatus.label} 未就绪`;
+        return providerStatus.detail || t("console.providerNotReady", { provider: providerStatus.label });
     }
 
     async function loadTtsOptions(ttsConfig) {
@@ -138,7 +143,7 @@ export function createTtsOptionsController(deps) {
             console.error(error);
             DOM.voiceSelect.innerHTML = "";
             DOM.voiceSelect.disabled = true;
-            DOM.ttsDetail.textContent = error.message || "语音列表加载失败";
+            DOM.ttsDetail.textContent = error.message || t("console.voiceListLoadFailed");
         }
     }
 
@@ -147,7 +152,7 @@ export function createTtsOptionsController(deps) {
 
         if (!voices || voices.length === 0) {
             DOM.voiceSelect.disabled = true;
-            DOM.ttsDetail.textContent = "没有可用语音";
+            DOM.ttsDetail.textContent = t("console.noVoices");
             return;
         }
 
@@ -177,6 +182,24 @@ export function createTtsOptionsController(deps) {
         DOM.voiceSelect.disabled = false;
         audioState.selectedVoice = finalVoice;
         persistTtsVoice(provider, finalVoice);
+    }
+
+    function refreshLocalizedText() {
+        const ttsConfig = appState.config && appState.config.tts;
+        if (!ttsConfig) {
+            if (DOM.ttsDetail) {
+                DOM.ttsDetail.textContent = t("console.ttsLoading");
+            }
+            return;
+        }
+        const providerName = audioState.selectedTtsProvider
+            || resolveInitialTtsProvider(ttsConfig);
+        renderTtsProviderOptions(ttsConfig, providerName);
+        if (DOM.ttsDetail) {
+            DOM.ttsDetail.textContent = buildTtsDetail(
+                findTtsProviderStatus(ttsConfig, providerName),
+            );
+        }
     }
 
     function buildVoiceLabel(voice) {
@@ -214,5 +237,6 @@ export function createTtsOptionsController(deps) {
         handleTtsProviderChange: handleTtsProviderChange,
         handleVoiceSelectionChange: handleVoiceSelectionChange,
         loadTtsOptions: loadTtsOptions,
+        refreshLocalizedText: refreshLocalizedText,
     };
 }

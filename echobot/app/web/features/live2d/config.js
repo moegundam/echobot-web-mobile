@@ -15,13 +15,14 @@ import {
     buildLive2DConfig,
     normalizeLive2DModelOption,
     resolveLive2DModelOptions,
-} from "./schema.js";
+} from "./schema.js?v=site-public-6";
 
 export function createLive2DConfigController(deps) {
     const {
         responseToError,
         setRunStatus,
         setStageMessage,
+        t = (key) => key,
         applyLive2DMouseFollowSetting,
         applyStageBackgroundByKey,
         applyStageEffectsSettings,
@@ -33,6 +34,9 @@ export function createLive2DConfigController(deps) {
         renderStageBackgroundOptions,
         resolveInitialStageBackgroundKey,
     } = deps;
+    let lastModelOptions = [];
+    let lastSelectedKey = "";
+    let lastUnavailable = false;
 
     function applyConfigToUI(config) {
         const rememberedSessionName = String(
@@ -57,7 +61,7 @@ export function createLive2DConfigController(deps) {
             DOM.live2dMouseFollowCheckbox.checked = live2dState.live2dMouseFollowEnabled;
         }
 
-        DOM.sessionLabel.textContent = `会话: ${rememberedSessionName}`;
+        DOM.sessionLabel.textContent = t("console.sessionLabel", { session: rememberedSessionName });
         renderLive2DModelOptions(live2dModelOptions, currentLive2DConfig.selection_key);
         renderLive2DControls(currentLive2DConfig);
         renderStageBackgroundOptions(stageConfig, stageBackgroundKey);
@@ -65,8 +69,10 @@ export function createLive2DConfigController(deps) {
         applyStageEffectsSettings(live2dState.stageEffects, { persist: false });
 
         if (!currentLive2DConfig.available) {
-            setStageMessage("未找到 Live2D 模型。请检查 .echobot/live2d 目录。");
+            lastUnavailable = true;
+            setStageMessage(t("console.live2dModelMissing"));
         } else {
+            lastUnavailable = false;
             setStageMessage("");
         }
 
@@ -96,12 +102,14 @@ export function createLive2DConfigController(deps) {
             return;
         }
 
+        lastModelOptions = Array.isArray(modelOptions) ? modelOptions : [];
+        lastSelectedKey = selectedKey || "";
         DOM.modelSelect.innerHTML = "";
 
         if (!modelOptions || modelOptions.length === 0) {
             const option = document.createElement("option");
             option.value = "";
-            option.textContent = "未找到 Live2D 模型";
+            option.textContent = t("console.live2dNoModels");
             DOM.modelSelect.appendChild(option);
             updateLive2DUploadControls();
             return;
@@ -119,7 +127,7 @@ export function createLive2DConfigController(deps) {
     }
 
     function buildLive2DModelLabel(modelOption) {
-        const sourceLabel = modelOption.source === "builtin" ? "内置" : "工作区";
+        const sourceLabel = modelOption.source === "builtin" ? t("console.builtin") : t("console.workspace");
         const baseName = modelOption.directory_name && modelOption.directory_name !== modelOption.model_name
             ? `${modelOption.directory_name} / ${modelOption.model_name}`
             : (modelOption.model_name || modelOption.directory_name || modelOption.selection_key);
@@ -178,7 +186,7 @@ export function createLive2DConfigController(deps) {
         const previousKeys = new Set(previousModelOptions.map((item) => item.selection_key));
 
         updateLive2DUploadControls({ isUploading: true });
-        setRunStatus("正在上传 Live2D 文件夹…");
+        setRunStatus(t("console.live2dUploadingFolder"));
 
         try {
             const formData = new FormData();
@@ -204,7 +212,7 @@ export function createLive2DConfigController(deps) {
                 || null;
 
             if (!uploadedOption) {
-                throw new Error("上传完成后没有发现可用的 Live2D 模型。");
+                throw new Error(t("console.live2dUploadNoUsableModel"));
             }
 
             const nextLive2DConfig = buildCurrentLive2DConfig(uploadedOption, nextModelOptions);
@@ -223,14 +231,14 @@ export function createLive2DConfigController(deps) {
                 return;
             }
             persistLive2DSelectionKey(nextLive2DConfig.selection_key);
-            setRunStatus(`已上传 Live2D 模型：${buildLive2DModelLabel(uploadedOption)}`);
+            setRunStatus(t("console.live2dModelUploaded", { model: buildLive2DModelLabel(uploadedOption) }));
         } catch (error) {
             console.error(error);
             appState.config.live2d = previousLive2DConfig;
             renderLive2DModelOptions(previousModelOptions, previousLive2DConfig.selection_key);
             renderLive2DControls(previousLive2DConfig);
             persistLive2DSelectionKey(previousLive2DConfig.selection_key);
-            setRunStatus(error.message || "Live2D 文件夹上传失败");
+            setRunStatus(error.message || t("console.live2dUploadFailed"));
         } finally {
             updateLive2DUploadControls();
         }
@@ -266,7 +274,7 @@ export function createLive2DConfigController(deps) {
         renderLive2DModelOptions(modelOptions, nextLive2DConfig.selection_key);
         updateLive2DUploadControls({ isLoading: true });
         renderLive2DControls(nextLive2DConfig);
-        setRunStatus(`切换模型中：${buildLive2DModelLabel(nextModelOption)}`);
+        setRunStatus(t("console.live2dSwitchingModel", { model: buildLive2DModelLabel(nextModelOption) }));
 
         try {
             const didLoadModel = await loadPromise;
@@ -279,7 +287,7 @@ export function createLive2DConfigController(deps) {
                 return;
             }
             persistLive2DSelectionKey(nextLive2DConfig.selection_key);
-            setRunStatus(`已切换模型：${buildLive2DModelLabel(nextModelOption)}`);
+            setRunStatus(t("console.live2dModelSwitched", { model: buildLive2DModelLabel(nextModelOption) }));
         } catch (error) {
             console.error(error);
             if (appState.config.live2d.selection_key !== nextLive2DConfig.selection_key) {
@@ -292,7 +300,7 @@ export function createLive2DConfigController(deps) {
             updateLive2DUploadControls();
 
 
-            setRunStatus(error.message || "Live2D 模型加载失败");
+            setRunStatus(error.message || t("console.live2dModelLoadFailed"));
         }
     }
 
@@ -330,8 +338,8 @@ export function createLive2DConfigController(deps) {
         applyLive2DMouseFollowSetting();
         setRunStatus(
             live2dState.live2dMouseFollowEnabled
-                ? "已开启 Live2D 眼神跟随"
-                : "已关闭 Live2D 眼神跟随",
+                ? t("console.live2dMouseFollowEnabled")
+                : t("console.live2dMouseFollowDisabled"),
         );
     }
 
@@ -345,8 +353,8 @@ export function createLive2DConfigController(deps) {
         resetLive2DHotkeyState();
         setRunStatus(
             live2dState.live2dHotkeysEnabled
-                ? "已启用 Live2D 模型热键"
-                : "已关闭 Live2D 模型热键",
+                ? t("console.live2dHotkeysEnabled")
+                : t("console.live2dHotkeysDisabled"),
         );
     }
 
@@ -356,5 +364,11 @@ export function createLive2DConfigController(deps) {
         handleLive2DModelChange,
         handleHotkeysToggle,
         handleMouseFollowToggle,
+        refreshLocalizedText() {
+            renderLive2DModelOptions(lastModelOptions, lastSelectedKey);
+            if (lastUnavailable) {
+                setStageMessage(t("console.live2dModelMissing"));
+            }
+        },
     };
 }

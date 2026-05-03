@@ -11,13 +11,14 @@ import {
     formatShortcutTokens,
     normalizeShortcutTokens,
     sameShortcutTokens,
-} from "./common.js";
+} from "./common.js?v=site-public-6";
 
 export function createLive2DControlsPersistence(deps) {
     const {
         controllerState,
         requestJson,
         setRunStatus,
+        t = (key) => key,
     } = deps;
 
     function handleNoteInput(event) {
@@ -110,7 +111,7 @@ export function createLive2DControlsPersistence(deps) {
         const conflict = findCurrentShortcutConflict(selectionKey, hotkeyKey, shortcutTokens);
         if (conflict) {
             restoreHotkeyInputFromConfig(input, selectionKey, hotkeyKey);
-            setRunStatus(`热键冲突：已被 ${conflict.name || buildHotkeyKey(conflict)} 使用`);
+            setRunStatus(t("console.live2dHotkeyConflict", { name: conflict.name || buildHotkeyKey(conflict) }));
             return;
         }
 
@@ -248,11 +249,11 @@ export function createLive2DControlsPersistence(deps) {
             }
             setRunStatus(
                 payload.note
-                    ? `已保存${payload.kind === "motion" ? "动作" : "表情"}备注`
-                    : `已清空${payload.kind === "motion" ? "动作" : "表情"}备注`,
+                    ? t("console.live2dAnnotationSaved", { kind: live2dAnnotationKindLabel(payload.kind) })
+                    : t("console.live2dAnnotationCleared", { kind: live2dAnnotationKindLabel(payload.kind) }),
             );
         } catch (error) {
-            setRunStatus(`保存备注失败：${describeError(error)}`);
+            setRunStatus(t("console.live2dAnnotationSaveFailed", { error: describeError(error, t) }));
         } finally {
             saveState.inFlight = false;
             if (saveState.pendingRequest && saveState.pendingRequest.note !== pendingNote) {
@@ -327,13 +328,13 @@ export function createLive2DControlsPersistence(deps) {
             }
             setRunStatus(
                 restoreDefault
-                    ? `已恢复默认热键：${payload.name}`
+                    ? t("console.live2dHotkeyRestored", { name: payload.name })
                     : payload.shortcut_tokens.length > 0
-                    ? `已保存热键：${payload.name}`
-                    : `已清空热键：${payload.name}`,
+                    ? t("console.live2dHotkeySaved", { name: payload.name })
+                    : t("console.live2dHotkeyCleared", { name: payload.name }),
             );
         } catch (error) {
-            setRunStatus(`保存热键失败：${describeError(error)}`);
+            setRunStatus(t("console.live2dHotkeySaveFailed", { error: describeError(error, t) }));
         } finally {
             saveState.inFlight = false;
             if (saveState.pendingRequest && !sameHotkeySaveRequest(saveState.pendingRequest, request)) {
@@ -344,6 +345,10 @@ export function createLive2DControlsPersistence(deps) {
                 controllerState.hotkeySaveStates.delete(stateKey);
             }
         }
+    }
+
+    function live2dAnnotationKindLabel(kind) {
+        return kind === "motion" ? t("console.motion") : t("console.expression");
     }
 
     async function requestAnnotationSave({ selectionKey, kind, file, note }) {

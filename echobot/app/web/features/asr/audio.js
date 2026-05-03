@@ -6,6 +6,7 @@ export function createAsrAudioCaptureController(deps) {
         ensureAudioContextReady,
         getTargetSampleRate,
         onChunk,
+        t = (key) => key,
     } = deps;
 
     async function ensureMicrophoneCaptureReady() {
@@ -15,15 +16,15 @@ export function createAsrAudioCaptureController(deps) {
             return;
         }
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-            throw new Error("当前浏览器不支持麦克风采集。");
+            throw new Error(t("console.microphoneCaptureUnsupported"));
         }
 
         await ensureAudioContextReady();
         if (!audioState.audioContext) {
-            throw new Error("当前浏览器不支持 Web Audio。");
+            throw new Error(t("console.webAudioUnsupported"));
         }
         if (!audioState.audioContext.audioWorklet || typeof AudioWorkletNode === "undefined") {
-            throw new Error("当前浏览器不支持 AudioWorklet。");
+            throw new Error(t("console.audioWorkletUnsupported"));
         }
 
         if (!asrState.microphoneWorkletLoaded) {

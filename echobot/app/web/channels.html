@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>EchoBot Channels</title>
+    <link rel="stylesheet" href="/web/assets/styles/shell-pages.css?v=site-public-6">
+</head>
+<body class="admin-page channels-page" data-page-title-key="channels.pageTitle">
+    <main id="channels-root" class="admin-root channels-root">
+        <header class="admin-header">
+            <div>
+                <h1 data-i18n-key="channels.heading">Channels</h1>
+                <p data-i18n-key="channels.description">Gateway status and setup boundaries for messaging platforms.</p>
+            </div>
+            <div class="shell-header-controls">
+                <div class="language-switcher" data-language-switcher></div>
+                <div class="display-mode-switcher" data-display-mode-switcher></div>
+            </div>
+        </header>
+        <nav class="admin-grid guide-nav" aria-label="Channel quick links" data-i18n-aria-label-key="channels.linksAria">
+            <a href="/admin" data-i18n-key="guide.backToAdmin">Back to Admin</a>
+            <a href="/console" data-i18n-key="admin.console">Console</a>
+            <a href="/admin/structure" data-i18n-key="admin.structure">Site Structure</a>
+            <a href="/admin/guide" data-i18n-key="admin.guide">Operation Guide</a>
+            <a href="/admin/openwebui" data-i18n-key="admin.openwebui">Open WebUI Bridge</a>
+        </nav>
+        <section class="openwebui-status-panel" aria-label="Channel status" data-i18n-aria-label-key="channels.statusAria">
+            <h2 data-i18n-key="channels.statusHeading">Channel Status</h2>
+            <div id="channels-status-grid" class="openwebui-status-grid"></div>
+        </section>
+        <section
+            id="channels-content"
+            class="structure-content"
+            aria-live="polite"
+            aria-label="Channel setup content"
+            data-i18n-aria-label-key="channels.contentAria"
+        ></section>
+    </main>
+    <script type="module" src="/web/assets/channels-app.js?v=site-public-6"></script>
+</body>
+</html>

@@ -5,10 +5,10 @@ import {
     audioState,
     chatState,
 } from "../core/store.js";
-import { buildWavBlob, createAsrAudioCaptureController } from "./asr/audio.js";
+import { buildWavBlob, createAsrAudioCaptureController } from "./asr/audio.js?v=site-public-6";
 import { findAsrProviderStatus, normalizeAsrConfig } from "./asr/config.js";
-import { createVoicePromptQueue } from "./asr/prompts.js";
-import { createRealtimeAsrClient } from "./asr/realtime.js";
+import { createVoicePromptQueue } from "./asr/prompts.js?v=site-public-6";
+import { createRealtimeAsrClient } from "./asr/realtime.js?v=site-public-6";
 
 export function createAsrModule(deps) {
     const {
@@ -19,20 +19,24 @@ export function createAsrModule(deps) {
         responseToError,
         setRunStatus,
         stopSpeechPlayback,
+        t = (key) => key,
     } = deps;
 
     const promptQueue = createVoicePromptQueue({
         setRunStatus: setRunStatus,
+        t: t,
     });
     const audioCapture = createAsrAudioCaptureController({
         clamp: clamp,
         ensureAudioContextReady: ensureAudioContextReady,
         getTargetSampleRate: currentSampleRate,
         onChunk: handleCapturedPcmChunk,
+        t: t,
     });
     const realtimeClient = createRealtimeAsrClient({
         onEvent: handleRealtimeEvent,
         onUnexpectedClose: handleUnexpectedSocketClose,
+        t: t,
     });
 
     function applyAsrStatus(asrConfig) {
@@ -70,8 +74,11 @@ export function createAsrModule(deps) {
             );
             DOM.recordButton.classList.toggle("is-recording", manualRecording);
             DOM.recordButton.setAttribute("aria-pressed", manualRecording ? "true" : "false");
-            DOM.recordButton.setAttribute("title", manualRecording ? "结束录音" : "开始录音");
-            DOM.recordButton.setAttribute("aria-label", manualRecording ? "结束录音" : "开始录音");
+            const recordLabel = manualRecording
+                ? t("console.stopRecording")
+                : t("console.startRecording");
+            DOM.recordButton.setAttribute("title", recordLabel);
+            DOM.recordButton.setAttribute("aria-label", recordLabel);
         }
 
         if (DOM.alwaysListenCheckbox) {
@@ -110,7 +117,7 @@ export function createAsrModule(deps) {
 
         if (asrState.microphoneCaptureMode === "manual") {
             DOM.asrProviderSelect.value = currentProvider;
-            addSystemMessage("请先结束当前录音，再切换 ASR 语音识别模型。");
+            addSystemMessage(t("console.stopRecordingBeforeAsrSwitch"));
             return;
         }
 
@@ -123,7 +130,7 @@ export function createAsrModule(deps) {
 
         asrState.asrProviderUpdating = true;
         updateVoiceInputControls();
-        setRunStatus("正在切换 ASR 语音识别模型...");
+        setRunStatus(t("console.switchingAsrProvider"));
 
         try {
             const payload = await requestJson("/api/web/asr/provider", {
@@ -139,14 +146,14 @@ export function createAsrModule(deps) {
             const providerStatus = findAsrProviderStatus(payload, nextProvider);
             setRunStatus(
                 providerStatus && providerStatus.available
-                    ? `${providerStatus.label} 已启用`
-                    : "ASR 语音识别模型已切换，正在等待就绪。",
+                    ? t("console.providerEnabled", { provider: providerStatus.label })
+                    : t("console.asrProviderWaiting"),
             );
         } catch (error) {
             console.error(error);
             DOM.asrProviderSelect.value = currentProvider;
-            addSystemMessage(`切换 ASR 语音识别模型失败：${error.message || error}`);
-            setRunStatus(error.message || "切换 ASR 语音识别模型失败");
+            addSystemMessage(`${t("console.asrProviderSwitchFailed")}: ${error.message || error}`);
+            setRunStatus(error.message || t("console.asrProviderSwitchFailed"));
         } finally {
             asrState.asrProviderUpdating = false;
             updateVoiceInputControls();
@@ -158,7 +165,19 @@ export function createAsrModule(deps) {
             await stopManualRecording();
             return;
         }
-        await startManualRecording();
+
+        try {
+            await startManualRecording();
+        } catch (error) {
+            console.error(error);
+            asrState.microphoneCaptureMode = "idle";
+            asrState.manualRecordingChunks = [];
+            audioCapture.stopMicrophoneCapture();
+            updateVoiceInputControls();
+            const message = voiceInputErrorMessage(error);
+            addSystemMessage(`${t("console.recordingStartFailed")}: ${message}`);
+            setRunStatus(message);
+        }
     }
 
     async function handleAlwaysListenToggle() {
@@ -175,7 +194,7 @@ export function createAsrModule(deps) {
                 asrState.alwaysListenEnabled = false;
                 asrState.microphoneCaptureMode = "idle";
                 updateVoiceInputControls();
-                addSystemMessage(`常开麦启动失败：${error.message || error}`);
+                addSystemMessage(`${t("console.alwaysListenStartFailed")}: ${error.message || error}`);
             }
             return;
         }
@@ -188,13 +207,23 @@ export function createAsrModule(deps) {
         audioCapture.stopMicrophoneCapture();
     }
 
+    async function handlePageHidden() {
+        if (document.visibilityState && document.visibilityState !== "hidden") {
+            return;
+        }
+        await stopVoiceInputForPageHide();
+    }
+
     return {
         applyAsrStatus: applyAsrStatus,
         drainVoicePromptQueue: promptQueue.drainVoicePromptQueue,
         handleAlwaysListenToggle: handleAlwaysListenToggle,
         handleAsrProviderChange: handleAsrProviderChange,
         handleBeforeUnload: handleBeforeUnload,
+        handlePageHidden: handlePageHidden,
         handleRecordButtonClick: handleRecordButtonClick,
+        refreshLocalizedText: updateVoiceInputControls,
+        syncAlwaysListenPauseState: syncAlwaysListenPauseState,
         startAsrStatusPolling: startAsrStatusPolling,
         updateVoiceInputControls: updateVoiceInputControls,
     };
@@ -214,7 +243,7 @@ export function createAsrModule(deps) {
             option.value = providerStatus.name;
             option.textContent = providerStatus.available
                 ? providerStatus.label
-                : `${providerStatus.label}（未就绪）`;
+                : t("console.providerNotReady", { provider: providerStatus.label });
             DOM.asrProviderSelect.appendChild(option);
         });
 
@@ -239,17 +268,17 @@ export function createAsrModule(deps) {
 
     function buildAsrDetailText() {
         if (asrState.microphoneCaptureMode === "manual") {
-            return "正在录音，再次点击麦克风结束。";
+            return t("console.asrRecording");
         }
         if (asrState.alwaysListenEnabled) {
             return asrState.alwaysListenPaused
-                ? "常开麦已开启，回复期间暂停收音。"
-                : "常开麦已开启，正在等待你说话。";
+                ? t("console.alwaysListenPaused")
+                : t("console.alwaysListenWaiting");
         }
         if (!asrState.asrConfig) {
-            return "语音识别尚未初始化。";
+            return t("console.asrNotInitialized");
         }
-        return asrState.asrConfig.detail || "语音识别未就绪。";
+        return asrState.asrConfig.detail || t("console.asrNotReady");
     }
 
     function stopAsrStatusPolling() {
@@ -266,18 +295,18 @@ export function createAsrModule(deps) {
         } catch (error) {
             console.error("Failed to refresh ASR status", error);
             if (DOM.asrDetail && !asrState.asrConfig) {
-                DOM.asrDetail.textContent = error.message || "语音识别状态获取失败";
+                DOM.asrDetail.textContent = error.message || t("console.asrStatusFailed");
             }
         }
     }
 
     async function startManualRecording() {
         if (!asrState.asrConfig || !asrState.asrConfig.available) {
-            addSystemMessage("语音识别还没准备好。");
+            addSystemMessage(t("console.asrNotReadyYet"));
             return;
         }
         if (chatState.chatBusy) {
-            addSystemMessage("当前正在回复，请稍后再录音。");
+            addSystemMessage(t("console.waitReplyBeforeRecording"));
             return;
         }
         if (asrState.alwaysListenEnabled) {
@@ -294,7 +323,7 @@ export function createAsrModule(deps) {
         asrState.manualRecordingChunks = [];
         asrState.microphoneCaptureMode = "manual";
         updateVoiceInputControls();
-        setRunStatus("正在录音...");
+        setRunStatus(t("console.recording"));
     }
 
     async function stopManualRecording() {
@@ -309,8 +338,8 @@ export function createAsrModule(deps) {
         audioCapture.stopMicrophoneCapture();
 
         if (!wavBlob) {
-            setRunStatus("未录到有效语音");
-            addSystemMessage("未录到有效语音。");
+            setRunStatus(t("console.noValidSpeech"));
+            addSystemMessage(t("console.noValidSpeech"));
             return;
         }
 
@@ -318,17 +347,17 @@ export function createAsrModule(deps) {
             await transcribeAndQueueWavBlob(wavBlob);
         } catch (error) {
             console.error(error);
-            addSystemMessage(`语音识别失败：${error.message || error}`);
-            setRunStatus(error.message || "语音识别失败");
+            addSystemMessage(`${t("console.asrFailed")}: ${error.message || error}`);
+            setRunStatus(error.message || t("console.asrFailed"));
         }
     }
 
     async function startAlwaysListen() {
         if (!asrState.asrConfig || !asrState.asrConfig.available) {
-            throw new Error("语音识别还没准备好。");
+            throw new Error(t("console.asrNotReadyYet"));
         }
         if (!asrState.asrConfig.always_listen_supported) {
-            throw new Error("当前 ASR / VAD 配置不支持常开麦。");
+            throw new Error(t("console.alwaysListenUnsupported"));
         }
         if (asrState.microphoneCaptureMode === "manual") {
             await stopManualRecording();
@@ -348,20 +377,21 @@ export function createAsrModule(deps) {
         updateVoiceInputControls();
         setRunStatus(
             asrState.alwaysListenPaused
-                ? "常开麦已开启，回复期间暂停收音"
-                : "常开麦已开启",
+                ? t("console.alwaysListenPaused")
+                : t("console.alwaysListenEnabled"),
         );
     }
 
-    async function stopAlwaysListen() {
+    async function stopAlwaysListen(options = {}) {
+        const flushFirst = options.flushFirst !== false;
         asrState.alwaysListenEnabled = false;
         asrState.alwaysListenPaused = false;
         asrState.microphoneCaptureMode = "idle";
         updateVoiceInputControls();
 
-        await realtimeClient.close({ flushFirst: true });
+        await realtimeClient.close({ flushFirst });
         audioCapture.stopMicrophoneCapture();
-        setRunStatus("常开麦已关闭");
+        setRunStatus(t("console.alwaysListenStopped"));
     }
 
     function handleCapturedPcmChunk(pcmChunk) {
@@ -374,26 +404,53 @@ export function createAsrModule(deps) {
             return;
         }
 
-        const shouldPause = chatState.chatBusy || audioState.speaking;
-        if (shouldPause) {
-            if (!asrState.alwaysListenPaused) {
-                asrState.alwaysListenPaused = true;
-                realtimeClient.sendControl("reset");
-                updateVoiceInputControls();
-            }
-            return;
-        }
-
+        syncAlwaysListenPauseState();
         if (asrState.alwaysListenPaused) {
-            asrState.alwaysListenPaused = false;
-            updateVoiceInputControls();
+            return;
         }
 
         realtimeClient.sendChunk(pcmChunk);
     }
 
+    function syncAlwaysListenPauseState() {
+        if (!asrState.alwaysListenEnabled || asrState.microphoneCaptureMode !== "always") {
+            return;
+        }
+
+        const shouldPause = chatState.chatBusy || audioState.speaking;
+        if (shouldPause && !asrState.alwaysListenPaused) {
+            asrState.alwaysListenPaused = true;
+            realtimeClient.sendControl("reset");
+            updateVoiceInputControls();
+            return;
+        }
+
+        if (!shouldPause && asrState.alwaysListenPaused) {
+            asrState.alwaysListenPaused = false;
+            updateVoiceInputControls();
+            setRunStatus(t("console.alwaysListenEnabled"));
+        }
+    }
+
+    async function stopVoiceInputForPageHide() {
+        if (asrState.alwaysListenEnabled) {
+            await stopAlwaysListen({ flushFirst: false });
+            return;
+        }
+
+        if (asrState.microphoneCaptureMode !== "manual") {
+            return;
+        }
+
+        asrState.microphoneCaptureMode = "idle";
+        asrState.manualRecordingChunks = [];
+        audioCapture.stopMicrophoneCapture();
+        updateVoiceInputControls();
+        setRunStatus(t("console.pageHiddenRecordingStopped"));
+    }
+
     async function transcribeAndQueueWavBlob(wavBlob) {
-        setRunStatus("正在识别语音...");
+        setRunStatus(t("console.transcribingSpeech"));
         const response = await fetch("/api/web/asr", {
             method: "POST",
             headers: {
@@ -409,12 +466,12 @@ export function createAsrModule(deps) {
         const payload = await response.json();
         const text = String((payload && payload.text) || "").trim();
         if (!text) {
-            addSystemMessage("没有识别到清晰语音。");
-            setRunStatus("没有识别到清晰语音");
+            addSystemMessage(t("console.noClearSpeech"));
+            setRunStatus(t("console.noClearSpeech"));
             return;
         }
 
-        promptQueue.enqueueVoicePrompt(text, "录音");
+        promptQueue.enqueueVoicePrompt(text, t("console.recordingSource"));
     }
 
     function handleRealtimeEvent(payload) {
@@ -431,19 +488,19 @@ export function createAsrModule(deps) {
             return;
         }
         if (payload.type === "speech_start") {
-            setRunStatus("正在听你说...");
+            setRunStatus(t("console.listening"));
             return;
         }
         if (payload.type === "speech_end") {
-            setRunStatus("正在识别语音...");
+            setRunStatus(t("console.transcribingSpeech"));
             return;
         }
         if (payload.type === "transcript") {
-            promptQueue.enqueueVoicePrompt(payload.text, "语音");
+            promptQueue.enqueueVoicePrompt(payload.text, t("console.voiceSource"));
             return;
         }
         if (payload.type === "error") {
-            addSystemMessage(`实时语音失败：${payload.message || "未知错误"}`);
+            addSystemMessage(`${t("console.realtimeAsrFailed")}: ${payload.message || t("console.unknownError")}`);
         }
     }
 
@@ -460,11 +517,29 @@ export function createAsrModule(deps) {
         }
         audioCapture.stopMicrophoneCapture();
         updateVoiceInputControls();
-        addSystemMessage("实时语音连接已断开。");
+        addSystemMessage(t("console.realtimeAsrDisconnected"));
     }
 
     function currentSampleRate() {
         const sampleRate = Number(asrState.asrConfig && asrState.asrConfig.sample_rate);
         return sampleRate > 0 ? sampleRate : 16000;
+    }
+
+    function voiceInputErrorMessage(error) {
+        const rawMessage = String((error && error.message) || error || "").trim();
+        const errorName = String((error && error.name) || "").trim();
+        if (errorName === "NotAllowedError" || /permission|denied|notallowed/i.test(rawMessage)) {
+            return t("console.microphonePermissionDenied");
+        }
+        if (errorName === "NotFoundError" || /notfound|device/i.test(rawMessage)) {
+            return t("console.microphoneNotFound");
+        }
+        if (/AudioWorklet/i.test(rawMessage)) {
+            return t("console.audioWorkletUnsupported");
+        }
+        if (/Web Audio/i.test(rawMessage)) {
+            return t("console.webAudioUnsupported");
+        }
+        return rawMessage || t("console.microphoneStartFailed");
     }
 }

@@ -4,6 +4,11 @@ import { normalizeRouteMode } from "./route-mode.js";
 
 export function createSessionSidebarController(deps) {
     const { formatTimestamp } = deps;
+    const t = typeof deps.t === "function" ? deps.t : (key, params = {}) => {
+        return String(key).replace(/\{([A-Za-z0-9_]+)\}/g, (_match, name) => {
+            return Object.prototype.hasOwnProperty.call(params, name) ? String(params[name]) : "";
+        });
+    };
 
     function applySessionSummaries(sessionSummaries) {
         sessionState.sessions = Array.isArray(sessionSummaries) ? sessionSummaries : [];
@@ -57,12 +62,15 @@ export function createSessionSidebarController(deps) {
         }
 
         if (!sessionState.sessions || sessionState.sessions.length === 0) {
-            DOM.sessionSidebarSummary.textContent = "暂无会话";
+            DOM.sessionSidebarSummary.textContent = t("console.noSessions");
             return;
         }
 
         const currentSessionName = sessionState.currentSessionName || sessionState.sessions[0].name;
-        DOM.sessionSidebarSummary.textContent = `共 ${sessionState.sessions.length} 个会话 · 当前会话：${currentSessionName}`;
+        DOM.sessionSidebarSummary.textContent = t("console.sessionSummary", {
+            count: sessionState.sessions.length,
+            session: currentSessionName,
+        });
     }
 
     function renderSessionList(sessionSummaries) {
@@ -74,7 +82,7 @@ export function createSessionSidebarController(deps) {
         if (!sessionSummaries || sessionSummaries.length === 0) {
             const empty = document.createElement("p");
             empty.className = "session-empty";
-            empty.textContent = "当前还没有会话。";
+            empty.textContent = t("console.sessionEmpty");
             DOM.sessionList.appendChild(empty);
             return;
         }
@@ -105,7 +113,9 @@ export function createSessionSidebarController(deps) {
 
         const count = document.createElement("span");
         count.className = "session-card-count";
-        count.textContent = `${sessionSummary.message_count || 0} 条`;
+        count.textContent = t("console.messageCount", {
+            count: sessionSummary.message_count || 0,
+        });
 
         header.appendChild(title);
         header.appendChild(count);
@@ -113,14 +123,14 @@ export function createSessionSidebarController(deps) {
 
         const meta = document.createElement("div");
         meta.className = "session-card-meta";
-        meta.textContent = formatTimestamp(sessionSummary.updated_at) || "暂无更新时间";
+        meta.textContent = formatTimestamp(sessionSummary.updated_at) || t("console.noUpdatedTime");
         mainButton.appendChild(meta);
 
         const actions = document.createElement("div");
         actions.className = "session-card-actions";
-        actions.appendChild(buildSessionActionButton("重命名", "rename", sessionSummary.name));
+        actions.appendChild(buildSessionActionButton(t("console.rename"), "rename", sessionSummary.name));
         actions.appendChild(
-            buildSessionActionButton("删除", "delete", sessionSummary.name, {
+            buildSessionActionButton(t("console.delete"), "delete", sessionSummary.name, {
                 danger: true,
             }),
         );
@@ -146,6 +156,10 @@ export function createSessionSidebarController(deps) {
     return {
         applySessionSummaries: applySessionSummaries,
         renderSessionList: renderSessionList,
+        refreshLocalizedText() {
+            updateSessionSidebarSummary();
+            renderSessionList(sessionState.sessions);
+        },
         setSessionControlsBusy: setSessionControlsBusy,
         setSessionSidebarStatus: setSessionSidebarStatus,
         syncRouteModeSelect: syncRouteModeSelect,

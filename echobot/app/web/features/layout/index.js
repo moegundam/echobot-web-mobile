@@ -1,8 +1,8 @@
-import { createCronController } from "./cron.js";
-import { createHeartbeatController } from "./heartbeat.js";
+import { createCronController } from "./cron.js?v=site-public-6";
+import { createHeartbeatController } from "./heartbeat.js?v=site-public-6";
 import { createPanelController } from "./panels.js";
 import { createRuntimeController } from "./runtime.js";
-import { createSidebarController } from "./sidebars.js";
+import { createSidebarController } from "./sidebars.js?v=site-public-6";
 import { createSplitController } from "./split.js";
 
 export function createLayoutModule(deps) {
@@ -17,7 +17,7 @@ export function createLayoutModule(deps) {
             heartbeat.handleHeartbeatPanelToggle();
         },
     });
-    const sidebars = createSidebarController();
+    const sidebars = createSidebarController({ t: deps.t });
     const split = createSplitController();
     const runtime = createRuntimeController(deps);
     cron = createCronController({
@@ -25,10 +25,12 @@ export function createLayoutModule(deps) {
         isSettingsPanelOpen: panels.isSettingsPanelOpen,
         requestJson: deps.requestJson,
         setRunStatus: deps.setRunStatus,
+        t: deps.t,
     });
     heartbeat = createHeartbeatController({
         isSettingsPanelOpen: panels.isSettingsPanelOpen,
         requestJson: deps.requestJson,
+        t: deps.t,
     });
 
     return {
@@ -38,5 +40,10 @@ export function createLayoutModule(deps) {
         ...runtime,
         ...sidebars,
         ...split,
+        refreshLocalizedText() {
+            sidebars.refreshSidebarLabels?.();
+            cron.refreshLocalizedText?.();
+            heartbeat.refreshLocalizedText?.();
+        },
     };
 }

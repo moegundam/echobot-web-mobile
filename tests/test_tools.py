@@ -3,8 +3,10 @@ from __future__ import annotations
 import base64
 import json
 import os
+import shlex
 import shutil
 import subprocess
+import sys
 import threading
 import tempfile
 import unittest
@@ -479,7 +481,10 @@ class BasicToolRegistryTests(unittest.IsolatedAsyncioTestCase):
                     name="run_shell_command",
                     arguments=json.dumps(
                         {
-                            "command": 'python -c "from pathlib import Path; print(Path.cwd().name)"',
+                            "command": (
+                                f"{shlex.quote(sys.executable)} "
+                                '-c "from pathlib import Path; print(Path.cwd().name)"'
+                            ),
                             "workdir": "subdir",
                         },
                         ensure_ascii=False,

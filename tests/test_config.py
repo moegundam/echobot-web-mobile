@@ -279,7 +279,7 @@ class RuntimeBootstrapConfigTests(unittest.TestCase):
             context.runtime_controls.set_file_write_enabled(False)
             updated_prompt = context.agent._system_prompt_text()
 
-            self.assertIn("Current shell safety mode: `danger-full-access`.", initial_prompt)
+            self.assertIn("Current shell safety mode: `workspace-write`.", initial_prompt)
             self.assertIn("Current shell safety mode: `read-only`.", updated_prompt)
             self.assertIn("Workspace file writes are currently disabled.", updated_prompt)
 

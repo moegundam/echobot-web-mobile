@@ -78,6 +78,26 @@ class ConversationCoordinator:
     def set_delegated_ack_enabled(self, enabled: bool) -> None:
         self._delegated_ack_enabled = bool(enabled)
 
+    def set_llm_provider(self, provider) -> None:
+        self._agent_runner.set_provider(provider)
+        self._decision_engine.set_provider(provider)
+        self._roleplay_engine.set_provider(provider)
+
+    def set_generation_defaults(
+        self,
+        *,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+    ) -> None:
+        self._agent_runner.set_generation_defaults(
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        self._roleplay_engine.set_generation_defaults(
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+
     async def handle_user_turn(
         self,
         session_name: str,

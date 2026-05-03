@@ -31,6 +31,32 @@ class TTSService:
     def default_provider(self) -> str:
         return self._default_provider
 
+    async def replace_provider(
+        self,
+        provider_name: str,
+        provider: TTSProvider,
+        *,
+        set_default: bool = False,
+    ) -> None:
+        normalized_name = provider_name.strip()
+        if not normalized_name:
+            raise ValueError("TTS provider name must not be empty")
+
+        previous_provider = self._providers.get(normalized_name)
+        self._providers[normalized_name] = provider
+        if set_default:
+            self.set_default_provider(normalized_name)
+        if previous_provider is not None and previous_provider is not provider:
+            await previous_provider.close()
+
+    def set_default_provider(self, provider_name: str) -> None:
+        normalized_name = provider_name.strip()
+        if not normalized_name:
+            raise ValueError("TTS provider name must not be empty")
+        if normalized_name not in self._providers:
+            raise ValueError(f"Unknown TTS provider: {normalized_name}")
+        self._default_provider = normalized_name
+
     def provider_names(self) -> list[str]:
         return sorted(self._providers)
 

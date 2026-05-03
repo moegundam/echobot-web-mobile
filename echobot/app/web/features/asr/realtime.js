@@ -7,6 +7,7 @@ export function createRealtimeAsrClient(deps) {
     const {
         onEvent,
         onUnexpectedClose,
+        t = (key) => key,
     } = deps;
 
     let flushResolver = null;
@@ -25,7 +26,7 @@ export function createRealtimeAsrClient(deps) {
         });
 
         try {
-            await waitForSocketOpen(socket);
+            await waitForSocketOpen(socket, t);
         } catch (error) {
             asrState.asrSocketIntentionalClose = true;
             try {
@@ -148,10 +149,10 @@ function buildAsrSocketUrl() {
     return `${protocol}//${window.location.host}/api/web/asr/ws`;
 }
 
-function waitForSocketOpen(socket) {
+function waitForSocketOpen(socket, t) {
     return new Promise((resolve, reject) => {
         const timerId = window.setTimeout(() => {
-            reject(new Error("实时语音连接超时"));
+            reject(new Error(t("console.realtimeAsrTimeout")));
         }, SOCKET_OPEN_TIMEOUT_MS);
 
         socket.addEventListener(
@@ -166,7 +167,7 @@ function waitForSocketOpen(socket) {
             "error",
             () => {
                 window.clearTimeout(timerId);
-                reject(new Error("实时语音连接失败"));
+                reject(new Error(t("console.realtimeAsrConnectionFailed")));
             },
             { once: true },
         );

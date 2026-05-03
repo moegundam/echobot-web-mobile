@@ -1,34 +1,41 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>EchoBot Live2D</title>
     <link rel="icon" href="/favicon.ico" type="image/svg+xml">
-    <link rel="stylesheet" href="/web/assets/styles/index.css">
+    <link rel="stylesheet" href="/web/assets/styles/index.css?v=site-public-6">
 </head>
-<body>
+<body data-page-title-key="console.pageTitle">
     <div class="page-shell">
         <section class="stage-panel">
             <div class="stage-header">
                 <div class="stage-header-meta">
-                    <p class="eyebrow">EchoBot Web Console</p>
-                    <span id="connection-badge" class="status-badge status-idle">初始化中</span>
-                    <span id="session-label" class="muted-text">会话: default</span>
+                    <p class="eyebrow" data-i18n-key="console.eyebrow">EchoBot Web Console</p>
+                    <span id="connection-badge" class="status-badge status-idle" data-i18n-key="console.status.initializing">initializing</span>
+                    <span id="session-label" class="muted-text" data-i18n-key="console.sessionDefault">session: default</span>
+                    <span id="model-profile-badge" class="model-profile-badge" hidden>
+                        <span data-i18n-key="console.modelProfile">Model</span>:
+                        <a id="model-profile-link" href="/admin/models">Profile A</a>
+                    </span>
                 </div>
                 <div class="stage-actions">
+                    <div class="console-language-switcher" data-language-switcher></div>
+                    <div class="console-display-mode-switcher" data-display-mode-switcher></div>
                     <button
                         id="live2d-drawer-toggle"
                         class="ghost-button ghost-button-compact"
                         type="button"
                         aria-expanded="false"
                         aria-controls="live2d-drawer"
+                        data-i18n-key="console.live2dOptions"
                     >
-                        Live2D 模型选项
+                        Live2D options
                     </button>
-                    <button id="reset-view-button" class="ghost-button" type="button">重置模型</button>
-                    <button id="stop-audio-button" class="ghost-button" type="button">停止语音</button>
-                    <button id="stop-agent-button" class="ghost-button stop-agent-button" type="button" disabled>停止任务</button>
+                    <button id="reset-view-button" class="ghost-button" type="button" data-i18n-key="console.resetModel">Reset model</button>
+                    <button id="stop-audio-button" class="ghost-button" type="button" data-i18n-key="console.stopAudio">Stop voice</button>
+                    <button id="stop-agent-button" class="ghost-button stop-agent-button" type="button" disabled data-i18n-key="console.stopTask">Stop task</button>
                 </div>
             </div>
             <div id="live2d-stage" class="live2d-stage">
@@ -40,23 +47,24 @@
                 <div id="stage-vignette" class="stage-vignette"></div>
                 <div id="stage-grain" class="stage-grain"></div>
                 <div class="stage-hint">
-                    <span>拖拽模型移动</span>
-                    <span>滚轮缩放</span>
+                    <span data-i18n-key="console.stageHintDrag">Drag model to move</span>
+                    <span data-i18n-key="console.stageHintZoom">Mouse wheel to zoom</span>
                 </div>
-                <div id="stage-message" class="stage-message">正在加载 Live2D 模型…</div>
+                <div id="stage-message" class="stage-message" data-i18n-key="console.live2dLoading">Loading Live2D model...</div>
                 <button
                     id="live2d-drawer-backdrop"
                     class="live2d-drawer-backdrop"
                     type="button"
                     hidden
-                    aria-label="关闭 Live2D 模型选项"
+                    aria-label="Close Live2D options"
+                    data-i18n-aria-label-key="console.closeLive2dOptions"
                 ></button>
                 <section id="live2d-drawer" class="live2d-drawer" aria-hidden="true">
                     <div class="live2d-drawer-header">
                         <div class="live2d-drawer-header-main">
-                            <p class="section-title">Live2D 模型选项</p>
-                            <span id="live2d-drawer-summary" class="muted-text">
-                                表情、动作和热键
+                            <p class="section-title" data-i18n-key="console.live2dOptions">Live2D Options</p>
+                            <span id="live2d-drawer-summary" class="muted-text" data-i18n-key="console.live2dDrawerSummary">
+                                Expressions, motions, and hotkeys
                             </span>
                         </div>
                         <button
@@ -64,10 +72,10 @@
                             class="ghost-button ghost-button-compact"
                             type="button"
                         >
-                            隐藏
+                            <span data-i18n-key="console.hide">Hide</span>
                         </button>
                     </div>
-                    <div class="live2d-drawer-tabs" role="tablist" aria-label="Live2D 模型选项">
+                    <div class="live2d-drawer-tabs" role="tablist" aria-label="Live2D Options" data-i18n-aria-label-key="console.live2dOptions">
                         <button
                             id="live2d-tab-expression"
                             class="live2d-drawer-tab is-active"
@@ -77,7 +85,7 @@
                             aria-controls="live2d-expression-panel"
                             data-live2d-drawer-tab="expression"
                         >
-                            表情
+                            <span data-i18n-key="console.expression">Expression</span>
                         </button>
                         <button
                             id="live2d-tab-motion"
@@ -88,7 +96,7 @@
                             aria-controls="live2d-motion-panel"
                             data-live2d-drawer-tab="motion"
                         >
-                            动作
+                            <span data-i18n-key="console.motion">Motion</span>
                         </button>
                         <button
                             id="live2d-tab-hotkey"
@@ -99,7 +107,7 @@
                             aria-controls="live2d-hotkey-panel"
                             data-live2d-drawer-tab="hotkey"
                         >
-                            热键
+                            <span data-i18n-key="console.hotkey">Hotkey</span>
                         </button>
                     </div>
                     <div class="live2d-drawer-body">
@@ -130,7 +138,7 @@
                             <div class="toggle-row">
                                 <label class="toggle-item">
                                     <input id="live2d-hotkeys-checkbox" type="checkbox">
-                                    <span>启用模型热键</span>
+                                    <span data-i18n-key="console.enableModelHotkeys">Enable model hotkeys</span>
                                 </label>
                             </div>
                             <div id="live2d-hotkey-list" class="live2d-control-list"></div>
@@ -144,39 +152,41 @@
             id="page-resizer"
             class="page-resizer"
             type="button"
-            aria-label="拖拽调整 Live2D 和聊天宽度"
-            title="拖拽调整宽度"
+            aria-label="Drag to resize Live2D and chat width"
+            title="Drag to resize width"
+            data-i18n-aria-label-key="console.pageResizerAria"
+            data-i18n-title-key="console.pageResizerTitle"
         ></button>
 
         <aside id="chat-panel" class="chat-panel">
             <section id="session-sidebar" class="session-sidebar" aria-hidden="true">
                 <div class="session-sidebar-header">
                     <div>
-                        <p class="section-title">会话列表</p>
-                        <span id="session-sidebar-summary" class="muted-text">准备加载会话…</span>
+                        <p class="section-title" data-i18n-key="console.sessionList">Sessions</p>
+                        <span id="session-sidebar-summary" class="muted-text" data-i18n-key="console.sessionLoadingSummary">Preparing sessions...</span>
                     </div>
                     <button
                         id="session-sidebar-close"
                         class="ghost-button ghost-button-compact"
                         type="button"
                     >
-                        隐藏
+                        <span data-i18n-key="console.hide">Hide</span>
                     </button>
                 </div>
                 <div class="session-sidebar-toolbar">
                     <button id="session-create-button" class="primary-button" type="button">
-                        新建会话
+                        <span data-i18n-key="console.createSession">New session</span>
                     </button>
                     <button
                         id="session-refresh-button"
                         class="ghost-button ghost-button-compact"
                         type="button"
                     >
-                        刷新
+                        <span data-i18n-key="console.refresh">Refresh</span>
                     </button>
                 </div>
                 <div id="session-sidebar-status" class="muted-text session-sidebar-status">
-                    正在加载会话…
+                    <span data-i18n-key="console.loadingSessions">Loading sessions...</span>
                 </div>
                 <div id="session-list" class="session-list"></div>
             </section>
@@ -185,61 +195,62 @@
                 class="session-sidebar-backdrop"
                 type="button"
                 hidden
-                aria-label="关闭会话列表"
+                aria-label="Close session list"
+                data-i18n-aria-label-key="console.closeSessionList"
             ></button>
 
             <section id="role-sidebar" class="role-sidebar" aria-hidden="true">
                 <div class="role-sidebar-header">
                     <div>
-                        <p class="section-title">角色卡</p>
-                        <span id="role-status" class="muted-text role-sidebar-status">正在加载角色卡…</span>
+                        <p class="section-title" data-i18n-key="console.roleCard">Role card</p>
+                        <span id="role-status" class="muted-text role-sidebar-status" data-i18n-key="console.roleLoading">Loading role card...</span>
                     </div>
                     <button
                         id="role-sidebar-close"
                         class="ghost-button ghost-button-compact"
                         type="button"
                     >
-                        隐藏
+                        <span data-i18n-key="console.hide">Hide</span>
                     </button>
                 </div>
                 <div class="role-sidebar-body">
                     <div class="field-grid role-field-grid">
                         <label class="field">
-                            <span>当前角色</span>
+                            <span data-i18n-key="console.currentRole">Current role</span>
                             <select id="role-select"></select>
                         </label>
                     </div>
                     <div class="role-toolbar">
                         <button id="role-refresh-button" class="ghost-button ghost-button-compact" type="button">
-                            刷新
+                            <span data-i18n-key="console.refresh">Refresh</span>
                         </button>
                         <button id="role-new-button" class="ghost-button ghost-button-compact" type="button">
-                            新建
+                            <span data-i18n-key="console.new">New</span>
                         </button>
                         <button id="role-edit-button" class="ghost-button ghost-button-compact" type="button">
-                            编辑
+                            <span data-i18n-key="console.edit">Edit</span>
                         </button>
                         <button id="role-delete-button" class="ghost-button ghost-button-compact ghost-button-danger" type="button">
-                            删除
+                            <span data-i18n-key="console.delete">Delete</span>
                         </button>
                     </div>
                     <div id="role-preview" class="role-preview">
-                        <p class="section-title">角色卡内容</p>
-                        <pre id="role-prompt-preview" class="role-preview-content">正在加载角色卡内容…</pre>
+                        <p class="section-title" data-i18n-key="console.roleContent">Role content</p>
+                        <pre id="role-prompt-preview" class="role-preview-content" data-i18n-key="console.roleContentLoading">Loading role content...</pre>
                     </div>
                     <div id="role-editor" class="role-editor" hidden>
-                        <p id="role-editor-title" class="section-title">角色卡编辑</p>
+                        <p id="role-editor-title" class="section-title" data-i18n-key="console.roleEditor">Role editor</p>
                         <label class="field">
-                            <span>角色名</span>
-                            <input id="role-name-input" type="text" placeholder="例如：助手猫娘">
+                            <span data-i18n-key="console.roleName">Role name</span>
+                            <input id="role-name-input" type="text" placeholder="Example: assistant" data-i18n-placeholder-key="console.roleNamePlaceholder">
                         </label>
                         <label class="field">
-                            <span>角色卡内容</span>
-                            <textarea id="role-prompt-input" rows="10" placeholder="在这里填写角色卡内容。"></textarea>
+                            <span data-i18n-key="console.rolePrompt">Role prompt</span>
+                            <textarea id="role-prompt-input" rows="10" placeholder="Write the role prompt here." data-i18n-placeholder-key="console.rolePromptPlaceholder"></textarea>
                         </label>
                         <div class="role-editor-actions">
-                            <button id="role-save-button" class="primary-button" type="button">保存</button>
-                            <button id="role-cancel-button" class="ghost-button" type="button">取消</button>
+                            <button id="role-save-button" class="primary-button" type="button" data-i18n-key="console.save">Save</button>
+                            <button id="role-cancel-button" class="ghost-button" type="button" data-i18n-key="console.cancel">Cancel</button>
                         </div>
                     </div>
                 </div>
@@ -249,14 +260,15 @@
                 class="role-sidebar-backdrop"
                 type="button"
                 hidden
-                aria-label="关闭角色卡"
+                aria-label="Close role card"
+                data-i18n-aria-label-key="console.closeRoleCard"
             ></button>
 
             <div class="chat-main">
             <details id="settings-panel" class="panel-section settings-panel">
                 <summary class="settings-summary">
                     <div class="settings-summary-main">
-                        <p class="section-title">控制面板</p>
+                        <p class="section-title" data-i18n-key="console.controlPanel">Control Panel</p>
                     </div>
                     <div class="panel-header-actions settings-summary-actions">
                         <button
@@ -264,14 +276,14 @@
                             class="ghost-button ghost-button-compact"
                             type="button"
                         >
-                            会话列表
+                            <span data-i18n-key="console.sessionList">Sessions</span>
                         </button>
                         <button
                             id="role-sidebar-toggle"
                             class="ghost-button ghost-button-compact"
                             type="button"
                         >
-                            角色卡
+                            <span data-i18n-key="console.roleCard">Role card</span>
                         </button>
                         <span class="settings-summary-icon" aria-hidden="true"></span>
                     </div>
@@ -279,43 +291,43 @@
                 <div class="settings-panel-body">
                     <div class="field-grid">
                         <label class="field">
-                            <span>TTS 语音合成模型</span>
+                            <span data-i18n-key="console.ttsProvider">TTS provider</span>
                             <select id="tts-provider-select"></select>
                         </label>
                         <label class="field">
-                            <span>TTS 音色选择</span>
+                            <span data-i18n-key="console.voiceSelect">TTS voice</span>
                             <select id="voice-select"></select>
                         </label>
                         <label class="field">
-                            <span>ASR 语音识别模型</span>
+                            <span data-i18n-key="console.asrProvider">ASR provider</span>
                             <select id="asr-provider-select"></select>
                         </label>
                         <label class="field field-span-full">
-                            <span>路由模式</span>
+                            <span data-i18n-key="console.routeMode">Route mode</span>
                             <select id="route-mode-select">
-                                <option value="auto">自动决策</option>
-                                <option value="chat_only">纯聊天</option>
-                                <option value="force_agent">强制 Agent</option>
+                                <option value="auto" data-i18n-key="console.routeAuto">Auto decision</option>
+                                <option value="chat_only" data-i18n-key="console.routeChatOnly">Chat only</option>
+                                <option value="force_agent" data-i18n-key="console.routeForceAgent">Force Agent</option>
                             </select>
                         </label>
                     </div>
                     <details id="runtime-panel" class="stage-background-panel runtime-panel" open>
                         <summary class="stage-background-header">
                             <div class="stage-background-header-main">
-                                <p class="section-title">Runtime 配置</p>
+                                <p class="section-title" data-i18n-key="console.runtimeConfig">Runtime Config</p>
                             </div>
                             <button
                                 id="runtime-reset-button"
                                 class="ghost-button ghost-button-compact"
                                 type="button"
                             >
-                                恢复默认
+                                <span data-i18n-key="console.restoreDefault">Restore default</span>
                             </button>
                         </summary>
                         <div class="stage-background-panel-body">
                             <div class="field-grid">
                                 <label class="field field-span-full">
-                                    <span>Shell 安全模式</span>
+                                    <span data-i18n-key="console.shellSafetyMode">Shell safety mode</span>
                                     <select id="shell-safety-mode-select">
                                         <option value="danger-full-access">danger-full-access</option>
                                         <option value="workspace-write">workspace-write</option>
@@ -326,21 +338,21 @@
                             <div class="toggle-row">
                                 <label class="toggle-item">
                                     <input id="delegated-ack-checkbox" type="checkbox" checked>
-                                    <span>后台任务开始时先发提示</span>
+                                    <span data-i18n-key="console.delegatedAck">Send notice before background tasks</span>
                                 </label>
                                 <label class="toggle-item">
                                     <input id="file-write-enabled-checkbox" type="checkbox" checked>
-                                    <span>允许 Agent 写入工作区文件</span>
+                                    <span data-i18n-key="console.fileWriteEnabled">Allow Agent to write workspace files</span>
                                 </label>
                             </div>
                             <div class="toggle-row">
                                 <label class="toggle-item">
                                     <input id="cron-mutation-enabled-checkbox" type="checkbox" checked>
-                                    <span>允许 Agent 修改 CRON 任务</span>
+                                    <span data-i18n-key="console.cronMutationEnabled">Allow Agent to modify CRON jobs</span>
                                 </label>
                                 <label class="toggle-item">
                                     <input id="web-private-network-enabled-checkbox" type="checkbox">
-                                    <span>允许 Agent 访问私有网络</span>
+                                    <span data-i18n-key="console.privateNetworkEnabled">Allow Agent to access private networks</span>
                                 </label>
                             </div>
                         </div>
@@ -348,13 +360,13 @@
                     <details id="live2d-panel" class="stage-background-panel" open>
                         <summary class="stage-background-header">
                             <div class="stage-background-header-main">
-                                <p class="section-title">Live2D 模型</p>
+                                <p class="section-title" data-i18n-key="console.live2dModel">Live2D Model</p>
                             </div>
                         </summary>
                         <div class="stage-background-panel-body">
                             <div class="field-grid">
                                 <label class="field field-span-full">
-                                    <span>Live2D 模型</span>
+                                    <span data-i18n-key="console.live2dModel">Live2D Model</span>
                                     <select id="model-select"></select>
                                 </label>
                             </div>
@@ -364,7 +376,7 @@
                                     class="ghost-button ghost-button-compact"
                                     type="button"
                                 >
-                                    上传 Live2D 文件夹
+                                    <span data-i18n-key="console.uploadLive2dFolder">Upload Live2D folder</span>
                                 </button>
                                 <input
                                     id="live2d-upload-input"
@@ -380,13 +392,13 @@
                     <details id="stage-background-panel" class="stage-background-panel" open>
                         <summary class="stage-background-header">
                             <div class="stage-background-header-main">
-                                <p class="section-title">舞台背景</p>
+                                <p class="section-title" data-i18n-key="console.stageBackground">Stage Background</p>
                             </div>
                         </summary>
                         <div class="stage-background-panel-body">
                             <div class="field-grid">
                                 <label class="field field-span-full">
-                                    <span>舞台背景</span>
+                                    <span data-i18n-key="console.stageBackground">Stage Background</span>
                                     <select id="stage-background-select"></select>
                                 </label>
                             </div>
@@ -396,14 +408,14 @@
                                     class="ghost-button ghost-button-compact"
                                     type="button"
                                 >
-                                    上传背景
+                                    <span data-i18n-key="console.uploadBackground">Upload background</span>
                                 </button>
                                 <button
                                     id="stage-background-reset-button"
                                     class="ghost-button ghost-button-compact"
                                     type="button"
                                 >
-                                    恢复默认
+                                    <span data-i18n-key="console.restoreDefault">Restore default</span>
                                 </button>
                                 <input
                                     id="stage-background-upload-input"
@@ -414,19 +426,19 @@
                             </div>
                             <div class="stage-background-transform-panel">
                                 <div class="stage-background-transform-header">
-                                    <p class="section-title">背景调整</p>
+                                    <p class="section-title" data-i18n-key="console.backgroundTransform">Background framing</p>
                                     <button
                                         id="stage-background-transform-reset-button"
                                         class="ghost-button ghost-button-compact"
                                         type="button"
                                     >
-                                        重置取景
+                                        <span data-i18n-key="console.resetCrop">Reset framing</span>
                                     </button>
                                 </div>
                                 <div class="stage-background-transform-grid">
                                     <label class="field">
                                         <span class="field-label-with-value">
-                                            <span>水平位置</span>
+                                            <span data-i18n-key="console.horizontalPosition">Horizontal position</span>
                                             <output id="stage-background-position-x-value" for="stage-background-position-x-input">50%</output>
                                         </span>
                                         <input
@@ -440,7 +452,7 @@
                                     </label>
                                     <label class="field">
                                         <span class="field-label-with-value">
-                                            <span>垂直位置</span>
+                                            <span data-i18n-key="console.verticalPosition">Vertical position</span>
                                             <output id="stage-background-position-y-value" for="stage-background-position-y-input">50%</output>
                                         </span>
                                         <input
@@ -454,7 +466,7 @@
                                     </label>
                                     <label class="field">
                                         <span class="field-label-with-value">
-                                            <span>缩放</span>
+                                            <span data-i18n-key="console.scale">Scale</span>
                                             <output id="stage-background-scale-value" for="stage-background-scale-input">100%</output>
                                         </span>
                                         <input
@@ -472,44 +484,44 @@
                     </details>
                     <details id="stage-effects-panel" class="stage-effects-panel" open>
                         <summary class="stage-effects-header">
-                            <p class="section-title">光影效果</p>
+                            <p class="section-title" data-i18n-key="console.stageEffects">Lighting Effects</p>
                             <button
                                 id="stage-effects-reset-button"
                                 class="ghost-button ghost-button-compact"
                                 type="button"
                             >
-                                重置参数
+                                <span data-i18n-key="console.resetParameters">Reset parameters</span>
                             </button>
                         </summary>
                         <div class="stage-effects-panel-body">
                             <div class="toggle-row">
                                 <label class="toggle-item">
                                     <input id="stage-effects-enabled-checkbox" type="checkbox" checked>
-                                    <span>全局开启</span>
+                                    <span data-i18n-key="console.globalEnabled">Enable all</span>
                                 </label>
                                 <label class="toggle-item">
                                     <input id="stage-effects-background-blur-checkbox" type="checkbox" checked>
-                                    <span>背景模糊</span>
+                                    <span data-i18n-key="console.backgroundBlur">Background blur</span>
                                 </label>
                                 <label class="toggle-item">
                                     <input id="stage-effects-light-enabled-checkbox" type="checkbox" checked>
-                                    <span>光位效果</span>
+                                    <span data-i18n-key="console.lightEnabled">Light position</span>
                                 </label>
                             </div>
                             <div class="toggle-row">
                                 <label class="toggle-item">
                                     <input id="stage-effects-light-float-checkbox" type="checkbox" checked>
-                                    <span>光位漂移</span>
+                                    <span data-i18n-key="console.lightFloat">Light drift</span>
                                 </label>
                                 <label class="toggle-item">
                                     <input id="stage-effects-particles-enabled-checkbox" type="checkbox" checked>
-                                    <span>&#31354;&#27668;&#31890;&#23376;</span>
+                                    <span data-i18n-key="console.airParticles">Air particles</span>
                                 </label>
                             </div>
                             <div class="stage-effects-grid">
                                 <label class="field">
                                     <span class="field-label-with-value">
-                                        <span>背景模糊</span>
+                                        <span data-i18n-key="console.backgroundBlur">Background blur</span>
                                         <output id="stage-effects-background-blur-value" for="stage-effects-background-blur-input">16</output>
                                     </span>
                                     <input
@@ -523,7 +535,7 @@
                                 </label>
                                 <label class="field">
                                     <span class="field-label-with-value">
-                                        <span>光位 X</span>
+                                        <span data-i18n-key="console.lightX">Light X</span>
                                         <output id="stage-effects-light-x-value" for="stage-effects-light-x-input">0%</output>
                                     </span>
                                     <input
@@ -537,7 +549,7 @@
                                 </label>
                                 <label class="field">
                                     <span class="field-label-with-value">
-                                        <span>光位 Y</span>
+                                        <span data-i18n-key="console.lightY">Light Y</span>
                                         <output id="stage-effects-light-y-value" for="stage-effects-light-y-input">0%</output>
                                     </span>
                                     <input
@@ -551,7 +563,7 @@
                                 </label>
                                 <label class="field">
                                     <span class="field-label-with-value">
-                                        <span>光晕强度</span>
+                                        <span data-i18n-key="console.glowStrength">Glow strength</span>
                                         <output id="stage-effects-glow-value" for="stage-effects-glow-input">25%</output>
                                     </span>
                                     <input
@@ -565,7 +577,7 @@
                                 </label>
                                 <label class="field">
                                     <span class="field-label-with-value">
-                                        <span>暗角强度</span>
+                                        <span data-i18n-key="console.vignetteStrength">Vignette strength</span>
                                         <output id="stage-effects-vignette-value" for="stage-effects-vignette-input">23%</output>
                                     </span>
                                     <input
@@ -579,7 +591,7 @@
                                 </label>
                                 <label class="field">
                                     <span class="field-label-with-value">
-                                        <span>&#39063;&#31890;&#24378;&#24230;</span>
+                                        <span data-i18n-key="console.grainStrength">Grain strength</span>
                                         <output id="stage-effects-grain-value" for="stage-effects-grain-input">16%</output>
                                     </span>
                                     <input
@@ -593,7 +605,7 @@
                                 </label>
                                 <label class="field">
                                     <span class="field-label-with-value">
-                                        <span>&#31890;&#23376;&#23494;&#24230;</span>
+                                        <span data-i18n-key="console.particleDensity">Particle density</span>
                                         <output id="stage-effects-particle-density-value" for="stage-effects-particle-density-input">30%</output>
                                     </span>
                                     <input
@@ -607,7 +619,7 @@
                                 </label>
                                 <label class="field">
                                     <span class="field-label-with-value">
-                                        <span>&#31890;&#23376;&#36879;&#26126;&#24230;</span>
+                                        <span data-i18n-key="console.particleOpacity">Particle opacity</span>
                                         <output id="stage-effects-particle-opacity-value" for="stage-effects-particle-opacity-input">45%</output>
                                     </span>
                                     <input
@@ -621,7 +633,7 @@
                                 </label>
                                 <label class="field">
                                     <span class="field-label-with-value">
-                                        <span>&#31890;&#23376;&#23610;&#23544;</span>
+                                        <span data-i18n-key="console.particleSize">Particle size</span>
                                         <output id="stage-effects-particle-size-value" for="stage-effects-particle-size-input">150%</output>
                                     </span>
                                     <input
@@ -635,7 +647,7 @@
                                 </label>
                                 <label class="field">
                                     <span class="field-label-with-value">
-                                        <span>&#31890;&#23376;&#36895;&#24230;</span>
+                                        <span data-i18n-key="console.particleSpeed">Particle speed</span>
                                         <output id="stage-effects-particle-speed-value" for="stage-effects-particle-speed-input">80%</output>
                                     </span>
                                     <input
@@ -649,7 +661,7 @@
                                 </label>
                                 <label class="field">
                                     <span class="field-label-with-value">
-                                        <span>&#33394;&#35843;</span>
+                                        <span data-i18n-key="console.hue">Hue</span>
                                         <output id="stage-effects-hue-value" for="stage-effects-hue-input">0&deg;</output>
                                     </span>
                                     <input
@@ -663,7 +675,7 @@
                                 </label>
                                 <label class="field">
                                     <span class="field-label-with-value">
-                                        <span>&#39281;&#21644;&#24230;</span>
+                                        <span data-i18n-key="console.saturation">Saturation</span>
                                         <output id="stage-effects-saturation-value" for="stage-effects-saturation-input">100%</output>
                                     </span>
                                     <input
@@ -677,7 +689,7 @@
                                 </label>
                                 <label class="field">
                                     <span class="field-label-with-value">
-                                        <span>&#23545;&#27604;&#24230;</span>
+                                        <span data-i18n-key="console.contrast">Contrast</span>
                                         <output id="stage-effects-contrast-value" for="stage-effects-contrast-input">100%</output>
                                     </span>
                                     <input
@@ -695,47 +707,47 @@
                     <div class="toggle-row">
                         <label class="toggle-item">
                             <input id="live2d-mouse-follow-checkbox" type="checkbox" checked>
-                            <span>Live 2D 眼神跟随</span>
+                            <span data-i18n-key="console.mouseFollow">Live2D eye tracking</span>
                         </label>
                     </div>
                     <div class="toggle-row">
                         <label class="toggle-item">
                             <input id="auto-tts-checkbox" type="checkbox" checked>
-                            <span>开启语音播报</span>
+                            <span data-i18n-key="console.autoTts">Enable speech playback</span>
                         </label>
-                        <span id="tts-detail" class="muted-text">准备加载 TTS 配置…</span>
+                        <span id="tts-detail" class="muted-text" data-i18n-key="console.ttsLoading">Preparing TTS config...</span>
                     </div>
                     <div class="voice-input-row">
                         <div class="voice-input-controls">
                             <label class="toggle-item">
                                 <input id="always-listen-checkbox" type="checkbox">
-                                <span>常开麦克风</span>
+                                <span data-i18n-key="console.alwaysListen">Always listen</span>
                             </label>
                         </div>
-                        <span id="asr-detail" class="muted-text">正在准备语音识别…</span>
+                        <span id="asr-detail" class="muted-text" data-i18n-key="console.asrPreparing">Preparing speech recognition...</span>
                     </div>
 
                     <details id="cron-panel" class="cron-panel">
                         <summary class="cron-summary">
                             <div class="cron-summary-main">
-                                <p class="section-title">CRON 定时任务</p>
-                                <span id="cron-summary-text" class="muted-text">已隐藏</span>
+                                <p class="section-title" data-i18n-key="console.cronJobs">CRON Jobs</p>
+                                <span id="cron-summary-text" class="muted-text" data-i18n-key="console.hidden">hidden</span>
                             </div>
                             <span class="cron-summary-icon" aria-hidden="true"></span>
                         </summary>
                         <div class="cron-panel-body">
                             <div class="cron-toolbar">
-                                <span id="cron-status" class="muted-text">展开后加载 CRON 定时任务</span>
+                                <span id="cron-status" class="muted-text" data-i18n-key="console.cronLoadAfterExpand">Expand to load CRON jobs</span>
                                 <button
                                     id="cron-refresh-button"
                                     class="ghost-button ghost-button-compact"
                                     type="button"
                                 >
-                                    刷新
+                                    <span data-i18n-key="console.refresh">Refresh</span>
                                 </button>
                             </div>
                             <div id="cron-jobs" class="cron-jobs">
-                                <p class="cron-empty">当前没有 CRON 定时任务。</p>
+                                <p class="cron-empty" data-i18n-key="console.cronEmpty">No CRON jobs.</p>
                             </div>
                         </div>
                     </details>
@@ -743,17 +755,17 @@
                     <details id="heartbeat-panel" class="heartbeat-panel">
                         <summary class="heartbeat-summary">
                             <div class="heartbeat-summary-main">
-                                <p class="section-title">HEARTBEAT 周期任务</p>
-                                <span id="heartbeat-summary-text" class="muted-text">已隐藏</span>
+                                <p class="section-title" data-i18n-key="console.heartbeatJobs">HEARTBEAT Jobs</p>
+                                <span id="heartbeat-summary-text" class="muted-text" data-i18n-key="console.hidden">hidden</span>
                             </div>
                             <span class="heartbeat-summary-icon" aria-hidden="true"></span>
                         </summary>
                         <div class="heartbeat-panel-body">
                             <div class="heartbeat-toolbar">
                                 <div class="heartbeat-toolbar-text">
-                                    <span id="heartbeat-status" class="muted-text">展开后加载 HEARTBEAT 周期任务</span>
+                                    <span id="heartbeat-status" class="muted-text" data-i18n-key="console.heartbeatLoadAfterExpand">Expand to load HEARTBEAT jobs</span>
                                     <p id="heartbeat-meta" class="muted-text heartbeat-meta">
-                                        间隔会在加载后显示
+                                        <span data-i18n-key="console.heartbeatMetaLoading">Interval appears after loading</span>
                                     </p>
                                 </div>
                                 <div class="heartbeat-toolbar-actions">
@@ -762,7 +774,7 @@
                                         class="ghost-button ghost-button-compact"
                                         type="button"
                                     >
-                                        刷新
+                                        <span data-i18n-key="console.refresh">Refresh</span>
                                     </button>
                                     <button
                                         id="heartbeat-save-button"
@@ -770,7 +782,7 @@
                                         type="button"
                                         disabled
                                     >
-                                        保存
+                                        <span data-i18n-key="console.save">Save</span>
                                     </button>
                                 </div>
                             </div>
@@ -780,7 +792,8 @@
                                     id="heartbeat-input"
                                     class="heartbeat-input"
                                     rows="10"
-                                    placeholder="在这里维护宽松的周期任务，例如定期检查待办、复查长期事项等。"
+                                    placeholder="Maintain loose recurring tasks here, such as checking todos or reviewing long-running items."
+                                    data-i18n-placeholder-key="console.heartbeatPlaceholder"
                                 ></textarea>
                             </label>
                         </div>
@@ -788,21 +801,21 @@
                 </div>
             </details>
 
-            <section class="conversation-panel" aria-label="当前会话">
+            <section class="conversation-panel" aria-label="Current session" data-i18n-aria-label-key="console.currentSession">
                 <div class="panel-section messages-section">
                     <div class="messages-header">
-                        <p class="section-title">对话</p>
-                        <span id="run-status" class="muted-text message-status">等待输入</span>
+                        <p class="section-title" data-i18n-key="console.conversation">Conversation</p>
+                        <span id="run-status" class="muted-text message-status" data-i18n-key="console.waitingInput">Waiting for input</span>
                     </div>
                     <details id="agent-trace-panel" class="agent-trace-panel" hidden>
                         <summary class="agent-trace-summary">
                             <div class="agent-trace-summary-main">
-                                <p class="section-title">Agent 执行日志</p>
-                                <span id="agent-trace-summary-text" class="muted-text">
-                                    等待后台任务
+                                <p class="section-title" data-i18n-key="console.agentTraceLog">Agent Trace Log</p>
+                                <span id="agent-trace-summary-text" class="muted-text" data-i18n-key="console.waitingBackgroundJob">
+                                    Waiting for a background task
                                 </span>
                             </div>
-                            <span id="agent-trace-count" class="agent-trace-count">0 条</span>
+                            <span id="agent-trace-count" class="agent-trace-count" data-i18n-key="console.traceCountZero">0 items</span>
                         </summary>
                         <div class="agent-trace-panel-body">
                             <div id="agent-trace-events" class="agent-trace-events"></div>
@@ -812,11 +825,12 @@
                 </div>
 
                 <form id="chat-form" class="composer">
-                    <label class="composer-label" for="prompt-input">输入消息</label>
+                    <label class="composer-label" for="prompt-input" data-i18n-key="console.inputMessage">Message</label>
                     <textarea
                         id="prompt-input"
                         rows="4"
-                        placeholder="例如：今天帮我安排一下工作重点。"
+                        placeholder="Example: help me plan today's work priorities."
+                        data-i18n-placeholder-key="console.promptPlaceholder"
                     ></textarea>
                     <div id="composer-files" class="composer-files" hidden></div>
                     <div id="composer-images" class="composer-images" hidden></div>
@@ -840,17 +854,19 @@
                         aria-live="polite"
                         hidden
                     >
-                        后台任务运行中，暂时无法发送文本或开始录音。可点击上方“停止任务”终止当前任务。
+                        <span data-i18n-key="console.composerBusyBanner">A background task is running. Text sending and recording are temporarily disabled. Use Stop Task above to end the current task.</span>
                     </div>
                     <div class="composer-actions">
-                        <span class="muted-text">Shift + Enter 换行</span>
+                        <span class="muted-text" data-i18n-key="console.shiftEnter">Shift + Enter for a new line</span>
                         <div class="composer-action-buttons">
                             <button
                                 id="composer-file-button"
                                 class="ghost-button icon-button"
                                 type="button"
-                                title="添加文件"
-                                aria-label="添加文件"
+                                title="Add file"
+                                aria-label="Add file"
+                                data-i18n-title-key="console.addFile"
+                                data-i18n-aria-label-key="console.addFile"
                             >
                                 <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                                     <path
@@ -863,8 +879,10 @@
                                 id="composer-image-button"
                                 class="ghost-button icon-button"
                                 type="button"
-                                title="添加图片"
-                                aria-label="添加图片"
+                                title="Add image"
+                                aria-label="Add image"
+                                data-i18n-title-key="console.addImage"
+                                data-i18n-aria-label-key="console.addImage"
                             >
                                 <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                                     <path
@@ -877,8 +895,10 @@
                                 id="record-button"
                                 class="ghost-button icon-button record-button"
                                 type="button"
-                                title="开始录音"
-                                aria-label="开始录音"
+                                title="Start recording"
+                                aria-label="Start recording"
+                                data-i18n-title-key="console.startRecording"
+                                data-i18n-aria-label-key="console.startRecording"
                             >
                                 <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                                     <path
@@ -887,7 +907,7 @@
                                     />
                                 </svg>
                             </button>
-                            <button id="send-button" class="primary-button" type="submit">发送</button>
+                            <button id="send-button" class="primary-button" type="submit" data-i18n-key="console.send">Send</button>
                         </div>
                     </div>
                 </form>
@@ -903,15 +923,16 @@
         hidden
     >
         <div class="window-file-drop-card">
-            <p class="window-file-drop-title">松开以上传附件</p>
-            <p class="window-file-drop-text">图片会作为图片附件，其余文件会作为文件附件</p>
+            <p class="window-file-drop-title" data-i18n-key="console.dropUploadTitle">Drop to upload attachments</p>
+            <p class="window-file-drop-text" data-i18n-key="console.dropUploadText">Images upload as image attachments; other files upload as file attachments.</p>
         </div>
     </div>
 
     <dialog
         id="message-image-dialog"
         class="message-image-dialog"
-        aria-label="图片预览"
+        aria-label="Image preview"
+        data-i18n-aria-label-key="console.imagePreview"
     >
         <div class="message-image-dialog-body">
             <div class="message-image-dialog-actions">
@@ -920,14 +941,15 @@
                     class="ghost-button ghost-button-compact"
                     type="button"
                 >
-                    关闭
+                    <span data-i18n-key="console.close">Close</span>
                 </button>
             </div>
             <img
                 id="message-image-dialog-image"
                 class="message-image-dialog-image"
                 src=""
-                alt="图片预览"
+                alt="Image preview"
+                data-i18n-alt-key="console.imagePreview"
             >
         </div>
     </dialog>
@@ -935,6 +957,6 @@
     <script src="/web/assets/vendor/pixi.min.js"></script>
     <script src="/web/assets/vendor/live2dcubismcore.min.js"></script>
     <script src="/web/assets/vendor/cubism4.min.js"></script>
-    <script type="module" src="/web/assets/app.js"></script>
+    <script type="module" src="/web/assets/app.js?v=site-public-6"></script>
 </body>
 </html>

@@ -119,26 +119,26 @@ export function displayHotkeyToken(token) {
     return token;
 }
 
-export function describeError(error) {
+export function describeError(error, t = null) {
     if (error instanceof Error) {
         return error.message;
     }
-    return String(error || "未知错误");
+    return String(error || (typeof t === "function" ? t("console.unknownError") : "Unknown error"));
 }
 
-export function describeHotkeyAction(action) {
+export function describeHotkeyAction(action, t = null) {
     const actionMap = {
-        ToggleExpression: "切换表情",
-        TriggerAnimation: "播放动作",
-        RemoveAllExpressions: "清空表情",
+        ToggleExpression: typeof t === "function" ? t("console.live2dToggleExpression") : "Toggle expression",
+        TriggerAnimation: typeof t === "function" ? t("console.live2dPlayMotion") : "Play motion",
+        RemoveAllExpressions: typeof t === "function" ? t("console.live2dClearExpressions") : "Clear expressions",
     };
-    return actionMap[action] || action || "热键";
+    return actionMap[action] || action || (typeof t === "function" ? t("console.hotkey") : "Hotkey");
 }
 
-export function buildHotkeyMetaText(hotkeyItem) {
-    const actionLabel = describeHotkeyAction(hotkeyItem.action);
+export function buildHotkeyMetaText(hotkeyItem, t = null) {
+    const actionLabel = describeHotkeyAction(hotkeyItem.action, t);
     if (!hotkeyItem.supported) {
-        return `${actionLabel} | 当前不支持`;
+        return `${actionLabel} | ${typeof t === "function" ? t("console.live2dUnsupported") : "unsupported"}`;
     }
     if (!hotkeyItem.file) {
         return actionLabel;

@@ -4,14 +4,17 @@ import { chatState } from "../../core/store.js";
 const MAX_COMPOSER_IMAGES = 20;
 const MAX_COMPOSER_FILES = 20;
 const IMAGE_FILE_NAME_PATTERN = /\.(avif|bmp|gif|heic|heif|ico|jpe?g|png|tiff?|webp)$/i;
+let composerT = (key) => key;
 
 export function createComposerAttachmentsController(deps) {
     const {
         deleteAttachment,
         setRunStatus,
+        t = (key) => key,
         uploadChatFile,
         uploadChatImage,
     } = deps;
+    composerT = t;
     let fileDragDepth = 0;
     let fileDropUploadInFlight = false;
 
@@ -41,7 +44,7 @@ export function createComposerAttachmentsController(deps) {
             }
         } catch (error) {
             console.error("Failed to load composer files", error);
-            setRunStatus(error.message || "文件上传失败");
+            setRunStatus(error.message || t("console.fileUploadFailed"));
         }
     }
 
@@ -65,7 +68,7 @@ export function createComposerAttachmentsController(deps) {
                 await deleteAttachment(removedFile.attachmentId);
             } catch (error) {
                 console.error("Failed to delete removed composer file", error);
-                setRunStatus(error.message || "文件清理失败");
+                setRunStatus(error.message || t("console.fileCleanupFailed"));
             }
         }
     }
@@ -96,7 +99,7 @@ export function createComposerAttachmentsController(deps) {
             }
         } catch (error) {
             console.error("Failed to load composer images", error);
-            setRunStatus(error.message || "图片上传失败");
+            setRunStatus(error.message || t("console.imageUploadFailed"));
         }
     }
 
@@ -113,7 +116,7 @@ export function createComposerAttachmentsController(deps) {
         event.preventDefault();
 
         const statusText = await importComposerTransfers(pastedFiles, {
-            actionLabel: "已粘贴",
+            actionLabel: t("console.pasted"),
             imageLogLabel: "Failed to upload pasted images",
             fileLogLabel: "Failed to upload pasted files",
         });
@@ -142,7 +145,7 @@ export function createComposerAttachmentsController(deps) {
                 await deleteAttachment(removedImage.attachmentId);
             } catch (error) {
                 console.error("Failed to delete removed composer image", error);
-                setRunStatus(error.message || "图片清理失败");
+                setRunStatus(error.message || t("console.imageCleanupFailed"));
             }
         }
     }
@@ -196,18 +199,18 @@ export function createComposerAttachmentsController(deps) {
         }
 
         if (fileDropUploadInFlight) {
-            setRunStatus("正在处理刚刚拖入的附件，请稍候");
+            setRunStatus(t("console.processingDroppedAttachments"));
             return;
         }
         if (isComposerLocked()) {
-            setRunStatus("后台任务运行中，暂不支持拖拽上传");
+            setRunStatus(t("console.dragUploadBlockedBusy"));
             return;
         }
 
         fileDropUploadInFlight = true;
         try {
             const statusText = await importComposerTransfers(droppedFiles, {
-                actionLabel: "已拖入",
+                actionLabel: t("console.dropped"),
                 imageLogLabel: "Failed to upload dropped images",
                 fileLogLabel: "Failed to upload dropped files",
             });
@@ -236,7 +239,7 @@ export function createComposerAttachmentsController(deps) {
 
     async function addComposerFiles(selectedFiles) {
         const files = Array.isArray(selectedFiles) ? selectedFiles : [];
-        const limitMessage = `最多只能附加 ${MAX_COMPOSER_FILES} 个文件`;
+        const limitMessage = t("console.maxFiles", { count: MAX_COMPOSER_FILES });
         if (!files.length) {
             return {
                 addedCount: 0,
@@ -271,7 +274,7 @@ export function createComposerAttachmentsController(deps) {
 
     async function addComposerImages(selectedFiles) {
         const files = Array.isArray(selectedFiles) ? selectedFiles : [];
-        const limitMessage = `最多只能附加 ${MAX_COMPOSER_IMAGES} 张图片`;
+        const limitMessage = t("console.maxImages", { count: MAX_COMPOSER_IMAGES });
         if (!files.length) {
             return {
                 addedCount: 0,
@@ -327,7 +330,7 @@ export function createComposerAttachmentsController(deps) {
                 imageLimitReached = result.truncated;
             } catch (error) {
                 console.error(imageLogLabel, error);
-                uploadErrors.push(error.message || "图片上传失败");
+                uploadErrors.push(error.message || t("console.imageUploadFailed"));
             }
         }
 
@@ -338,7 +341,7 @@ export function createComposerAttachmentsController(deps) {
                 fileLimitReached = result.truncated;
             } catch (error) {
                 console.error(fileLogLabel, error);
-                uploadErrors.push(error.message || "文件上传失败");
+                uploadErrors.push(error.message || t("console.fileUploadFailed"));
             }
         }
 
@@ -512,29 +515,29 @@ function buildAttachmentTransferStatus({
     const uploadedParts = [];
 
     if (uploadedImageCount > 0) {
-        uploadedParts.push(`${uploadedImageCount} 张图片`);
+        uploadedParts.push(composerT("console.imageCount", { count: uploadedImageCount }));
     }
     if (uploadedFileCount > 0) {
-        uploadedParts.push(`${uploadedFileCount} 个文件`);
+        uploadedParts.push(composerT("console.fileCount", { count: uploadedFileCount }));
     }
     if (uploadedParts.length) {
-        statusParts.push(`${actionLabel} ${uploadedParts.join("、")}`);
+        statusParts.push(`${actionLabel} ${uploadedParts.join(composerT("console.listSeparator"))}`);
     }
 
     if (imageLimitReached || fileLimitReached) {
         if (statusParts.length) {
-            statusParts.push("超出上限的附件已忽略");
+            statusParts.push(composerT("console.attachmentLimitIgnored"));
         } else if (imageLimitReached && fileLimitReached) {
-            statusParts.push("图片和文件数量都已达到上限");
+            statusParts.push(composerT("console.imageAndFileLimitsReached"));
         } else if (imageLimitReached) {
-            statusParts.push(`最多只能附加 ${MAX_COMPOSER_IMAGES} 张图片`);
+            statusParts.push(composerT("console.maxImages", { count: MAX_COMPOSER_IMAGES }));
         } else {
-            statusParts.push(`最多只能附加 ${MAX_COMPOSER_FILES} 个文件`);
+            statusParts.push(composerT("console.maxFiles", { count: MAX_COMPOSER_FILES }));
         }
     }
 
     if (uploadErrors.length) {
-        statusParts.push(`部分上传失败：${uploadErrors.join("；")}`);
+        statusParts.push(composerT("console.partialUploadFailed", { errors: uploadErrors.join("；") }));
     }
 
     return statusParts.join("，");
@@ -560,7 +563,7 @@ function renderComposerFiles() {
 
         const name = document.createElement("div");
         name.className = "composer-file-name";
-        name.textContent = file.name || "file";
+        name.textContent = file.name || composerT("console.unnamedFile");
         body.appendChild(name);
 
         const meta = document.createElement("div");
@@ -576,8 +579,9 @@ function renderComposerFiles() {
         removeButton.type = "button";
         removeButton.className = "composer-file-remove";
         removeButton.dataset.composerFileId = file.id;
-        removeButton.textContent = "移除";
-        removeButton.title = "移除文件";
+        removeButton.textContent = composerT("console.remove");
+        removeButton.title = composerT("console.removeFile");
+        removeButton.setAttribute("aria-label", composerT("console.removeFile"));
         removeButton.disabled = chatState.chatBusy || Boolean(chatState.activeChatJobId);
         card.appendChild(removeButton);
 
@@ -588,10 +592,10 @@ function renderComposerFiles() {
 function describeComposerFile(file) {
     const sizeText = formatComposerFileSize(file.sizeBytes);
     if (sizeText) {
-        return `待发送 · ${sizeText}`;
+        return `${composerT("console.pendingSend")} · ${sizeText}`;
     }
 
-    return "待发送";
+    return composerT("console.pendingSend");
 }
 
 function formatComposerFileSize(sizeBytes) {
@@ -627,7 +631,7 @@ function renderComposerImages() {
         const preview = document.createElement("img");
         preview.className = "composer-image-thumb";
         preview.src = image.previewUrl || image.url;
-        preview.alt = image.name || "Selected image";
+        preview.alt = image.name || composerT("console.selectedImage");
         preview.loading = "lazy";
         card.appendChild(preview);
 
@@ -636,7 +640,8 @@ function renderComposerImages() {
         removeButton.className = "composer-image-remove";
         removeButton.dataset.composerImageId = image.id;
         removeButton.textContent = "×";
-        removeButton.title = "移除图片";
+        removeButton.title = composerT("console.removeImage");
+        removeButton.setAttribute("aria-label", composerT("console.removeImage"));
         removeButton.disabled = chatState.chatBusy || Boolean(chatState.activeChatJobId);
         card.appendChild(removeButton);
 

@@ -17,17 +17,22 @@ export function normalizeHistory(history) {
 }
 
 export function renderSessionHistory(history, deps) {
-    const { addMessage, addSystemMessage, clearMessages } = deps;
+    const {
+        addMessage,
+        addSystemMessage,
+        clearMessages,
+        t = (key) => key,
+    } = deps;
     clearMessages();
 
     const messageHistory = normalizeHistory(history);
     if (messageHistory.length === 0) {
-        addSystemMessage("当前会话还没有消息，开始聊吧。");
+        addSystemMessage(t("console.emptySessionStart"));
         return;
     }
 
     messageHistory.forEach((message) => {
-        const renderedMessage = resolveHistoryMessage(message);
+        const renderedMessage = resolveHistoryMessage(message, t);
         addMessage(
             renderedMessage.kind,
             message.content,
@@ -80,11 +85,11 @@ export function buildSpokenText(messages) {
         .join("\n\n");
 }
 
-function resolveHistoryMessage(message) {
+function resolveHistoryMessage(message, t) {
     if (message.role === "user") {
         return {
             kind: "user",
-            label: message.name || "你",
+            label: message.name || t("console.youLabel"),
             options: { renderMode: "plain" },
         };
     }
@@ -98,13 +103,13 @@ function resolveHistoryMessage(message) {
     if (message.role === "system") {
         return {
             kind: "system",
-            label: message.name || "系统",
+            label: message.name || t("console.systemLabel"),
             options: { renderMode: "plain" },
         };
     }
     return {
         kind: "system",
-        label: message.name || message.role || "记录",
+        label: message.name || message.role || t("console.recordLabel"),
         options: { renderMode: "plain" },
     };
 }

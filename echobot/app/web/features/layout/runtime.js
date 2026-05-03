@@ -1,7 +1,7 @@
 import { DOM } from "../../core/dom.js";
 import { appState, runtimeState } from "../../core/store.js";
 
-const DEFAULT_SHELL_SAFETY_MODE = "danger-full-access";
+const DEFAULT_SHELL_SAFETY_MODE = "workspace-write";
 const DEFAULT_RUNTIME_CONFIG = Object.freeze({
     delegated_ack_enabled: true,
     shell_safety_mode: DEFAULT_SHELL_SAFETY_MODE,

@@ -4,12 +4,33 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from ..runtime.bootstrap import RuntimeOptions
-from .routers import attachments, chat, channels, cron, health, heartbeat, roles, sessions, web
+from .auth import (
+    TRUSTED_USER_STATE_KEY,
+    TrustedUserConfig,
+    is_protected_path,
+    resolve_trusted_user_id,
+)
+from .routers import (
+    attachments,
+    chat,
+    channels,
+    cron,
+    health,
+    heartbeat,
+    model_profiles,
+    openwebui,
+    roles,
+    sessions,
+    stage,
+    web,
+)
 from .runtime import ASRServiceBuilder, AppRuntime, RuntimeContextBuilder, TTSServiceBuilder
+from .web_pages import WEB_PAGE_ROUTES
 
 
 WEB_ASSETS_DIR = Path(__file__).with_name("web")
@@ -46,6 +67,27 @@ def create_app(
         description="Runtime API for EchoBot daemon and future web console.",
         lifespan=lifespan,
     )
+    trusted_user_config = TrustedUserConfig.from_env()
+    app.state.trusted_user_config = trusted_user_config
+
+    @app.middleware("http")
+    async def trusted_user_middleware(request, call_next):
+        if trusted_user_config.enabled and is_protected_path(request.url.path):
+            try:
+                user_id = resolve_trusted_user_id(request.headers, trusted_user_config)
+            except ValueError as error:
+                return JSONResponse(
+                    {"detail": str(error)},
+                    status_code=401,
+                )
+            if not user_id and trusted_user_config.required:
+                return JSONResponse(
+                    {"detail": "Trusted user header is required"},
+                    status_code=401,
+                )
+            if user_id:
+                setattr(request.state, TRUSTED_USER_STATE_KEY, user_id)
+        return await call_next(request)
 
     @app.get("/")
     async def root() -> dict[str, str]:
@@ -54,9 +96,7 @@ def create_app(
             "docs": "/docs",
         }
 
-    @app.get("/web", include_in_schema=False)
-    async def web_console() -> FileResponse:
-        return FileResponse(WEB_ASSETS_DIR / "index.html")
+    _register_web_page_routes(app)
 
     @app.get("/favicon.ico", include_in_schema=False)
     async def favicon() -> FileResponse:
@@ -78,6 +118,27 @@ def create_app(
     app.include_router(cron.router, prefix="/api")
     app.include_router(heartbeat.router, prefix="/api")
     app.include_router(roles.router, prefix="/api")
+    app.include_router(model_profiles.router, prefix="/api")
     app.include_router(channels.router, prefix="/api")
+    app.include_router(stage.router, prefix="/api")
+    app.include_router(openwebui.router, prefix="/api")
     app.include_router(web.router, prefix="/api")
     return app
+
+
+def _register_web_page_routes(app: FastAPI) -> None:
+    for route in WEB_PAGE_ROUTES:
+        app.add_api_route(
+            route.path,
+            _web_page_handler(route.asset_name),
+            methods=["GET"],
+            include_in_schema=False,
+            name=route.route_name,
+        )
+
+
+def _web_page_handler(asset_name: str):
+    async def handler() -> FileResponse:
+        return FileResponse(WEB_ASSETS_DIR / asset_name)
+
+    return handler

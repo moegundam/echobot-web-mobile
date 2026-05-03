@@ -17,6 +17,7 @@ export function createTtsPlaybackController(deps) {
         setConnectionState,
         setRunStatus,
         smoothValue,
+        t = (key) => key,
     } = deps;
 
     async function speakText(text, options = {}) {
@@ -49,6 +50,7 @@ export function createTtsPlaybackController(deps) {
             finalized: false,
             cancelled: false,
             eventResolvers: [],
+            abortControllers: new Set(),
             firstPlaybackStarted: false,
             resolveFirstPlaybackStarted: null,
             firstPlaybackStartedPromise: null,
@@ -71,6 +73,7 @@ export function createTtsPlaybackController(deps) {
 
         speechSession.cancelled = true;
         speechSession.finalized = true;
+        abortSpeechSessionRequests(speechSession);
         resolveSpeechSessionStart(speechSession);
         notifySpeechSessionEvent(speechSession);
 
@@ -114,7 +117,7 @@ export function createTtsPlaybackController(deps) {
                 audioState.activeSpeechSession = null;
             }
             DOM.stopAudioButton.disabled = true;
-            setConnectionState("ready", "已连接");
+            setConnectionState("ready", t("console.status.ready"));
             return Promise.resolve();
         }
 
@@ -157,7 +160,7 @@ export function createTtsPlaybackController(deps) {
         speechSession.queue.push({
             audioBufferPromise: synthesizeSpeechAudioBuffer(
                 preparedText,
-                speechSession.turnId,
+                speechSession,
             ),
         });
         DOM.stopAudioButton.disabled = false;
@@ -245,7 +248,7 @@ export function createTtsPlaybackController(deps) {
             }
             if (!audioState.audioSourceNode && !audioState.activeSpeechSession) {
                 DOM.stopAudioButton.disabled = true;
-                setConnectionState("ready", "已连接");
+                setConnectionState("ready", t("console.status.ready"));
             }
             notifySpeechSessionEvent(speechSession);
         }
@@ -286,7 +289,8 @@ export function createTtsPlaybackController(deps) {
         }
     }
 
-    async function synthesizeSpeechAudioBuffer(text, turnId) {
+    async function synthesizeSpeechAudioBuffer(text, speechSession) {
+        const turnId = speechSession ? speechSession.turnId : 0;
         if (!isSpeechTurnActive(turnId)) {
             return null;
         }
@@ -296,36 +300,75 @@ export function createTtsPlaybackController(deps) {
             return null;
         }
 
-        setConnectionState("busy", "语音合成中...");
+        setConnectionState("busy", t("console.status.ttsSynthesizing"));
         DOM.stopAudioButton.disabled = false;
 
-        const response = await fetch("/api/web/tts", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-                text: text,
-                provider: audioState.selectedTtsProvider || appState.config.tts.default_provider,
-                voice: audioState.selectedVoice
-                    || (appState.config.tts.default_voices || {})[audioState.selectedTtsProvider]
-                    || appState.config.tts.default_voice,
-            }),
+        const abortController = new AbortController();
+        registerSpeechAbortController(speechSession, abortController);
+        try {
+            const response = await fetch("/api/web/tts", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                signal: abortController.signal,
+                body: JSON.stringify({
+                    text: text,
+                    provider: audioState.selectedTtsProvider || appState.config.tts.default_provider,
+                    voice: audioState.selectedVoice
+                        || (appState.config.tts.default_voices || {})[audioState.selectedTtsProvider]
+                        || appState.config.tts.default_voice,
+                }),
+            });
+
+            if (!response.ok) {
+                throw await responseToError(response);
+            }
+            if (!isSpeechTurnActive(turnId)) {
+                return null;
+            }
+
+            const audioBytes = await response.arrayBuffer();
+            if (!isSpeechTurnActive(turnId)) {
+                return null;
+            }
+
+            return await audioState.audioContext.decodeAudioData(audioBytes.slice(0));
+        } catch (error) {
+            if (abortController.signal.aborted || !isSpeechTurnActive(turnId)) {
+                return null;
+            }
+            throw error;
+        } finally {
+            unregisterSpeechAbortController(speechSession, abortController);
+        }
+    }
+
+    function registerSpeechAbortController(speechSession, abortController) {
+        if (!speechSession || !speechSession.abortControllers) {
+            return;
+        }
+
+        speechSession.abortControllers.add(abortController);
+    }
+
+    function unregisterSpeechAbortController(speechSession, abortController) {
+        if (!speechSession || !speechSession.abortControllers) {
+            return;
+        }
+
+        speechSession.abortControllers.delete(abortController);
+    }
+
+    function abortSpeechSessionRequests(speechSession) {
+        if (!speechSession || !speechSession.abortControllers) {
+            return;
+        }
+
+        speechSession.abortControllers.forEach((abortController) => {
+            abortController.abort();
         });
-
-        if (!response.ok) {
-            throw await responseToError(response);
-        }
-        if (!isSpeechTurnActive(turnId)) {
-            return null;
-        }
-
-        const audioBytes = await response.arrayBuffer();
-        if (!isSpeechTurnActive(turnId)) {
-            return null;
-        }
-
-        return await audioState.audioContext.decodeAudioData(audioBytes.slice(0));
+        speechSession.abortControllers.clear();
     }
 
     async function playSpeechAudioBuffer(audioBuffer, turnId) {
@@ -345,6 +388,7 @@ export function createTtsPlaybackController(deps) {
         audioState.audioAnalyser = analyserNode;
         audioState.volumeBuffer = new Uint8Array(analyserNode.fftSize);
         audioState.speaking = true;
+        getHooks().syncAlwaysListenPauseState();
         getHooks().updateVoiceInputControls();
 
         const playbackEnded = new Promise((resolve) => {
@@ -357,7 +401,7 @@ export function createTtsPlaybackController(deps) {
 
         startLipSyncLoop();
         sourceNode.start(0);
-        setRunStatus("正在播报回复");
+        setRunStatus(t("console.status.speakingReply"));
         await playbackEnded;
     }
 
@@ -375,8 +419,8 @@ export function createTtsPlaybackController(deps) {
         console.error(error);
         clearSpeechState();
         DOM.stopAudioButton.disabled = true;
-        setRunStatus(error.message || "语音播放失败");
-        addMessage("system", `TTS 失败：${error.message || error}`, "状态");
+        setRunStatus(error.message || t("console.status.ttsPlaybackFailed"));
+        addMessage("system", `${t("console.ttsFailed")}: ${error.message || error}`, t("console.systemLabel"));
     }
 
     function stopSpeechPlayback() {
@@ -390,7 +434,7 @@ export function createTtsPlaybackController(deps) {
         }
         clearSpeechState();
         DOM.stopAudioButton.disabled = true;
-        setConnectionState("ready", "已连接");
+        setConnectionState("ready", t("console.status.ready"));
     }
 
     function clearSpeechState() {
@@ -414,6 +458,7 @@ export function createTtsPlaybackController(deps) {
         audioState.volumeBuffer = null;
         audioState.speaking = false;
         live2dState.currentMouthValue = 0;
+        getHooks().syncAlwaysListenPauseState();
         getHooks().updateVoiceInputControls();
 
         if (live2dState.lipSyncFrameId) {
@@ -429,7 +474,7 @@ export function createTtsPlaybackController(deps) {
         DOM.stopAudioButton.disabled = !hasPendingSpeech;
         setConnectionState(
             hasPendingSpeech ? "busy" : "ready",
-            hasPendingSpeech ? "语音合成中..." : "已连接",
+            hasPendingSpeech ? t("console.status.ttsSynthesizing") : t("console.status.ready"),
         );
         resolveSpeechWaiter();
     }

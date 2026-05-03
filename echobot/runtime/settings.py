@@ -10,7 +10,7 @@ from typing import Any, ClassVar, Protocol
 from ..tools.shell import normalize_shell_safety_mode
 
 
-DEFAULT_SHELL_SAFETY_MODE = "danger-full-access"
+DEFAULT_SHELL_SAFETY_MODE = "workspace-write"
 
 
 @dataclass(frozen=True, slots=True)
@@ -318,11 +318,13 @@ class RuntimeSettingsManager:
         *,
         coordinator: RuntimeSettingsCoordinator,
         runtime_controls: RuntimeControls,
+        storage_root: str | Path | None = None,
     ) -> None:
         self._coordinator = coordinator
         self._runtime_controls = runtime_controls
+        root = Path(storage_root) if storage_root is not None else Path(workspace) / ".echobot"
         self._store = RuntimeSettingsStore(
-            Path(workspace) / ".echobot" / "runtime_settings.json",
+            root / "runtime_settings.json",
         )
 
     @property

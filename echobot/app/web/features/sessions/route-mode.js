@@ -5,12 +5,13 @@ export function normalizeRouteMode(routeMode) {
     return ROUTE_MODE_VALUES.has(value) ? value : "auto";
 }
 
-export function routeModeLabel(routeMode) {
+export function routeModeLabel(routeMode, t = null) {
+    const translate = typeof t === "function" ? t : null;
     if (routeMode === "chat_only") {
-        return "纯聊天";
+        return translate ? translate("console.routeChatOnly") : "Chat only";
     }
     if (routeMode === "force_agent") {
-        return "强制 Agent";
+        return translate ? translate("console.routeForceAgent") : "Force Agent";
     }
-    return "自动决策";
+    return translate ? translate("console.routeAuto") : "Auto decision";
 }

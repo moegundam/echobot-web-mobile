@@ -1,13 +1,15 @@
-import { createTtsOptionsController } from "./tts/options.js";
-import { createTtsPlaybackController } from "./tts/playback.js";
+import { createTtsOptionsController } from "./tts/options.js?v=site-public-6";
+import { createTtsPlaybackController } from "./tts/playback.js?v=site-public-6";
 
 export function createTtsModule(deps) {
     let hooks = {
+        syncAlwaysListenPauseState() {},
         updateVoiceInputControls() {},
     };
 
     const options = createTtsOptionsController({
         requestJson: deps.requestJson,
+        t: deps.t,
     });
     const playback = createTtsPlaybackController({
         addMessage: deps.addMessage,
@@ -18,6 +20,7 @@ export function createTtsModule(deps) {
         setConnectionState: deps.setConnectionState,
         setRunStatus: deps.setRunStatus,
         smoothValue: deps.smoothValue,
+        t: deps.t,
     });
 
     function bindHooks(nextHooks) {
@@ -36,6 +39,7 @@ export function createTtsModule(deps) {
         handleVoiceSelectionChange: options.handleVoiceSelectionChange,
         loadTtsOptions: options.loadTtsOptions,
         queueSpeechSessionText: playback.queueSpeechSessionText,
+        refreshLocalizedText: options.refreshLocalizedText,
         speakText: playback.speakText,
         stopSpeechPlayback: playback.stopSpeechPlayback,
     };

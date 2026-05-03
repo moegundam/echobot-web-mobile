@@ -8,9 +8,10 @@ from ....runtime.settings import RuntimeSettings, RuntimeSettingsStore
 
 
 class WebRuntimeSettingsService:
-    def __init__(self, workspace: Path) -> None:
+    def __init__(self, workspace: Path, storage_root: Path | None = None) -> None:
+        root = storage_root or workspace / ".echobot"
         self._store = RuntimeSettingsStore(
-            workspace / ".echobot" / "runtime_settings.json",
+            root / "runtime_settings.json",
         )
 
     async def load_settings(self) -> RuntimeSettings:

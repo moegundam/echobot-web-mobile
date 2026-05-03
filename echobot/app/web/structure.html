@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>EchoBot Site Structure</title>
+    <link rel="stylesheet" href="/web/assets/styles/shell-pages.css?v=site-public-6">
+</head>
+<body class="admin-page structure-page" data-page-title-key="structure.pageTitle">
+    <main id="structure-root" class="admin-root structure-root">
+        <header class="admin-header structure-header">
+            <div>
+                <h1 data-i18n-key="structure.heading">EchoBot Site Structure</h1>
+                <p data-i18n-key="structure.description">Page boundaries, operator flow, and API grouping.</p>
+            </div>
+            <div class="shell-header-controls">
+                <div class="language-switcher" data-language-switcher></div>
+                <div class="display-mode-switcher" data-display-mode-switcher></div>
+            </div>
+        </header>
+        <nav class="admin-grid guide-nav" aria-label="Structure quick links" data-i18n-aria-label-key="structure.linksAria">
+            <a href="/admin" data-i18n-key="guide.backToAdmin">Back to Admin</a>
+            <a href="/console" data-i18n-key="guide.openConsole">Open Console</a>
+            <a href="/stage?session_name=default" data-session-link data-i18n-key="guide.openStage">Open Stage</a>
+            <a href="/messenger?session_name=default" data-session-link data-i18n-key="guide.openMessenger">Open Messenger</a>
+            <a href="/admin/channels" data-i18n-key="admin.channels">Channels</a>
+            <a href="/admin/guide" data-i18n-key="admin.guide">Operation Guide</a>
+        </nav>
+        <section
+            id="structure-content"
+            class="structure-content"
+            aria-live="polite"
+            aria-label="Site structure content"
+            data-i18n-aria-label-key="structure.contentAria"
+        ></section>
+    </main>
+    <script type="module" src="/web/assets/structure-app.js?v=site-public-6"></script>
+</body>
+</html>

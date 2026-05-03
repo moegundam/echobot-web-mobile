@@ -118,6 +118,18 @@ class RoleplayEngine:
         self._default_max_tokens = default_max_tokens
         self._lightweight_max_tokens = max(int(lightweight_max_tokens), 1)
 
+    def set_provider(self, provider) -> None:
+        self._role_agent.provider = provider
+
+    def set_generation_defaults(
+        self,
+        *,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+    ) -> None:
+        self._default_temperature = temperature
+        self._default_max_tokens = max_tokens
+
     async def chat_reply(
         self,
         *,

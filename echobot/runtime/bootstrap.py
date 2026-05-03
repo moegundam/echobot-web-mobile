@@ -45,6 +45,7 @@ ToolRegistryFactory = Callable[[str, bool], ToolRegistry | None]
 class RuntimeOptions:
     env_file: str = ".env"
     workspace: Path | None = None
+    storage_root: Path | None = None
     temperature: float | None = None
     max_tokens: int | None = None
     delegated_ack_enabled: bool | None = None
@@ -79,6 +80,7 @@ class RuntimeContext:
     tool_registry_factory: ToolRegistryFactory
     runtime_controls: RuntimeControls
     default_runtime_config: RuntimeConfigSnapshot
+    storage_root: Path | None = None
 
 
 def build_runtime_context(
@@ -87,10 +89,11 @@ def build_runtime_context(
     load_session_state: bool,
 ) -> RuntimeContext:
     workspace = (options.workspace or Path(".")).resolve()
+    storage_root = _storage_root(workspace, options.storage_root)
     env_file_path = _resolve_runtime_path(workspace, options.env_file)
     load_env_file(str(env_file_path))
     default_runtime_config = _default_runtime_config(options)
-    settings_store = RuntimeSettingsStore(_runtime_settings_path(workspace))
+    settings_store = RuntimeSettingsStore(_runtime_settings_path(storage_root))
     runtime_settings = settings_store.load()
     runtime_controls = RuntimeControls(
         shell_safety_mode=(
@@ -120,7 +123,7 @@ def build_runtime_context(
     settings = OpenAICompatibleSettings.from_env()
     supports_image_input = _env_bool("ECHOBOT_LLM_SUPPORTS_IMAGE_INPUT", True)
     attachment_store = AttachmentStore(
-        workspace / ".echobot" / "attachments",
+        storage_root / "attachments",
         image_budget=_image_budget_from_env(),
         file_budget=_file_budget_from_env(),
     )
@@ -147,8 +150,8 @@ def build_runtime_context(
         settings,
         attachment_store=attachment_store,
     )
-    cron_store_path = workspace / ".echobot" / "cron" / "jobs.json"
-    heartbeat_file_path = _heartbeat_file_path(workspace)
+    cron_store_path = storage_root / "cron" / "jobs.json"
+    heartbeat_file_path = _heartbeat_file_path(workspace, storage_root)
     heartbeat_interval_seconds = _heartbeat_interval_seconds(options)
     agent = AgentCore(
         provider,
@@ -163,9 +166,9 @@ def build_runtime_context(
         ),
         memory_support=memory_support,
     )
-    session_store = SessionStore(workspace / ".echobot" / "sessions")
-    agent_session_store = SessionStore(workspace / ".echobot" / "agent_sessions")
-    agent_trace_store = AgentTraceStore(workspace / ".echobot" / "agent_traces")
+    session_store = SessionStore(storage_root / "sessions")
+    agent_session_store = SessionStore(storage_root / "agent_sessions")
+    agent_trace_store = AgentTraceStore(storage_root / "agent_traces")
     session = _load_session(session_store, options) if load_session_state else None
     cron_service = CronService(cron_store_path)
     tool_registry_factory = _build_tool_registry_factory(
@@ -192,7 +195,7 @@ def build_runtime_context(
         trace_store=agent_trace_store,
     )
     role_registry = RoleCardRegistry.discover(project_root=workspace)
-    job_store = ConversationJobStore(workspace / ".echobot" / "jobs" / "jobs.json")
+    job_store = ConversationJobStore(storage_root / "jobs" / "jobs.json")
     decision_engine = DecisionEngine(
         AgentCore(decider_provider),
         max_tokens=lightweight_max_tokens,
@@ -247,6 +250,7 @@ def build_runtime_context(
         tool_registry_factory=tool_registry_factory,
         runtime_controls=runtime_controls,
         default_runtime_config=default_runtime_config,
+        storage_root=storage_root,
     )
 
 
@@ -329,11 +333,13 @@ def _load_session(
     return session_store.load_current_session()
 
 
-def _heartbeat_file_path(workspace: Path) -> Path:
+def _heartbeat_file_path(workspace: Path, storage_root: Path) -> Path:
     file_name = os.environ.get(
         "ECHOBOT_HEARTBEAT_FILE",
         ".echobot/HEARTBEAT.md",
     )
+    if file_name == ".echobot/HEARTBEAT.md":
+        return storage_root / "HEARTBEAT.md"
     return workspace / file_name
 
 
@@ -472,8 +478,17 @@ def _resolve_runtime_path(workspace: Path, path: str | Path) -> Path:
     return workspace / resolved_path
 
 
-def _runtime_settings_path(workspace: Path) -> Path:
-    return workspace / ".echobot" / "runtime_settings.json"
+def _runtime_settings_path(storage_root: Path) -> Path:
+    return storage_root / "runtime_settings.json"
+
+
+def _storage_root(workspace: Path, storage_root: str | Path | None) -> Path:
+    if storage_root is None:
+        return workspace / ".echobot"
+    resolved_root = Path(storage_root).expanduser()
+    if resolved_root.is_absolute():
+        return resolved_root.resolve()
+    return (workspace / resolved_root).resolve()
 
 
 def _build_provider_from_env(
