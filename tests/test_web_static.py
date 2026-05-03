@@ -110,6 +110,18 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertNotIn("playTts", delta_handler.group(0))
         self.assertIn("playTts(payload.text)", final_handler.group(0))
 
+    def test_stage_live2d_falls_back_before_noisy_webgl_initialization(self) -> None:
+        stage_js = (WEB_ROOT / "stage-app.js").read_text(encoding="utf-8")
+        i18n_js = (WEB_ROOT / "shell-i18n.js").read_text(encoding="utf-8")
+
+        self.assertIn("canUsePixiLive2D()", stage_js)
+        self.assertIn("canCreateWebGLShaderProgram()", stage_js)
+        self.assertIn('"stage.fallback.webglUnavailable"', stage_js)
+        self.assertIn("withPixiInitializationGuard", stage_js)
+        self.assertIn("isKnownPixiInitializationNoise", stage_js)
+        self.assertIn("destroyLive2DApp()", stage_js)
+        self.assertIn('"stage.fallback.webglUnavailable"', i18n_js)
+
 
 if __name__ == "__main__":
     unittest.main()

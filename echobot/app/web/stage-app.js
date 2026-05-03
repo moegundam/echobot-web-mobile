@@ -369,24 +369,131 @@ async function initLive2D() {
         return;
     }
 
-    if (!window.PIXI || !window.PIXI.live2d || !window.PIXI.live2d.Live2DModel) {
-        markLive2DUnavailable("stage.fallback.live2dUnavailable");
+    const live2dReadiness = canUsePixiLive2D();
+    if (!live2dReadiness.ready) {
+        markLive2DUnavailable(live2dReadiness.messageKey);
         return;
     }
 
     try {
-        live2dApp = await createPixiApplication(canvasHost);
-        live2dModel = await window.PIXI.live2d.Live2DModel.from(modelUrl, {
-            autoInteract: false,
+        await withPixiInitializationGuard(async () => {
+            live2dApp = await createPixiApplication(canvasHost);
+            live2dModel = await window.PIXI.live2d.Live2DModel.from(modelUrl, {
+                autoInteract: false,
+            });
+            live2dApp.stage.addChild(live2dModel);
+            fitLive2DModel();
+            window.addEventListener("resize", fitLive2DModel);
+            canvasHost.dataset.live2d = "ready";
         });
-        live2dApp.stage.addChild(live2dModel);
-        fitLive2DModel();
-        window.addEventListener("resize", fitLive2DModel);
-        canvasHost.dataset.live2d = "ready";
     } catch (error) {
         console.warn("Live2D initialization failed", error);
-        markLive2DUnavailable("stage.fallback.subtitleMode");
+        markLive2DUnavailable(
+            isKnownPixiInitializationNoise([error])
+                ? "stage.fallback.webglUnavailable"
+                : "stage.fallback.subtitleMode",
+        );
     }
+}
+
+function canUsePixiLive2D() {
+    if (!window.PIXI || !window.PIXI.live2d || !window.PIXI.live2d.Live2DModel) {
+        return {
+            ready: false,
+            messageKey: "stage.fallback.live2dUnavailable",
+        };
+    }
+    if (!canCreateWebGLShaderProgram()) {
+        return {
+            ready: false,
+            messageKey: "stage.fallback.webglUnavailable",
+        };
+    }
+    return {
+        ready: true,
+        messageKey: "",
+    };
+}
+
+function canCreateWebGLShaderProgram() {
+    const documentRef = window.document;
+    if (!documentRef || typeof documentRef.createElement !== "function") {
+        return false;
+    }
+
+    const canvas = documentRef.createElement("canvas");
+    let gl = null;
+    try {
+        gl = canvas.getContext("webgl2")
+            || canvas.getContext("webgl")
+            || canvas.getContext("experimental-webgl");
+    } catch (_error) {
+        return false;
+    }
+    if (!gl || typeof gl.createShader !== "function") {
+        return false;
+    }
+
+    const vertexShader = compileWebGLShader(
+        gl,
+        gl.VERTEX_SHADER,
+        "attribute vec2 position; void main(){ gl_Position = vec4(position, 0.0, 1.0); }",
+    );
+    const fragmentShader = compileWebGLShader(
+        gl,
+        gl.FRAGMENT_SHADER,
+        "void main(){ gl_FragColor = vec4(1.0); }",
+    );
+    if (!vertexShader || !fragmentShader) {
+        deleteWebGLShader(gl, vertexShader);
+        deleteWebGLShader(gl, fragmentShader);
+        return false;
+    }
+
+    const program = gl.createProgram();
+    if (!program) {
+        deleteWebGLShader(gl, vertexShader);
+        deleteWebGLShader(gl, fragmentShader);
+        return false;
+    }
+
+    gl.attachShader(program, vertexShader);
+    gl.attachShader(program, fragmentShader);
+    gl.linkProgram(program);
+    const linkSucceeded = Boolean(gl.getProgramParameter(program, gl.LINK_STATUS));
+
+    deleteWebGLProgram(gl, program);
+    deleteWebGLShader(gl, vertexShader);
+    deleteWebGLShader(gl, fragmentShader);
+    return linkSucceeded;
+}
+
+function compileWebGLShader(gl, type, source) {
+    const shader = gl.createShader(type);
+    if (!shader) {
+        return null;
+    }
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+        gl.deleteShader(shader);
+        return null;
+    }
+    return shader;
+}
+
+function deleteWebGLProgram(gl, program) {
+    if (!gl || !program || typeof gl.deleteProgram !== "function") {
+        return;
+    }
+    gl.deleteProgram(program);
+}
+
+function deleteWebGLShader(gl, shader) {
+    if (!gl || !shader || typeof gl.deleteShader !== "function") {
+        return;
+    }
+    gl.deleteShader(shader);
 }
 
 function normalizeLive2DConfig(sourceConfig) {
@@ -414,6 +521,35 @@ function normalizeLive2DConfig(sourceConfig) {
             ? modelConfig.mouth_form_parameter_id
             : null,
     };
+}
+
+async function withPixiInitializationGuard(callback) {
+    const originalConsoleError = console.error;
+    console.error = (...args) => {
+        if (isKnownPixiInitializationNoise(args)) {
+            return;
+        }
+        originalConsoleError.apply(console, args);
+    };
+    try {
+        return await callback();
+    } finally {
+        console.error = originalConsoleError;
+    }
+}
+
+function isKnownPixiInitializationNoise(args) {
+    return args.some((item) => {
+        const text = String(
+            item && item.message
+                ? item.message
+                : item,
+        );
+        return (
+            text.includes("PixiJS Error: Could not initialize shader")
+            || text.includes("Could not initialize shader")
+        );
+    });
 }
 
 async function createPixiApplication(host) {
@@ -445,6 +581,24 @@ async function createPixiApplication(host) {
     return app;
 }
 
+function destroyLive2DApp() {
+    window.removeEventListener("resize", fitLive2DModel);
+    applyMouthValue(0);
+    live2dModel = null;
+    if (live2dApp && typeof live2dApp.destroy === "function") {
+        try {
+            live2dApp.destroy(true, {
+                children: true,
+                texture: true,
+                baseTexture: true,
+            });
+        } catch (_error) {
+            // Fallback rendering should keep working even if PIXI cleanup fails.
+        }
+    }
+    live2dApp = null;
+}
+
 function fitLive2DModel() {
     if (!live2dModel || !live2dApp || !canvasHost) {
         return;
@@ -471,6 +625,7 @@ function fitLive2DModel() {
 }
 
 function markLive2DUnavailable(messageKey) {
+    destroyLive2DApp();
     if (canvasHost) {
         canvasHost.dataset.live2d = "fallback";
         canvasHost.dataset.i18nFallbackKey = messageKey;
