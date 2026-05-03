@@ -148,10 +148,10 @@ Completed so far:
 
 Not finished or still planned:
 
-- Telegram, QQ, LINE, Discord, WhatsApp, and other external chat platforms are currently planning entries under `/admin/channels`; production bot gateways are not wired yet.
+- Telegram and QQ already have built-in runtime adapters. `/admin/channels` is currently a status and planning entry, not a production-ready token/webhook management UI. LINE, Discord, and WhatsApp remain planned adapters.
 - The EchoBot-side narrow Open WebUI bridge API and documentation page exist, but Open WebUI does not need to be connected yet.
 - `/admin` v1 is mostly an index, guide, and status surface. It is not a complete production SaaS admin console.
-- Stage / Live2D / ASR / TTS integration direction is preserved, but real-device microphone and long-running voice interaction checks still need HTTPS plus real-device validation.
+- Stage / Live2D / ASR / TTS have v1 integration and local smoke coverage. Real-device microphone and long-running voice interaction checks still need HTTPS plus real-device validation.
 - Multi-user private testing should use Cloudflare Access or a trusted reverse proxy. Do not expose the local service anonymously to the public internet.
 
 A public repository means the code and documentation are browseable. It does not mean this system is safe to deploy anonymously. Before internet deployment, read [`SECURITY.md`](./SECURITY.md) and enable the trusted-user security boundary.

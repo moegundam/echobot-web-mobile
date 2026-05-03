@@ -148,10 +148,10 @@ python -m echobot app --host 127.0.0.1 --port 8001
 
 尚未完成或仍屬規劃中的部分：
 
-- Telegram、QQ、LINE、Discord、WhatsApp 等外部通訊平台目前是 `/admin/channels` 規劃入口，尚未完成正式 bot gateway 接線。
+- Telegram 與 QQ 已有 built-in runtime adapter；`/admin/channels` 目前偏向狀態與規劃入口，尚未完成公開內測等級的 token/webhook 管理 UI。LINE、Discord、WhatsApp 仍屬規劃中 adapter。
 - Open WebUI bridge 已有 EchoBot 端 narrow API 與說明頁，但尚未要求使用者實際接入 Open WebUI。
 - `/admin` 第一版偏向索引、說明與狀態檢視，還不是完整 production SaaS 管理後台。
-- Stage / Live2D / ASR / TTS 已保留整合方向，但真機麥克風與長時間語音互動仍需在 HTTPS + 真機環境逐項驗收。
+- Stage / Live2D / ASR / TTS 已有 v1 整合與本機 smoke；真機麥克風與長時間語音互動仍需在 HTTPS + 真機環境逐項驗收。
 - 多使用者內測建議使用 Cloudflare Access 或可信 reverse proxy；不要把本地服務匿名直接暴露到公開網路。
 
 公開 repo 代表程式碼與文件開放瀏覽，不代表這套系統已適合無保護地公開部署。部署到外網前，請先閱讀 [`SECURITY.md`](./SECURITY.md) 並啟用 trusted-user 安全邊界。
