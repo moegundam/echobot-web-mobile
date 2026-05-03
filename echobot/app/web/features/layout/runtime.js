@@ -17,7 +17,14 @@ const SHELL_SAFETY_MODE_LABELS = {
 };
 
 export function createRuntimeController(deps) {
-    const { addMessage, requestJson, setRunStatus } = deps;
+    const {
+        addMessage,
+        requestJson,
+        setRunStatus,
+        t = (key, params = {}) => String(key).replace(/\{([A-Za-z0-9_]+)\}/g, (_match, name) => {
+            return Object.prototype.hasOwnProperty.call(params, name) ? String(params[name]) : "";
+        }),
+    } = deps;
 
     function currentRuntimeConfig() {
         return {
@@ -79,9 +86,9 @@ export function createRuntimeController(deps) {
             element,
             key,
             currentValue,
-            enabledText,
-            disabledText,
-            settingLabel,
+            enabledKey,
+            disabledKey,
+            settingKey,
         } = options;
         if (!element || runtimeState.runtimeConfigLoading) {
             return;
@@ -95,8 +102,8 @@ export function createRuntimeController(deps) {
 
         await saveRuntimeConfig(
             { [key]: nextValue },
-            nextValue ? enabledText : disabledText,
-            settingLabel,
+            nextValue ? enabledKey : disabledKey,
+            settingKey,
         );
     }
 
@@ -105,9 +112,9 @@ export function createRuntimeController(deps) {
             element: DOM.delegatedAckCheckbox,
             key: "delegated_ack_enabled",
             currentValue: runtimeState.delegatedAckEnabled,
-            enabledText: "Task-start notice enabled",
-            disabledText: "Task-start notice disabled",
-            settingLabel: "task-start notice",
+            enabledKey: "console.runtime.taskNoticeEnabled",
+            disabledKey: "console.runtime.taskNoticeDisabled",
+            settingKey: "console.runtime.taskNotice",
         });
     }
 
@@ -124,8 +131,9 @@ export function createRuntimeController(deps) {
 
         await saveRuntimeConfig(
             { shell_safety_mode: nextValue },
-            `Shell safety mode set to ${formatShellSafetyModeLabel(nextValue)}`,
-            "shell safety mode",
+            "console.runtime.shellSafetyModeSet",
+            "console.runtime.shellSafetyMode",
+            { mode: formatShellSafetyModeLabel(nextValue) },
         );
     }
 
@@ -134,9 +142,9 @@ export function createRuntimeController(deps) {
             element: DOM.fileWriteEnabledCheckbox,
             key: "file_write_enabled",
             currentValue: runtimeState.fileWriteEnabled,
-            enabledText: "File write tools enabled",
-            disabledText: "File write tools disabled",
-            settingLabel: "file write tools",
+            enabledKey: "console.runtime.fileWriteEnabled",
+            disabledKey: "console.runtime.fileWriteDisabled",
+            settingKey: "console.runtime.fileWrite",
         });
     }
 
@@ -145,9 +153,9 @@ export function createRuntimeController(deps) {
             element: DOM.cronMutationEnabledCheckbox,
             key: "cron_mutation_enabled",
             currentValue: runtimeState.cronMutationEnabled,
-            enabledText: "CRON mutation enabled",
-            disabledText: "CRON mutation disabled",
-            settingLabel: "CRON mutation",
+            enabledKey: "console.runtime.cronMutationEnabled",
+            disabledKey: "console.runtime.cronMutationDisabled",
+            settingKey: "console.runtime.cronMutation",
         });
     }
 
@@ -156,9 +164,9 @@ export function createRuntimeController(deps) {
             element: DOM.webPrivateNetworkEnabledCheckbox,
             key: "web_private_network_enabled",
             currentValue: runtimeState.webPrivateNetworkEnabled,
-            enabledText: "Private network access enabled",
-            disabledText: "Private network access disabled",
-            settingLabel: "private network access",
+            enabledKey: "console.runtime.privateNetworkEnabled",
+            disabledKey: "console.runtime.privateNetworkDisabled",
+            settingKey: "console.runtime.privateNetwork",
         });
     }
 
@@ -169,11 +177,12 @@ export function createRuntimeController(deps) {
         await resetRuntimeConfig();
     }
 
-    async function saveRuntimeConfig(changes, successText, settingLabel) {
+    async function saveRuntimeConfig(changes, successKey, settingKey, successParams = {}) {
         const previousConfig = currentRuntimeConfig();
+        const settingLabel = t(settingKey);
         runtimeState.runtimeConfigLoading = true;
         updateRuntimeControls();
-        setRunStatus(`Updating ${settingLabel}...`);
+        setRunStatus(t("console.runtime.updating", { setting: settingLabel }));
 
         try {
             const payload = await requestJson("/api/web/runtime", {
@@ -187,16 +196,20 @@ export function createRuntimeController(deps) {
                 appState.config.runtime = payload;
             }
             applyRuntimeConfig(payload);
-            setRunStatus(successText);
+            setRunStatus(t(successKey, successParams));
         } catch (error) {
             console.error(error);
             applyRuntimeConfig(previousConfig);
             addMessage(
                 "system",
-                `Failed to update ${settingLabel}: ${error.message || error}`,
-                "Status",
+                t("console.runtime.updateFailed", {
+                    setting: settingLabel,
+                    error: error.message || error,
+                }),
+                t("console.systemLabel"),
+                { labelKey: "console.systemLabel" },
             );
-            setRunStatus(error.message || `Failed to update ${settingLabel}`);
+            setRunStatus(error.message || t("console.runtime.updateFailedShort", { setting: settingLabel }));
         } finally {
             runtimeState.runtimeConfigLoading = false;
             updateRuntimeControls();
@@ -207,7 +220,7 @@ export function createRuntimeController(deps) {
         const previousConfig = currentRuntimeConfig();
         runtimeState.runtimeConfigLoading = true;
         updateRuntimeControls();
-        setRunStatus("Resetting runtime config...");
+        setRunStatus(t("console.runtime.resetting"));
 
         try {
             const payload = await requestJson("/api/web/runtime/reset", {
@@ -217,16 +230,17 @@ export function createRuntimeController(deps) {
                 appState.config.runtime = payload;
             }
             applyRuntimeConfig(payload);
-            setRunStatus("Runtime overrides cleared");
+            setRunStatus(t("console.runtime.resetCleared"));
         } catch (error) {
             console.error(error);
             applyRuntimeConfig(previousConfig);
             addMessage(
                 "system",
-                `Failed to reset runtime config: ${error.message || error}`,
-                "Status",
+                t("console.runtime.resetFailed", { error: error.message || error }),
+                t("console.systemLabel"),
+                { labelKey: "console.systemLabel" },
             );
-            setRunStatus(error.message || "Failed to reset runtime config");
+            setRunStatus(error.message || t("console.runtime.resetFailedShort"));
         } finally {
             runtimeState.runtimeConfigLoading = false;
             updateRuntimeControls();

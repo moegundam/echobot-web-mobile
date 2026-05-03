@@ -30,6 +30,18 @@ export function refreshMessagesLocalizedText() {
         return;
     }
 
+    DOM.messages.querySelectorAll("[data-message-aria-label-key]").forEach((message) => {
+        message.setAttribute(
+            "aria-label",
+            messageT(message.dataset.messageAriaLabelKey),
+        );
+    });
+    DOM.messages.querySelectorAll(".message-meta[data-label-key]").forEach((meta) => {
+        meta.textContent = messageT(
+            meta.dataset.labelKey,
+            parseJsonDataset(meta.dataset.labelParams),
+        );
+    });
     DOM.messages.querySelectorAll("[data-image-preview='true']").forEach((button) => {
         const label = button.dataset.previewLabel || messageT("console.previewImage");
         button.title = label;
@@ -54,7 +66,11 @@ export function addMessage(kind, content, label, options = {}) {
     container.dataset.messageId = messageId;
     container.dataset.messageKind = kind;
     container.setAttribute("role", kind === "system" ? "status" : "group");
-    container.setAttribute("aria-label", resolveMessageAriaLabel(kind, label));
+    const ariaLabelKey = options.ariaLabelKey || defaultMessageAriaLabelKey(kind);
+    if (ariaLabelKey) {
+        container.dataset.messageAriaLabelKey = ariaLabelKey;
+    }
+    container.setAttribute("aria-label", resolveMessageAriaLabel(kind, label, options));
     if (kind === "system") {
         container.setAttribute("aria-live", "polite");
     }
@@ -72,7 +88,10 @@ export function addMessage(kind, content, label, options = {}) {
 }
 
 export function addSystemMessage(text) {
-    addMessage("system", text, "Status");
+    addMessage("system", text, messageT("console.systemLabel"), {
+        labelKey: "console.systemLabel",
+        ariaLabelKey: "console.systemLabel",
+    });
 }
 
 export function updateMessage(messageId, content, label, options = {}) {
@@ -83,7 +102,11 @@ export function updateMessage(messageId, content, label, options = {}) {
 
     const body = container.querySelector(".message-text");
     const kind = container.dataset.messageKind || "assistant";
-    container.setAttribute("aria-label", resolveMessageAriaLabel(kind, label));
+    const ariaLabelKey = options.ariaLabelKey || defaultMessageAriaLabelKey(kind);
+    if (ariaLabelKey) {
+        container.dataset.messageAriaLabelKey = ariaLabelKey;
+    }
+    container.setAttribute("aria-label", resolveMessageAriaLabel(kind, label, options));
     syncMessageMeta(container, label, options);
     if (body) {
         renderMessageBody(body, kind, content, options);
@@ -147,7 +170,15 @@ function syncMessageMeta(container, label, options = {}) {
 
     const meta = existingMeta || document.createElement("div");
     meta.className = "message-meta";
-    meta.textContent = String(label || "");
+    if (options.labelKey) {
+        meta.dataset.labelKey = options.labelKey;
+        meta.dataset.labelParams = JSON.stringify(options.labelParams || {});
+        meta.textContent = messageT(options.labelKey, options.labelParams || {});
+    } else {
+        delete meta.dataset.labelKey;
+        delete meta.dataset.labelParams;
+        meta.textContent = String(label || "");
+    }
 
     if (!existingMeta) {
         if (body) {
@@ -166,22 +197,38 @@ function scrollMessagesToBottom() {
     DOM.messages.scrollTop = DOM.messages.scrollHeight;
 }
 
-function resolveMessageAriaLabel(kind, label) {
+function resolveMessageAriaLabel(kind, label, options = {}) {
+    if (options.ariaLabelKey) {
+        return messageT(options.ariaLabelKey, options.ariaLabelParams || {});
+    }
     const customLabel = String(label || "").trim();
     if (customLabel) {
         return customLabel;
     }
 
+    return messageT(defaultMessageAriaLabelKey(kind));
+}
+
+function defaultMessageAriaLabelKey(kind) {
     if (kind === "user") {
-        return "Your message";
+        return "console.youMessageAria";
     }
     if (kind === "assistant") {
-        return "Echo reply";
+        return "console.echoReplyAria";
     }
     if (kind === "system") {
-        return "Status";
+        return "console.systemLabel";
     }
-    return "Message";
+    return "console.messageAria";
+}
+
+function parseJsonDataset(value) {
+    try {
+        const parsed = JSON.parse(String(value || "{}"));
+        return parsed && typeof parsed === "object" ? parsed : {};
+    } catch (_error) {
+        return {};
+    }
 }
 
 function renderMessageBody(element, kind, content, options = {}) {

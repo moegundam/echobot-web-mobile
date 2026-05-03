@@ -90,21 +90,25 @@ function resolveHistoryMessage(message, t) {
         return {
             kind: "user",
             label: message.name || t("console.youLabel"),
-            options: { renderMode: "plain" },
+            options: message.name
+                ? { renderMode: "plain" }
+                : { renderMode: "plain", labelKey: "console.youLabel" },
         };
     }
     if (message.role === "assistant") {
         return {
             kind: "assistant",
-            label: message.name || "Echo",
-            options: {},
+            label: message.name || t("console.echoLabel"),
+            options: message.name ? {} : { labelKey: "console.echoLabel" },
         };
     }
     if (message.role === "system") {
         return {
             kind: "system",
             label: message.name || t("console.systemLabel"),
-            options: { renderMode: "plain" },
+            options: message.name
+                ? { renderMode: "plain" }
+                : { renderMode: "plain", labelKey: "console.systemLabel" },
         };
     }
     return {

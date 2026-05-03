@@ -6,15 +6,19 @@ const TABLET_VIEWPORT_MAX_WIDTH = 1023;
 const DISPLAY_MODES = [
     { code: "auto", labelKey: "displayMode.auto" },
     { code: "mobile", labelKey: "displayMode.mobile" },
-    { code: "portrait", labelKey: "displayMode.portrait" },
-    { code: "landscape", labelKey: "displayMode.landscape" },
+    { code: "tablet", labelKey: "displayMode.tablet" },
     { code: "desktop", labelKey: "displayMode.desktop" },
 ];
+const LEGACY_DISPLAY_MODE_MAP = {
+    portrait: "mobile",
+    landscape: "tablet",
+};
 
 export function initShellDisplayMode({ t } = {}) {
     const controller = {
         selectedMode: resolveInitialMode(),
-        effectiveMode: "portrait",
+        effectiveMode: "mobile",
+        layoutMode: "mobile",
         refresh() {
             renderDisplayModeSwitchers(controller, t);
         },
@@ -31,7 +35,7 @@ export function initShellDisplayMode({ t } = {}) {
 
 function resolveInitialMode() {
     const storedMode = readStoredMode();
-    return isSupportedMode(storedMode) ? storedMode : DEFAULT_DISPLAY_MODE;
+    return normalizeMode(storedMode);
 }
 
 function readStoredMode() {
@@ -52,6 +56,14 @@ function writeStoredMode(mode) {
 
 function isSupportedMode(mode) {
     return DISPLAY_MODES.some((item) => item.code === mode);
+}
+
+function normalizeMode(mode) {
+    const normalizedMode = String(mode || "").trim();
+    if (isSupportedMode(normalizedMode)) {
+        return normalizedMode;
+    }
+    return LEGACY_DISPLAY_MODE_MAP[normalizedMode] || DEFAULT_DISPLAY_MODE;
 }
 
 function renderDisplayModeSwitchers(controller, t) {
@@ -76,7 +88,7 @@ function renderDisplayModeSwitchers(controller, t) {
 
         select.value = controller.selectedMode;
         select.addEventListener("change", () => {
-            const nextMode = isSupportedMode(select.value) ? select.value : DEFAULT_DISPLAY_MODE;
+            const nextMode = normalizeMode(select.value);
             controller.selectedMode = nextMode;
             writeStoredMode(nextMode);
             applyDisplayMode(controller);
@@ -91,23 +103,40 @@ function renderDisplayModeSwitchers(controller, t) {
 function applyDisplayMode(controller) {
     const viewport = currentViewport();
     const detectedMode = detectMode(viewport);
-    const effectiveMode = controller.selectedMode === "auto"
-        ? detectedMode
-        : controller.selectedMode;
-    const compactViewport = viewportClass(viewport) !== "desktop";
-    controller.effectiveMode = effectiveMode;
+    const requestedMode = normalizeMode(controller.selectedMode);
+    const layoutMode = resolveLayoutMode(requestedMode, detectedMode, viewport);
+    const viewportSizeClass = viewportClass(viewport);
+    const deviceClass = detectedDeviceClass(viewport);
+    controller.effectiveMode = layoutMode;
+    controller.layoutMode = layoutMode;
 
     const targets = [document.documentElement, document.body].filter(Boolean);
     targets.forEach((target) => {
-        target.dataset.displayMode = controller.selectedMode;
-        target.dataset.effectiveDisplayMode = effectiveMode;
-        target.dataset.deviceClass = compactViewport || viewport.mobileDevice ? "mobile" : "desktop";
+        target.dataset.displayMode = requestedMode;
+        target.dataset.requestedDisplayMode = requestedMode;
+        target.dataset.effectiveDisplayMode = layoutMode;
+        target.dataset.layoutMode = layoutMode;
+        target.dataset.deviceClass = deviceClass;
         target.dataset.inputMode = viewport.coarsePointer ? "touch" : "pointer";
         target.dataset.viewportOrientation = viewport.width >= viewport.height
             ? "landscape"
             : "portrait";
-        target.dataset.viewportClass = viewportClass(viewport);
+        target.dataset.viewportClass = viewportSizeClass;
     });
+}
+
+function resolveLayoutMode(requestedMode, detectedMode, viewport) {
+    const deviceClass = detectedDeviceClass(viewport);
+    if (requestedMode === "auto") {
+        return detectedMode;
+    }
+    if (deviceClass === "phone") {
+        return requestedMode === "mobile" ? "mobile" : detectedMode;
+    }
+    if (deviceClass === "tablet" && requestedMode === "desktop") {
+        return "tablet";
+    }
+    return requestedMode;
 }
 
 function currentViewport() {
@@ -131,11 +160,14 @@ function currentViewport() {
 }
 
 function detectMode(viewport) {
-    const viewportMode = viewportClass(viewport);
-    if (!viewport.mobileDevice && viewportMode === "desktop") {
+    const deviceClass = detectedDeviceClass(viewport);
+    if (deviceClass === "desktop") {
         return "desktop";
     }
-    return viewport.width >= viewport.height ? "landscape" : "portrait";
+    if (deviceClass === "tablet") {
+        return "tablet";
+    }
+    return "mobile";
 }
 
 function viewportClass(viewport) {
@@ -146,6 +178,16 @@ function viewportClass(viewport) {
         return "tablet";
     }
     return "phone";
+}
+
+function detectedDeviceClass(viewport) {
+    if (!viewport.mobileDevice) {
+        return "desktop";
+    }
+    if (viewportClass(viewport) === "phone") {
+        return "phone";
+    }
+    return "tablet";
 }
 
 function bindViewportUpdates(controller) {
@@ -172,8 +214,7 @@ function translate(t, key) {
         "displayMode.label": "Display",
         "displayMode.auto": "Auto",
         "displayMode.mobile": "Mobile",
-        "displayMode.portrait": "Portrait",
-        "displayMode.landscape": "Landscape",
+        "displayMode.tablet": "Tablet",
         "displayMode.desktop": "Desktop / Dense",
     };
     return fallback[key] || key;

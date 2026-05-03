@@ -84,13 +84,13 @@ export function createChatRunner(deps) {
                 })),
             ),
             t("console.youLabel"),
-            { renderMode: "plain" },
+            { renderMode: "plain", labelKey: "console.youLabel" },
         );
         let assistantMessageId = addMessage(
             "assistant",
-            "...",
-            "Echo",
-            { renderMode: "plain" },
+            t("console.loadingEllipsis"),
+            t("console.echoLabel"),
+            { renderMode: "plain", labelKey: "console.echoLabel" },
         );
         let streamedText = "";
 
@@ -113,9 +113,9 @@ export function createChatRunner(deps) {
                         streamedText += delta;
                         updateMessage(
                             assistantMessageId,
-                            streamedText || "...",
-                            "Echo",
-                            { renderMode: "plain" },
+                            streamedText || t("console.loadingEllipsis"),
+                            t("console.echoLabel"),
+                            { renderMode: "plain", labelKey: "console.echoLabel" },
                         );
                         queueSpeechSessionText(speechSession, delta);
                     },
@@ -155,7 +155,8 @@ export function createChatRunner(deps) {
                 updateMessage(
                     assistantMessageId,
                     finalContent,
-                    response.completed ? "Echo" : t("console.processing"),
+                    response.completed ? t("console.echoLabel") : t("console.processing"),
+                    response.completed ? { labelKey: "console.echoLabel" } : {},
                 );
             }
 
@@ -171,9 +172,13 @@ export function createChatRunner(deps) {
                     { includeImageMarker: false },
                 ).trim() || t("console.jobEndedNoContent");
                 if (assistantMessageId) {
-                    updateMessage(assistantMessageId, finalContent, "Echo");
+                    updateMessage(assistantMessageId, finalContent, t("console.echoLabel"), {
+                        labelKey: "console.echoLabel",
+                    });
                 } else {
-                    assistantMessageId = addMessage("assistant", finalContent, "Echo");
+                    assistantMessageId = addMessage("assistant", finalContent, t("console.echoLabel"), {
+                        labelKey: "console.echoLabel",
+                    });
                 }
 
                 await startupSpeech;
@@ -214,7 +219,9 @@ export function createChatRunner(deps) {
             if (assistantMessageId && !streamedText.trim()) {
                 removeMessage(assistantMessageId);
             }
-            addMessage("system", `${t("console.requestFailed")}: ${error.message || error}`, t("console.systemLabel"));
+            addMessage("system", `${t("console.requestFailed")}: ${error.message || error}`, t("console.systemLabel"), {
+                labelKey: "console.systemLabel",
+            });
             setRunStatus(error.message || t("console.requestFailed"));
         } finally {
             setActiveBackgroundJob("");
@@ -292,7 +299,9 @@ export function createChatRunner(deps) {
             if (DOM.stopAgentButton) {
                 DOM.stopAgentButton.disabled = false;
             }
-            addMessage("system", `${t("console.stopBackgroundJobFailed")}: ${error.message || error}`, t("console.systemLabel"));
+            addMessage("system", `${t("console.stopBackgroundJobFailed")}: ${error.message || error}`, t("console.systemLabel"), {
+                labelKey: "console.systemLabel",
+            });
             setRunStatus(error.message || t("console.stopBackgroundJobFailed"));
         }
     }

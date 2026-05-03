@@ -48,6 +48,7 @@ import {
 } from "./modules/utils.js";
 
 const status = createUiStatusController();
+let currentActiveModelProfile = null;
 const i18n = initShellI18n({
     onChange: () => {
         displayMode.refresh();
@@ -62,6 +63,7 @@ const i18n = initShellI18n({
         chat?.refreshLocalizedText?.();
         refreshMessagesLocalizedText();
         status.refreshLocalizedText?.(i18n.t);
+        renderActiveModelProfile(currentActiveModelProfile);
     },
 });
 configureMessageI18n({ t: i18n.t });
@@ -222,6 +224,7 @@ async function initializePage() {
         const config = await requestJson("/api/web/config");
         currentModelProfileScope = modelProfileScopeFromConfig(config);
         const activeModelProfile = activeModelProfileFromConfig(config);
+        currentActiveModelProfile = activeModelProfile;
         applyModelProfileToLocalPreferences(activeModelProfile);
         renderActiveModelProfile(activeModelProfile);
         appState.config = config;
@@ -277,7 +280,7 @@ function renderActiveModelProfile(profile) {
 
     const profileId = String(profile.profile_id || "").trim();
     const code = profileId ? profileId.toUpperCase() : "";
-    const label = String(profile.label || code || "Default").trim();
+    const label = String(profile.label || code || i18n.t("models.defaultProfile")).trim();
     link.textContent = code ? `${code} · ${label}` : label;
     badge.hidden = false;
 }

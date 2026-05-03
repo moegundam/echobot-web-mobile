@@ -914,29 +914,21 @@ textarea {
     }
 }
 
-html[data-effective-display-mode="mobile"] .stage-canvas-host,
-html[data-effective-display-mode="portrait"] .stage-canvas-host {
+html[data-layout-mode="mobile"] .stage-canvas-host {
     padding-top: 132px;
 }
 
-html[data-effective-display-mode="mobile"] .stage-subtitle-panel,
-html[data-effective-display-mode="portrait"] .stage-subtitle-panel {
+html[data-layout-mode="mobile"] .stage-subtitle-panel {
     width: min(680px, calc(100% - 24px));
     margin-bottom: 14px;
 }
 
-html[data-effective-display-mode="mobile"] .admin-grid,
-html[data-effective-display-mode="mobile"] .guide-content,
-html[data-effective-display-mode="mobile"] .structure-card-grid,
-html[data-effective-display-mode="mobile"] .openwebui-status-grid,
-html[data-effective-display-mode="mobile"] .models-layout,
-html[data-effective-display-mode="mobile"] .model-profile-field-grid,
-html[data-effective-display-mode="portrait"] .admin-grid,
-html[data-effective-display-mode="portrait"] .guide-content,
-html[data-effective-display-mode="portrait"] .structure-card-grid,
-html[data-effective-display-mode="portrait"] .openwebui-status-grid,
-html[data-effective-display-mode="portrait"] .models-layout,
-html[data-effective-display-mode="portrait"] .model-profile-field-grid {
+html[data-layout-mode="mobile"] .admin-grid,
+html[data-layout-mode="mobile"] .guide-content,
+html[data-layout-mode="mobile"] .structure-card-grid,
+html[data-layout-mode="mobile"] .openwebui-status-grid,
+html[data-layout-mode="mobile"] .models-layout,
+html[data-layout-mode="mobile"] .model-profile-field-grid {
     grid-template-columns: minmax(0, 1fr);
 }
 
@@ -961,30 +953,41 @@ html[data-effective-display-mode="portrait"] .model-profile-field-grid {
     }
 }
 
-html[data-effective-display-mode="landscape"] .stage-canvas-host {
+html[data-layout-mode="tablet"] .stage-canvas-host {
+    padding-top: 96px;
+}
+
+html[data-layout-mode="tablet"][data-viewport-orientation="landscape"] .stage-canvas-host,
+html[data-layout-mode="desktop"] .stage-canvas-host {
     padding-top: 20px;
 }
 
-html[data-effective-display-mode="landscape"] .stage-subtitle-panel {
+html[data-layout-mode="tablet"] .stage-subtitle-panel,
+html[data-layout-mode="desktop"] .stage-subtitle-panel {
     width: min(760px, calc(100% - 28px));
     margin-bottom: 12px;
 }
 
-html[data-effective-display-mode="landscape"] .messenger-root,
-html[data-effective-display-mode="desktop"] .messenger-root,
-html[data-effective-display-mode="landscape"] .admin-root,
-html[data-effective-display-mode="desktop"] .admin-root {
+html[data-layout-mode="tablet"] .messenger-root,
+html[data-layout-mode="desktop"] .messenger-root,
+html[data-layout-mode="tablet"] .admin-root,
+html[data-layout-mode="desktop"] .admin-root {
     width: min(1120px, 100%);
 }
 
-html[data-effective-display-mode="desktop"] .admin-grid {
+html[data-layout-mode="tablet"] .models-layout,
+html[data-layout-mode="tablet"] .model-profile-field-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+html[data-layout-mode="desktop"] .admin-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
-html[data-effective-display-mode="desktop"] .guide-content {
+html[data-layout-mode="desktop"] .guide-content {
     grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
-html[data-effective-display-mode="desktop"] .structure-card-grid {
+html[data-layout-mode="desktop"] .structure-card-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
 }
