@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 from fastapi import APIRouter, Depends, HTTPException
 
 from ..schemas import (
@@ -14,6 +16,7 @@ from ..schemas import (
     session_summary_model_from_info,
 )
 from ..state import get_app_runtime
+from ...orchestration import role_name_from_metadata
 
 
 router = APIRouter(tags=["sessions"])
@@ -92,6 +95,10 @@ async def set_session_role(
             session_name,
             request.role_name,
         )
+        await _apply_bound_model_profile_for_role(
+            runtime,
+            role_name_from_metadata(session.metadata),
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return session_detail_model_from_session(session)
@@ -122,3 +129,24 @@ async def delete_session(
     if not deleted:
         raise HTTPException(status_code=404, detail=f"Session not found: {session_name}")
     return {"deleted": True}
+
+
+async def _apply_bound_model_profile_for_role(runtime, role_name: str) -> None:
+    if runtime.model_profile_service is None:
+        return
+    profile_id = await asyncio.to_thread(
+        runtime.model_profile_service.profile_id_for_role,
+        role_name,
+    )
+    if not profile_id:
+        return
+
+    payload = await asyncio.to_thread(
+        runtime.model_profile_service.activate_profile,
+        profile_id,
+    )
+    active_profile = await asyncio.to_thread(
+        runtime.model_profile_service.get_profile_for_runtime,
+        payload["active_profile_id"],
+    )
+    await runtime.apply_model_profile(active_profile)

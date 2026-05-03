@@ -522,6 +522,59 @@ textarea {
     background: #047857;
 }
 
+.model-role-bindings {
+    display: grid;
+    gap: 12px;
+    min-width: 0;
+    padding: 14px;
+    border: 1px solid var(--shell-line);
+    border-radius: 8px;
+    background: var(--shell-surface);
+}
+
+.model-role-bindings h2,
+.model-role-bindings p {
+    margin: 0;
+}
+
+.model-role-bindings p,
+.model-role-binding-empty {
+    color: var(--shell-muted);
+}
+
+.model-role-binding-list {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    min-width: 0;
+}
+
+.model-role-binding-row {
+    display: grid;
+    gap: 7px;
+    min-width: 0;
+    color: var(--shell-muted);
+    font-size: 0.88rem;
+}
+
+.model-role-binding-row span {
+    overflow: hidden;
+    color: var(--shell-text);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.model-role-binding-row select {
+    width: 100%;
+    min-width: 0;
+    min-height: 40px;
+    padding: 8px 10px;
+    border: 1px solid var(--shell-line);
+    border-radius: 8px;
+    color: var(--shell-text);
+    background: var(--shell-surface-strong);
+}
+
 .model-profile-form {
     display: grid;
     gap: 16px;
@@ -539,6 +592,10 @@ textarea {
     align-items: center;
     justify-content: space-between;
     gap: 12px;
+}
+
+.model-profile-delete {
+    background: var(--shell-danger);
 }
 
 .model-profile-form h2,
@@ -927,6 +984,7 @@ html[data-layout-mode="mobile"] .admin-grid,
 html[data-layout-mode="mobile"] .guide-content,
 html[data-layout-mode="mobile"] .structure-card-grid,
 html[data-layout-mode="mobile"] .openwebui-status-grid,
+html[data-layout-mode="mobile"] .model-role-binding-list,
 html[data-layout-mode="mobile"] .models-layout,
 html[data-layout-mode="mobile"] .model-profile-field-grid {
     grid-template-columns: minmax(0, 1fr);
@@ -976,6 +1034,7 @@ html[data-layout-mode="desktop"] .admin-root {
 }
 
 html[data-layout-mode="tablet"] .models-layout,
+html[data-layout-mode="tablet"] .model-role-binding-list,
 html[data-layout-mode="tablet"] .model-profile-field-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
 }

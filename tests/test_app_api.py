@@ -1276,8 +1276,28 @@ class AppApiTests(unittest.TestCase):
                             "label": "Streamer Custom",
                         },
                     )
+                    duplicate_secret_update = client.patch(
+                        f"/api/model-profiles/{duplicate.json()['profile_id']}",
+                        headers=alpha_headers,
+                        json={
+                            "chat": {
+                                "provider": "openai-compatible",
+                                "model": "duplicate-chat-model",
+                                "base_url": "http://duplicate-provider.test/v1",
+                                "api_key": "duplicate-chat-key",
+                            },
+                        },
+                    )
                     activated = client.post(
                         f"/api/model-profiles/{created.json()['profile_id']}/activate",
+                        headers=alpha_headers,
+                    )
+                    delete_active = client.delete(
+                        f"/api/model-profiles/{created.json()['profile_id']}",
+                        headers=alpha_headers,
+                    )
+                    deleted_duplicate = client.delete(
+                        f"/api/model-profiles/{duplicate.json()['profile_id']}",
                         headers=alpha_headers,
                     )
                     console_config = client.get("/api/web/config", headers=alpha_headers)
@@ -1326,9 +1346,21 @@ class AppApiTests(unittest.TestCase):
 
             self.assertEqual(200, duplicate.status_code)
             self.assertEqual("streamer-custom-2", duplicate.json()["profile_id"])
+            self.assertEqual(200, duplicate_secret_update.status_code)
+            self.assertTrue(
+                duplicate_secret_update.json()["chat"]["api_key_configured"],
+            )
 
             self.assertEqual(200, activated.status_code)
             self.assertEqual("streamer-custom", activated.json()["active_profile_id"])
+            self.assertEqual(400, delete_active.status_code)
+            self.assertIn("Active model profile", delete_active.json()["detail"])
+            self.assertEqual(200, deleted_duplicate.status_code)
+            self.assertEqual("streamer-custom", deleted_duplicate.json()["active_profile_id"])
+            self.assertNotIn(
+                "streamer-custom-2",
+                [item["profile_id"] for item in deleted_duplicate.json()["profiles"]],
+            )
 
             self.assertEqual(200, console_config.status_code)
             console_profiles = console_config.json()["model_profiles"]
@@ -1351,10 +1383,11 @@ class AppApiTests(unittest.TestCase):
             )
             self.assertIn("profile-chat-model", stored_text)
             self.assertIn("streamer-custom", stored_text)
-            self.assertIn("streamer-custom-2", stored_text)
+            self.assertNotIn("streamer-custom-2", stored_text)
             self.assertNotIn("profile-chat-key", stored_text)
             self.assertNotIn("profile-tts-key", stored_text)
             self.assertNotIn("profile-asr-key", stored_text)
+            self.assertNotIn("duplicate-chat-key", stored_text)
             self.assertNotIn("api_key", stored_text)
             secret_text = (alpha_storage / "model_profile_secrets.json").read_text(
                 encoding="utf-8",
@@ -1362,6 +1395,7 @@ class AppApiTests(unittest.TestCase):
             self.assertIn("profile-chat-key", secret_text)
             self.assertIn("profile-tts-key", secret_text)
             self.assertIn("profile-asr-key", secret_text)
+            self.assertNotIn("duplicate-chat-key", secret_text)
 
             self.assertEqual("profile-chat-model", alpha_provider_model)
             self.assertEqual("http://provider.test/v1", alpha_provider_base_url)
@@ -1379,6 +1413,182 @@ class AppApiTests(unittest.TestCase):
                 if item["profile_id"] == "b"
             )
             self.assertEqual("Profile B", beta_b_profile["label"])
+
+    def test_model_profile_role_bindings_apply_on_role_switch(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+
+            with patch.dict(
+                os.environ,
+                {
+                    "ECHOBOT_TRUSTED_USER_HEADER_ENABLED": "true",
+                    "ECHOBOT_TRUSTED_USER_REQUIRED": "true",
+                    "LLM_API_KEY": "base-key",
+                    "LLM_MODEL": "base-chat-model",
+                    "LLM_BASE_URL": "http://base-llm.test/v1",
+                    "ECHOBOT_ASR_SHERPA_AUTO_DOWNLOAD": "false",
+                    "ECHOBOT_VAD_SILERO_AUTO_DOWNLOAD": "false",
+                },
+                clear=False,
+            ):
+                app = create_app(
+                    runtime_options=RuntimeOptions(
+                        workspace=workspace,
+                        no_tools=True,
+                        no_skills=True,
+                        no_memory=True,
+                        no_heartbeat=True,
+                    ),
+                    channel_config_path=workspace / ".echobot" / "channels.json",
+                    context_builder=build_test_context,
+                )
+
+                alpha_headers = {DEFAULT_TRUSTED_USER_HEADER: "alpha@example.test"}
+                beta_headers = {DEFAULT_TRUSTED_USER_HEADER: "beta@example.test"}
+                alpha_storage = (
+                    workspace
+                    / ".echobot"
+                    / "users"
+                    / user_storage_key("alpha@example.test")
+                )
+
+                with TestClient(app) as client:
+                    updated_profile = client.patch(
+                        "/api/model-profiles/b",
+                        headers=alpha_headers,
+                        json={
+                            "label": "Helper Voice",
+                            "chat": {
+                                "provider": "private-litellm",
+                                "model": "role-bound-chat-model",
+                                "base_url": "http://role-bound.test/v1",
+                                "api_key": "role-bound-key",
+                            },
+                        },
+                    )
+                    unknown_role = client.put(
+                        "/api/model-profiles/role-bindings/missing-role",
+                        headers=alpha_headers,
+                        json={"profile_id": "b"},
+                    )
+                    created_role = client.post(
+                        "/api/roles",
+                        headers=alpha_headers,
+                        json={
+                            "name": "Helper Cat",
+                            "prompt": "# Helper Cat\n\nStay concise.",
+                        },
+                    )
+                    unknown_profile = client.put(
+                        "/api/model-profiles/role-bindings/helper-cat",
+                        headers=alpha_headers,
+                        json={"profile_id": "missing-profile"},
+                    )
+                    bound = client.put(
+                        "/api/model-profiles/role-bindings/helper-cat",
+                        headers=alpha_headers,
+                        json={"profile_id": "b"},
+                    )
+                    binding_list = client.get(
+                        "/api/model-profiles/role-bindings",
+                        headers=alpha_headers,
+                    )
+                    beta_profiles = client.get(
+                        "/api/model-profiles",
+                        headers=beta_headers,
+                    )
+                    switched = client.put(
+                        "/api/sessions/default/role",
+                        headers=alpha_headers,
+                        json={"role_name": "helper-cat"},
+                    )
+                    console_config = client.get(
+                        "/api/web/config",
+                        headers=alpha_headers,
+                    )
+                    runtime = app.state.runtime
+                    alpha_runtime = next(
+                        item
+                        for item in runtime._user_runtimes.values()
+                        if item.user_id == "alpha@example.test"
+                    )
+                    alpha_provider_model = (
+                        alpha_runtime.context.agent.provider.settings.model
+                    )
+                    alpha_provider_base_url = (
+                        alpha_runtime.context.agent.provider.settings.base_url
+                    )
+                    alpha_provider_api_key = (
+                        alpha_runtime.context.agent.provider.settings.api_key
+                    )
+                    activated_default = client.post(
+                        "/api/model-profiles/a/activate",
+                        headers=alpha_headers,
+                    )
+                    deleted_bound_profile = client.delete(
+                        "/api/model-profiles/b",
+                        headers=alpha_headers,
+                    )
+                    after_delete = client.get(
+                        "/api/model-profiles",
+                        headers=alpha_headers,
+                    )
+
+            self.assertEqual(200, updated_profile.status_code)
+            self.assertEqual("role-bound-chat-model", updated_profile.json()["chat"]["model"])
+
+            self.assertEqual(404, unknown_role.status_code)
+            self.assertIn("Unknown role", unknown_role.json()["detail"])
+
+            self.assertEqual(200, created_role.status_code)
+            self.assertEqual("helper-cat", created_role.json()["name"])
+
+            self.assertEqual(404, unknown_profile.status_code)
+            self.assertIn("Unknown model profile", unknown_profile.json()["detail"])
+
+            self.assertEqual(200, bound.status_code)
+            self.assertEqual("a", bound.json()["active_profile_id"])
+            self.assertEqual({"helper-cat": "b"}, bound.json()["role_bindings"])
+
+            self.assertEqual(200, binding_list.status_code)
+            self.assertEqual({"helper-cat": "b"}, binding_list.json())
+
+            self.assertEqual(200, beta_profiles.status_code)
+            self.assertEqual({}, beta_profiles.json()["role_bindings"])
+
+            self.assertEqual(200, switched.status_code)
+            self.assertEqual("helper-cat", switched.json()["role_name"])
+
+            self.assertEqual(200, console_config.status_code)
+            self.assertEqual(
+                "b",
+                console_config.json()["model_profiles"]["active_profile_id"],
+            )
+            self.assertEqual(
+                {"helper-cat": "b"},
+                console_config.json()["model_profiles"]["role_bindings"],
+            )
+
+            self.assertEqual("role-bound-chat-model", alpha_provider_model)
+            self.assertEqual("http://role-bound.test/v1", alpha_provider_base_url)
+            self.assertEqual("role-bound-key", alpha_provider_api_key)
+
+            self.assertEqual(200, activated_default.status_code)
+            self.assertEqual("a", activated_default.json()["active_profile_id"])
+
+            self.assertEqual(200, deleted_bound_profile.status_code)
+            self.assertNotIn(
+                "helper-cat",
+                deleted_bound_profile.json()["role_bindings"],
+            )
+            self.assertNotIn(
+                "helper-cat",
+                after_delete.json()["role_bindings"],
+            )
+            stored_text = (alpha_storage / "model_profiles.json").read_text(
+                encoding="utf-8",
+            )
+            self.assertNotIn("role-bound-key", stored_text)
 
     def test_openwebui_bridge_targets_user_scoped_stage_and_chat(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

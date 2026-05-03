@@ -283,12 +283,17 @@ class ModelProfileModel(StrictSchemaModel):
 
 class ModelProfilesResponse(StrictSchemaModel):
     active_profile_id: str = "a"
+    role_bindings: dict[str, str] = Field(default_factory=dict)
     profiles: list[ModelProfileModel] = Field(default_factory=list)
 
 
 class CreateModelProfileRequest(StrictSchemaModel):
     label: str
     source_profile_id: str | None = None
+
+
+class SetRoleModelProfileBindingRequest(StrictSchemaModel):
+    profile_id: str
 
 
 class UpdateChatModelProfileConfigRequest(StrictSchemaModel):

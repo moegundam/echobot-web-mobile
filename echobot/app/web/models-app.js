@@ -10,6 +10,7 @@ import {
 const state = {
     payload: null,
     webConfig: null,
+    roles: [],
     selectedProfileId: "a",
     busy: false,
     loaded: false,
@@ -25,8 +26,10 @@ const DOM = {
     form: document.getElementById("model-profile-form"),
     title: document.getElementById("model-profile-title"),
     status: document.getElementById("model-profile-status"),
+    roleBindings: document.getElementById("model-role-binding-list"),
     activate: document.getElementById("model-profile-activate"),
     save: document.getElementById("model-profile-save"),
+    remove: document.getElementById("model-profile-delete"),
     label: document.getElementById("model-profile-label"),
     chatProvider: document.getElementById("model-chat-provider"),
     chatModel: document.getElementById("model-chat-model"),
@@ -72,6 +75,9 @@ DOM.activate.addEventListener("click", () => {
 DOM.create.addEventListener("click", () => {
     void createProfileFromSelection();
 });
+DOM.remove.addEventListener("click", () => {
+    void deleteSelectedProfile();
+});
 
 void load();
 
@@ -81,12 +87,14 @@ async function load() {
     state.loadError = "";
     setStatusKey("models.loading");
     try {
-        const [payload, webConfig] = await Promise.all([
+        const [payload, webConfig, roles] = await Promise.all([
             requestJson("/api/model-profiles"),
             requestJson("/api/web/config"),
+            requestJson("/api/roles"),
         ]);
         state.payload = payload;
         state.webConfig = webConfig;
+        state.roles = Array.isArray(roles) ? roles : [];
         state.loaded = true;
         const activeProfile = activeModelProfileFromConfig({ model_profiles: payload });
         state.selectedProfileId = activeProfile ? activeProfile.profile_id : "a";
@@ -105,6 +113,7 @@ async function load() {
 
 function render() {
     renderProfileList();
+    renderRoleBindings();
     renderProviderOptions();
     renderSelectedProfile();
 }
@@ -137,6 +146,63 @@ function renderProfileList() {
         });
         DOM.list.appendChild(button);
     });
+}
+
+function renderRoleBindings() {
+    DOM.roleBindings.replaceChildren();
+    const roles = Array.isArray(state.roles) ? state.roles : [];
+    const profiles = state.payload && Array.isArray(state.payload.profiles)
+        ? state.payload.profiles
+        : [];
+    if (roles.length === 0 || profiles.length === 0) {
+        const empty = document.createElement("p");
+        empty.className = "model-role-binding-empty";
+        empty.textContent = i18n.t("models.noRoleBindings");
+        DOM.roleBindings.appendChild(empty);
+        return;
+    }
+
+    roles.forEach((role) => {
+        const roleName = String(role && role.name || "").trim();
+        if (!roleName) {
+            return;
+        }
+
+        const row = document.createElement("label");
+        row.className = "model-role-binding-row";
+
+        const text = document.createElement("span");
+        text.textContent = roleName === "default"
+            ? i18n.t("console.defaultRoleOption", { role: roleName })
+            : roleName;
+
+        const select = document.createElement("select");
+        select.disabled = formActionsDisabled();
+        renderRoleBindingOptions(select, profiles, roleBindingProfileId(roleName));
+        select.addEventListener("change", () => {
+            void saveRoleBinding(roleName, select.value);
+        });
+
+        row.append(text, select);
+        DOM.roleBindings.appendChild(row);
+    });
+}
+
+function renderRoleBindingOptions(select, profiles, selectedProfileId) {
+    select.replaceChildren();
+    const emptyOption = document.createElement("option");
+    emptyOption.value = "";
+    emptyOption.textContent = i18n.t("models.useActiveProfile");
+    select.appendChild(emptyOption);
+
+    profiles.forEach((profile) => {
+        const option = document.createElement("option");
+        option.value = profile.profile_id;
+        option.textContent = `${profile.profile_id.toUpperCase()} · ${profile.label || profile.profile_id}`;
+        select.appendChild(option);
+    });
+
+    select.value = selectedProfileId || "";
 }
 
 function renderProviderOptions() {
@@ -201,6 +267,7 @@ function renderSelectedProfile() {
     const disabled = formActionsDisabled();
     DOM.activate.disabled = disabled || profile.profile_id === activeProfileId();
     DOM.save.disabled = disabled;
+    DOM.remove.disabled = disabled || !canDeleteSelectedProfile(profile);
 }
 
 function apiKeyStatus(section) {
@@ -322,15 +389,78 @@ async function activateSelectedProfile() {
         const payload = await requestJson(`/api/model-profiles/${profile.profile_id}/activate`, {
             method: "POST",
         });
-        state.payload = payload;
-        const activeProfile = activeModelProfileFromConfig({ model_profiles: payload });
-        applyModelProfileToLocalPreferences(activeProfile);
-        notifyModelProfileChanged(profile.profile_id, modelProfileScope());
+        applyModelProfilesPayload(payload, { notify: true });
         render();
         setStatusKey("models.activated");
     } catch (error) {
         console.error(error);
         setRawStatus(error.message || i18n.t("models.activateFailed"));
+    } finally {
+        setBusy(false);
+    }
+}
+
+async function deleteSelectedProfile() {
+    if (formActionsDisabled()) {
+        return;
+    }
+    const profile = selectedProfile();
+    if (!canDeleteSelectedProfile(profile)) {
+        setStatusKey("models.deleteBlocked");
+        return;
+    }
+    if (!window.confirm(i18n.t("models.deleteConfirm", { profile: profile.label || profile.profile_id }))) {
+        return;
+    }
+
+    setBusy(true);
+    setStatusKey("models.deleting");
+    try {
+        const payload = await requestJson(`/api/model-profiles/${profile.profile_id}`, {
+            method: "DELETE",
+        });
+        applyModelProfilesPayload(payload);
+        state.selectedProfileId = payload.active_profile_id
+            || (Array.isArray(payload.profiles) && payload.profiles[0] && payload.profiles[0].profile_id)
+            || "a";
+        render();
+        setStatusKey("models.deleted");
+    } catch (error) {
+        console.error(error);
+        setRawStatus(error.message || i18n.t("models.deleteFailed"));
+    } finally {
+        setBusy(false);
+    }
+}
+
+async function saveRoleBinding(roleName, profileId) {
+    if (formActionsDisabled()) {
+        return;
+    }
+
+    setBusy(true);
+    setStatusKey("models.savingRoleBinding");
+    try {
+        const encodedRoleName = encodeURIComponent(roleName);
+        const payload = profileId
+            ? await requestJson(`/api/model-profiles/role-bindings/${encodedRoleName}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ profile_id: profileId }),
+            })
+            : await requestJson(`/api/model-profiles/role-bindings/${encodedRoleName}`, {
+                method: "DELETE",
+            });
+        const previousActiveProfileId = activeProfileId();
+        applyModelProfilesPayload(payload, {
+            notify: payload.active_profile_id !== previousActiveProfileId,
+        });
+        render();
+        setStatusKey("models.roleBindingSaved");
+    } catch (error) {
+        console.error(error);
+        setRawStatus(error.message || i18n.t("models.roleBindingFailed"));
+        render();
     } finally {
         setBusy(false);
     }
@@ -384,6 +514,23 @@ function replaceProfile(profile) {
     state.payload.profiles.splice(index, 1, profile);
 }
 
+function applyModelProfilesPayload(payload, options = {}) {
+    state.payload = payload;
+    const activeProfile = activeModelProfileFromConfig({ model_profiles: payload });
+    if (activeProfile && options.notify) {
+        applyModelProfileToLocalPreferences(activeProfile);
+        notifyModelProfileChanged(activeProfile.profile_id, modelProfileScope());
+    }
+}
+
+function roleBindingProfileId(roleName) {
+    const bindings = state.payload && state.payload.role_bindings
+        && typeof state.payload.role_bindings === "object"
+        ? state.payload.role_bindings
+        : {};
+    return String(bindings[roleName] || "");
+}
+
 function ttsProviderOptions() {
     const providers = state.webConfig
         && state.webConfig.tts
@@ -433,9 +580,15 @@ function optionalInteger(value) {
 function setBusy(busy) {
     state.busy = Boolean(busy);
     DOM.form.classList.toggle("is-busy", state.busy);
-    DOM.create.disabled = formActionsDisabled();
-    DOM.activate.disabled = formActionsDisabled();
-    DOM.save.disabled = formActionsDisabled();
+    const disabled = formActionsDisabled();
+    const profile = selectedProfile();
+    DOM.create.disabled = disabled;
+    DOM.activate.disabled = disabled || profile.profile_id === activeProfileId();
+    DOM.save.disabled = disabled;
+    DOM.remove.disabled = disabled || !canDeleteSelectedProfile(profile);
+    DOM.roleBindings.querySelectorAll("select").forEach((select) => {
+        select.disabled = disabled;
+    });
 }
 
 function setStatusKey(key, params = {}) {
@@ -460,6 +613,17 @@ function refreshStatus() {
 
 function formActionsDisabled() {
     return state.busy || !state.loaded || Boolean(state.loadError);
+}
+
+function canDeleteSelectedProfile(profile = selectedProfile()) {
+    const payload = state.payload || { profiles: [] };
+    const profileCount = Array.isArray(payload.profiles) ? payload.profiles.length : 0;
+    return Boolean(
+        profile
+        && profile.profile_id
+        && profile.profile_id !== activeProfileId()
+        && profileCount > 1,
+    );
 }
 
 function nextProfileLabel() {

@@ -9,6 +9,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from ...orchestration import normalize_role_name
+
 
 DEFAULT_PROFILE_IDS = ("a", "b", "c", "d", "e")
 DEFAULT_ACTIVE_PROFILE_ID = "a"
@@ -109,6 +111,54 @@ class ModelProfileService:
             self._save_state_unlocked(state)
             return self._response_from_state(state, secrets)
 
+    def delete_profile(self, profile_id: str) -> dict[str, Any]:
+        normalized_id = _normalize_profile_id(profile_id)
+        with self._lock:
+            state = self._load_state_unlocked()
+            _require_existing_profile(state, normalized_id)
+            if normalized_id == state["active_profile_id"]:
+                raise ValueError("Active model profile cannot be deleted")
+            if len(state["profiles"]) <= 1:
+                raise ValueError("Last model profile cannot be deleted")
+
+            secrets = self._load_secrets_unlocked()
+            state["profiles"].pop(normalized_id, None)
+            state["role_bindings"] = {
+                role_name: bound_profile_id
+                for role_name, bound_profile_id in state["role_bindings"].items()
+                if bound_profile_id != normalized_id
+            }
+            secrets.setdefault("profiles", {}).pop(normalized_id, None)
+            self._save_state_unlocked(state)
+            self._save_secrets_unlocked(secrets)
+            return self._response_from_state(state, secrets)
+
+    def set_role_binding(self, role_name: str, profile_id: str) -> dict[str, Any]:
+        normalized_role_name = _normalize_role_binding_name(role_name)
+        normalized_profile_id = _normalize_profile_id(profile_id)
+        with self._lock:
+            state = self._load_state_unlocked()
+            _require_existing_profile(state, normalized_profile_id)
+            secrets = self._load_secrets_unlocked()
+            state["role_bindings"][normalized_role_name] = normalized_profile_id
+            self._save_state_unlocked(state)
+            return self._response_from_state(state, secrets)
+
+    def clear_role_binding(self, role_name: str) -> dict[str, Any]:
+        normalized_role_name = _normalize_role_binding_name(role_name)
+        with self._lock:
+            state = self._load_state_unlocked()
+            secrets = self._load_secrets_unlocked()
+            state["role_bindings"].pop(normalized_role_name, None)
+            self._save_state_unlocked(state)
+            return self._response_from_state(state, secrets)
+
+    def profile_id_for_role(self, role_name: str) -> str:
+        normalized_role_name = _normalize_role_binding_name(role_name)
+        with self._lock:
+            state = self._load_state_unlocked()
+            return str(state["role_bindings"].get(normalized_role_name, ""))
+
     def active_profile(self) -> dict[str, Any]:
         with self._lock:
             state = self._load_state_unlocked()
@@ -169,6 +219,10 @@ class ModelProfileService:
                 payload.get("active_profile_id"),
                 state["profiles"],
             )
+            state["role_bindings"] = _coerce_role_bindings(
+                payload.get("role_bindings"),
+                state["profiles"],
+            )
         return state
 
     def _save_state_unlocked(self, state: dict[str, Any]) -> None:
@@ -226,6 +280,7 @@ class ModelProfileService:
     ) -> dict[str, Any]:
         return {
             "active_profile_id": state["active_profile_id"],
+            "role_bindings": dict(state["role_bindings"]),
             "profiles": [
                 self._profile_response(
                     state["profiles"][profile_id],
@@ -258,6 +313,7 @@ def _default_state() -> dict[str, Any]:
     }
     return {
         "active_profile_id": DEFAULT_ACTIVE_PROFILE_ID,
+        "role_bindings": {},
         "profiles": profiles,
     }
 
@@ -447,6 +503,31 @@ def _coerce_active_profile_id(value: Any, profiles: dict[str, Any]) -> str:
     if DEFAULT_ACTIVE_PROFILE_ID in profiles:
         return DEFAULT_ACTIVE_PROFILE_ID
     return next(iter(profiles), DEFAULT_ACTIVE_PROFILE_ID)
+
+
+def _coerce_role_bindings(value: Any, profiles: dict[str, Any]) -> dict[str, str]:
+    if not isinstance(value, dict):
+        return {}
+    bindings: dict[str, str] = {}
+    for raw_role_name, raw_profile_id in value.items():
+        try:
+            role_name = _normalize_role_binding_name(raw_role_name)
+            profile_id = _normalize_profile_id(raw_profile_id)
+        except ValueError:
+            continue
+        if profile_id in profiles:
+            bindings[role_name] = profile_id
+    return bindings
+
+
+def _normalize_role_binding_name(role_name: Any) -> str:
+    raw_name = str(role_name or "").strip()
+    if not raw_name:
+        raise ValueError("Role name cannot be empty")
+    normalized_name = normalize_role_name(raw_name)
+    if not normalized_name:
+        raise ValueError("Role name cannot be empty")
+    return normalized_name
 
 
 def _require_existing_profile(state: dict[str, Any], profile_id: str) -> None:
