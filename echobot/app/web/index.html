@@ -220,6 +220,11 @@
                             <select id="role-select"></select>
                         </label>
                     </div>
+                    <div id="role-model-profile-card" class="role-model-profile-card">
+                        <p class="section-title" data-i18n-key="console.roleModelProfile">Role model profile</p>
+                        <a id="role-model-profile-link" class="role-model-profile-link" href="/admin/models">Use active profile</a>
+                        <span id="role-model-profile-detail" class="muted-text role-model-profile-detail" data-i18n-key="console.roleModelProfileUnbound">No role-specific profile binding</span>
+                    </div>
                     <div class="role-toolbar">
                         <button id="role-refresh-button" class="ghost-button ghost-button-compact" type="button">
                             <span data-i18n-key="console.refresh">Refresh</span>
@@ -289,6 +294,13 @@
                     </div>
                 </summary>
                 <div class="settings-panel-body">
+                    <div class="console-control-section-heading">
+                        <div>
+                            <p class="section-title" data-i18n-key="console.groupModelRouting">Model / Voice / Routing</p>
+                            <span class="muted-text" data-i18n-key="console.groupModelRoutingHelp">Model profiles, speech providers, and session route mode.</span>
+                        </div>
+                        <a class="console-control-link" href="/admin/models" data-i18n-key="admin.modelProfiles">Model Profiles</a>
+                    </div>
                     <div class="field-grid">
                         <label class="field">
                             <span data-i18n-key="console.ttsProvider">TTS provider</span>
@@ -310,6 +322,12 @@
                                 <option value="force_agent" data-i18n-key="console.routeForceAgent">Force Agent</option>
                             </select>
                         </label>
+                    </div>
+                    <div class="console-control-section-heading">
+                        <div>
+                            <p class="section-title" data-i18n-key="console.groupRuntimeJobs">Runtime / Jobs</p>
+                            <span class="muted-text" data-i18n-key="console.groupRuntimeJobsHelp">Agent permissions, scheduled jobs, and heartbeat work.</span>
+                        </div>
                     </div>
                     <details id="runtime-panel" class="stage-background-panel runtime-panel" open>
                         <summary class="stage-background-header">
@@ -357,6 +375,12 @@
                             </div>
                         </div>
                     </details>
+                    <div class="console-control-section-heading">
+                        <div>
+                            <p class="section-title" data-i18n-key="console.groupLive2dStage">Live2D / Stage</p>
+                            <span class="muted-text" data-i18n-key="console.groupLive2dStageHelp">Character model, background, effects, and stage interaction.</span>
+                        </div>
+                    </div>
                     <details id="live2d-panel" class="stage-background-panel" open>
                         <summary class="stage-background-header">
                             <div class="stage-background-header-main">
@@ -709,6 +733,12 @@
                             <input id="live2d-mouse-follow-checkbox" type="checkbox" checked>
                             <span data-i18n-key="console.mouseFollow">Live2D eye tracking</span>
                         </label>
+                    </div>
+                    <div class="console-control-section-heading">
+                        <div>
+                            <p class="section-title" data-i18n-key="console.groupVoice">Voice</p>
+                            <span class="muted-text" data-i18n-key="console.groupVoiceHelp">Speech playback, ASR, and always-listen controls.</span>
+                        </div>
                     </div>
                     <div class="toggle-row">
                         <label class="toggle-item">

@@ -114,6 +114,15 @@
         flex-wrap: wrap;
     }
 
+    .console-control-section-heading {
+        display: grid;
+    }
+
+    .console-control-link {
+        justify-self: start;
+        white-space: normal;
+    }
+
     .session-sidebar,
     .role-sidebar {
         width: calc(100% - 14px);

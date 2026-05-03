@@ -139,9 +139,11 @@ const sessions = createSessionsModule({
 });
 const roles = createRolesModule({
     addMessage,
+    getModelProfilesPayload: () => appState.config && appState.config.model_profiles || null,
     normalizeSessionName,
     requestJson,
     setRunStatus: status.setRunStatus,
+    syncModelProfileFromServer,
     t: i18n.t,
 });
 const traces = createTraceModule({ t: i18n.t });
@@ -255,6 +257,38 @@ async function initializePage() {
         live2d.setStageMessage(error.message || i18n.t("console.status.error"));
         addSystemMessage(`${i18n.t("console.status.error")}: ${error.message || error}`);
     }
+}
+
+async function syncModelProfileFromServer() {
+    const config = await requestJson("/api/web/config");
+    currentModelProfileScope = modelProfileScopeFromConfig(config);
+    const activeModelProfile = activeModelProfileFromConfig(config);
+    currentActiveModelProfile = activeModelProfile;
+    appState.config = {
+        ...(appState.config || {}),
+        ...config,
+    };
+    applyModelProfileToLocalPreferences(activeModelProfile);
+    renderActiveModelProfile(activeModelProfile);
+    await refreshConsoleControlsFromConfig(config);
+    return activeModelProfile;
+}
+
+async function refreshConsoleControlsFromConfig(config) {
+    if (!config) {
+        return;
+    }
+    try {
+        const activeLive2DConfig = live2d.applyConfigToUI(config);
+        live2d.renderLive2DControls(activeLive2DConfig);
+        await live2d.loadLive2DModel(activeLive2DConfig);
+        live2d.renderLive2DControls(appState.config && appState.config.live2d);
+    } catch (error) {
+        console.error(error);
+        status.setRunStatus(error.message || i18n.t("console.live2dModelLoadFailed"));
+    }
+    await tts.loadTtsOptions(config.tts);
+    asr.applyAsrStatus(config.asr);
 }
 
 function parseModelProfileUpdateScope(value) {

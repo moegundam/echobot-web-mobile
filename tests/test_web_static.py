@@ -49,6 +49,34 @@ class WebStaticAssetTests(unittest.TestCase):
 
         self.assertEqual([], failures)
 
+    def test_console_exposes_role_model_profile_and_control_groups(self) -> None:
+        html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+        app_js = (WEB_ROOT / "app.js").read_text(encoding="utf-8")
+        roles_js = (WEB_ROOT / "features" / "roles.js").read_text(encoding="utf-8")
+        i18n_js = (WEB_ROOT / "shell-i18n.js").read_text(encoding="utf-8")
+
+        self.assertIn('id="role-model-profile-card"', html)
+        self.assertIn('id="role-model-profile-link"', html)
+        self.assertIn('id="role-model-profile-detail"', html)
+        self.assertIn('data-i18n-key="console.groupModelRouting"', html)
+        self.assertIn('data-i18n-key="console.groupVoice"', html)
+        self.assertIn('data-i18n-key="console.groupLive2dStage"', html)
+        self.assertIn('data-i18n-key="console.groupRuntimeJobs"', html)
+        self.assertIn("syncModelProfileFromServer", app_js)
+        self.assertIn("renderRoleModelProfileCard", roles_js)
+
+        for key in (
+            "console.roleModelProfile",
+            "console.roleModelProfileBound",
+            "console.roleModelProfileUnbound",
+            "console.roleSwitchedWithProfile",
+            "console.groupModelRouting",
+            "console.groupVoice",
+            "console.groupLive2dStage",
+            "console.groupRuntimeJobs",
+        ):
+            self.assertIn(f'"{key}"', i18n_js)
+
 
 if __name__ == "__main__":
     unittest.main()

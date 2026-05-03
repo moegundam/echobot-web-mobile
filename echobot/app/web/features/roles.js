@@ -9,9 +9,11 @@ import { DOM } from "../core/dom.js";
 export function createRolesModule(deps) {
     const {
         addMessage,
+        getModelProfilesPayload = () => null,
         normalizeSessionName,
         requestJson,
         setRunStatus,
+        syncModelProfileFromServer = async () => null,
         t = (key) => key,
     } = deps;
 
@@ -98,6 +100,33 @@ export function createRolesModule(deps) {
         renderCurrentRoleCard();
     }
 
+    function renderRoleModelProfileCard() {
+        if (!DOM.roleModelProfileLink || !DOM.roleModelProfileDetail) {
+            return;
+        }
+
+        const roleName = roleState.currentRoleName || "default";
+        const profilePayload = getModelProfilesPayload() || {};
+        const roleBindings = profilePayload.role_bindings || {};
+        const boundProfileId = String(roleBindings[roleName] || "").trim();
+        const boundProfile = findModelProfileById(boundProfileId);
+
+        DOM.roleModelProfileLink.href = "/admin/models";
+        if (boundProfile) {
+            DOM.roleModelProfileLink.textContent = modelProfileLabel(boundProfile);
+            DOM.roleModelProfileDetail.textContent = t(
+                "console.roleModelProfileBound",
+                { profile: modelProfileLabel(boundProfile) },
+            );
+            return;
+        }
+
+        DOM.roleModelProfileLink.textContent = t("models.useActiveProfile");
+        DOM.roleModelProfileDetail.textContent = boundProfileId
+            ? t("console.roleModelProfileMissing", { profile: boundProfileId.toUpperCase() })
+            : t("console.roleModelProfileUnbound");
+    }
+
     function renderRoleSelectOptions() {
         if (!DOM.roleSelect) {
             return;
@@ -158,6 +187,7 @@ export function createRolesModule(deps) {
             }
         }
 
+        renderRoleModelProfileCard();
         updateRoleActionState();
     }
 
@@ -237,9 +267,21 @@ export function createRolesModule(deps) {
         closeRoleEditor();
         setRoleControlsBusy(true, t("console.switchingRole"));
         try {
+            const expectedBoundProfile = modelProfileForRole(nextRoleName);
             await setCurrentSessionRole(nextRoleName, { silent: true });
+            if (expectedBoundProfile) {
+                await syncModelProfileFromServer();
+            }
             await refreshCurrentRoleCard({ silent: true });
-            setRunStatus(t("console.roleSwitched", { role: roleState.currentRoleName }));
+            const boundProfile = modelProfileForRole(roleState.currentRoleName);
+            if (boundProfile) {
+                setRunStatus(t("console.roleSwitchedWithProfile", {
+                    role: roleState.currentRoleName,
+                    profile: modelProfileLabel(boundProfile),
+                }));
+            } else {
+                setRunStatus(t("console.roleSwitched", { role: roleState.currentRoleName }));
+            }
             setRoleStatus("");
         } catch (error) {
             console.error(error);
@@ -249,6 +291,29 @@ export function createRolesModule(deps) {
         } finally {
             setRoleControlsBusy(false);
         }
+    }
+
+    function findModelProfileById(profileId) {
+        const payload = getModelProfilesPayload() || {};
+        const profiles = Array.isArray(payload.profiles) ? payload.profiles : [];
+        return profiles.find((profile) => profile && profile.profile_id === profileId) || null;
+    }
+
+    function modelProfileForRole(roleName) {
+        const payload = getModelProfilesPayload() || {};
+        const bindings = payload.role_bindings || {};
+        const profileId = String(bindings[String(roleName || "").trim()] || "").trim();
+        return findModelProfileById(profileId);
+    }
+
+    function modelProfileLabel(profile) {
+        if (!profile) {
+            return "";
+        }
+        const profileId = String(profile.profile_id || "").trim();
+        const code = profileId ? profileId.toUpperCase() : "";
+        const label = String(profile.label || code || t("models.defaultProfile")).trim();
+        return code ? `${code} · ${label}` : label;
     }
 
     async function setCurrentSessionRole(roleName, options = {}) {
@@ -457,6 +522,7 @@ export function createRolesModule(deps) {
         refreshLocalizedText() {
             renderRoleSelectOptions();
             renderCurrentRoleCard();
+            renderRoleModelProfileCard();
             if (roleState.roleEditorMode === "create" && DOM.roleEditorTitle) {
                 DOM.roleEditorTitle.textContent = t("console.newRoleCard");
             } else if (roleState.roleEditorMode === "edit" && DOM.roleEditorTitle && roleState.currentRoleCard) {
