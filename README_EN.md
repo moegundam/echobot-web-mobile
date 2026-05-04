@@ -40,7 +40,7 @@ Original EchoBot mainly used `/web` as the operation page. This edition adds and
 | Admin | `/admin` | Admin index, health, API docs, jobs, and management pages |
 | Operation Guide | `/admin/guide` | Operation, setup, expected outcomes, failure signs, and troubleshooting |
 | Site Structure | `/admin/structure` | Route map, Console sections, and API namespace boundaries |
-| Characters | `/admin/characters` | Manage role prompts, model profile binding, voice, and Live2D summary |
+| Characters | `/admin/characters` | Manage role prompts, model profile binding, voice, Live2D summary, and emotion maps |
 | Model Profiles | `/admin/models` | Create, rename, and activate role/model profiles |
 | Channels | `/admin/channels` | Planning entry for Telegram, QQ, LINE, Discord, WhatsApp, and gateway adapters |
 | Open WebUI Bridge | `/admin/openwebui` | Narrow OpenAPI bridge instructions for Open WebUI |
@@ -103,6 +103,7 @@ A user/session scoped Stage event flow was added:
 - Broker v1 is in-memory and keyed by trusted user plus session.
 - Stage updates subtitles on `assistant_delta` and performs final subtitle/TTS behavior on `assistant_final`.
 - Stage events can carry `emotion`, `expression`, and `motion`; `character_state` can update Live2D expression/motion without changing subtitles.
+- `/admin/characters` can maintain an emotion map per character; when an event only provides `emotion` and the session has a bound role, the backend fills the mapped Live2D `expression` / `motion`.
 
 ### 7. Open WebUI Bridge Interface
 

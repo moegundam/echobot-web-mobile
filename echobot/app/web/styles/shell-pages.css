@@ -654,6 +654,46 @@ textarea {
     min-width: 0;
 }
 
+.character-emotion-map-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.character-emotion-map {
+    display: grid;
+    gap: 10px;
+    min-width: 0;
+}
+
+.character-emotion-map-row {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+    gap: 10px;
+    align-items: end;
+    min-width: 0;
+    padding: 12px;
+    border: 1px solid var(--shell-line);
+    border-radius: 8px;
+    background: var(--shell-surface-strong);
+}
+
+.character-emotion-map-actions {
+    display: flex;
+    justify-content: flex-end;
+    min-width: 104px;
+}
+
+.character-emotion-map-actions button {
+    width: 100%;
+    min-height: 40px;
+    background: transparent;
+    color: var(--shell-danger);
+    border: 1px solid rgba(185, 28, 28, 0.28);
+}
+
 .model-profile-field-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -967,7 +1007,8 @@ textarea {
         grid-template-columns: repeat(4, minmax(0, 1fr));
     }
 
-    .models-root {
+    .models-root,
+    .characters-root {
         width: min(1180px, 100%);
     }
 }
@@ -987,7 +1028,8 @@ html[data-layout-mode="mobile"] .structure-card-grid,
 html[data-layout-mode="mobile"] .openwebui-status-grid,
 html[data-layout-mode="mobile"] .model-role-binding-list,
 html[data-layout-mode="mobile"] .models-layout,
-html[data-layout-mode="mobile"] .model-profile-field-grid {
+html[data-layout-mode="mobile"] .model-profile-field-grid,
+html[data-layout-mode="mobile"] .character-emotion-map-row {
     grid-template-columns: minmax(0, 1fr);
 }
 
@@ -997,6 +1039,7 @@ html[data-layout-mode="mobile"] .model-profile-field-grid {
     .structure-root,
     .openwebui-root,
     .models-root,
+    .characters-root,
     .channels-root {
         padding: 12px;
     }

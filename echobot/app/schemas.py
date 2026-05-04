@@ -235,6 +235,12 @@ class UpdateRoleRequest(BaseModel):
     prompt: str
 
 
+class CharacterEmotionMapModel(BaseModel):
+    emotion: str
+    expression: str = ""
+    motion: str = ""
+
+
 class CharacterProfileModel(BaseModel):
     name: str
     editable: bool = True
@@ -248,6 +254,7 @@ class CharacterProfileModel(BaseModel):
     tts_voice: str = ""
     asr_model: str = ""
     live2d_selection_key: str = ""
+    emotion_maps: list[CharacterEmotionMapModel] = Field(default_factory=list)
 
 
 class CharacterProfilesResponse(BaseModel):
@@ -260,12 +267,14 @@ class CreateCharacterProfileRequest(BaseModel):
     name: str
     prompt: str
     model_profile_id: str = ""
+    emotion_maps: list[CharacterEmotionMapModel] = Field(default_factory=list)
 
 
 class UpdateCharacterProfileRequest(BaseModel):
     prompt: str | None = None
     model_profile_id: str | None = None
     clear_model_profile_binding: bool = False
+    emotion_maps: list[CharacterEmotionMapModel] | None = None
 
 
 class StrictSchemaModel(BaseModel):

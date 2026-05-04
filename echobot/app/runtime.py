@@ -35,6 +35,7 @@ from ..tts.providers.openai_compatible import (
 )
 from .auth import user_storage_root
 from .services.chat import ChatService
+from .services.character_profiles import CharacterProfileSettingsService
 from .services.channels import ChannelService
 from .services.model_profiles import ModelProfileService
 from .services.roles import RoleService
@@ -77,6 +78,7 @@ class AppRuntime:
         self.session_service: GatewaySessionService | None = None
         self.chat_service: ChatService | None = None
         self.role_service: RoleService | None = None
+        self.character_profile_settings_service: CharacterProfileSettingsService | None = None
         self.model_profile_service: ModelProfileService | None = None
         self.channel_service: ChannelService | None = None
         self.stage_event_broker = StageEventBroker()
@@ -134,6 +136,9 @@ class AppRuntime:
         self.role_service = RoleService(
             self.context.role_registry,
             self.context.session_store,
+        )
+        self.character_profile_settings_service = CharacterProfileSettingsService(
+            _context_storage_root(self.context),
         )
         self.model_profile_service = ModelProfileService(
             _context_storage_root(self.context),
@@ -519,6 +524,7 @@ class UserScopedRuntime:
         self.session_service: GatewaySessionService | None = None
         self.chat_service: ChatService | None = None
         self.role_service: RoleService | None = None
+        self.character_profile_settings_service: CharacterProfileSettingsService | None = None
         self.model_profile_service: ModelProfileService | None = None
         self.web_console_service: WebConsoleService | None = None
         self.stage_event_broker = parent.stage_event_broker
@@ -566,6 +572,13 @@ class UserScopedRuntime:
             self.context.role_registry,
             self.context.session_store,
         )
+        self.character_profile_settings_service = CharacterProfileSettingsService(
+            self.storage_root,
+        )
+        if self.parent.character_profile_settings_service is not None:
+            self.character_profile_settings_service.seed_from(
+                self.parent.character_profile_settings_service,
+            )
         self.model_profile_service = ModelProfileService(self.storage_root)
         if self.parent.model_profile_service is not None:
             self.model_profile_service.seed_from(self.parent.model_profile_service)

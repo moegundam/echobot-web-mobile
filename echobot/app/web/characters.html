@@ -55,6 +55,18 @@
                     <h3 data-i18n-key="characters.prompt">Role prompt</h3>
                     <textarea id="character-prompt" rows="14" data-i18n-placeholder-key="characters.promptPlaceholder"></textarea>
                 </section>
+                <section class="model-profile-section character-emotion-map-section">
+                    <div class="character-emotion-map-header">
+                        <div>
+                            <h3 data-i18n-key="characters.emotionMapTitle">Stage emotion map</h3>
+                            <p data-i18n-key="characters.emotionMapDescription">Map character emotions to Live2D expressions and motions.</p>
+                        </div>
+                        <button id="character-emotion-map-add" type="button" data-i18n-key="characters.emotionMapAdd">Add emotion</button>
+                    </div>
+                    <div id="character-emotion-map" class="character-emotion-map"></div>
+                    <datalist id="character-expression-options"></datalist>
+                    <datalist id="character-motion-options"></datalist>
+                </section>
                 <section class="model-profile-section">
                     <h3 data-i18n-key="characters.effectiveProfile">Effective profile</h3>
                     <div id="character-effective-summary" class="model-role-bindings"></div>

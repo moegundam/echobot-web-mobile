@@ -21,6 +21,7 @@ from ..services.openwebui_bridge import (
     resolve_bridge_target_user,
     runtime_for_bridge_target,
 )
+from ..services.stage_event_enrichment import apply_character_emotion_map
 from ..services.stage_events import StageEventModel, StageEventPublishRequest
 from ..state import get_app_runtime
 
@@ -77,9 +78,10 @@ async def publish_openwebui_stage_event(
     settings: OpenWebUIBridgeSettings = Depends(require_openwebui_bridge),
 ) -> StageEventModel:
     user_id = resolve_bridge_target_user(request.target_user_id, settings)
-    return await runtime.stage_event_broker.publish(
-        scope_key=bridge_scope_key(user_id),
-        request=StageEventPublishRequest(
+    target_runtime = await runtime_for_bridge_target(runtime, user_id)
+    payload = await apply_character_emotion_map(
+        target_runtime,
+        StageEventPublishRequest(
             kind="assistant_final",
             session_name=normalized_session_name(request.session_name),
             text=request.text,
@@ -93,6 +95,10 @@ async def publish_openwebui_stage_event(
                 "target_user_id": user_id,
             },
         ),
+    )
+    return await runtime.stage_event_broker.publish(
+        scope_key=bridge_scope_key(user_id),
+        request=payload,
     )
 
 

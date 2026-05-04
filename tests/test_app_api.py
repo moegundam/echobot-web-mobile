@@ -1891,6 +1891,13 @@ class AppApiTests(unittest.TestCase):
                         "name": "Stage Host",
                         "prompt": "# Stage Host\n\nSpeak clearly.",
                         "model_profile_id": "b",
+                        "emotion_maps": [
+                            {
+                                "emotion": "joy",
+                                "expression": "smile.exp3.json",
+                                "motion": "wave.motion3.json",
+                            },
+                        ],
                     },
                 )
                 listed = client.get("/api/character-profiles")
@@ -1904,6 +1911,21 @@ class AppApiTests(unittest.TestCase):
                     json={
                         "prompt": "# Stage Host\n\nSpeak with warm energy.",
                         "model_profile_id": "c",
+                        "emotion_maps": [
+                            {
+                                "emotion": "focused",
+                                "expression": "serious.exp3.json",
+                                "motion": "nod.motion3.json",
+                            },
+                        ],
+                    },
+                )
+                mapped_stage_event = client.post(
+                    "/api/stage/events",
+                    json={
+                        "kind": "character_state",
+                        "session_name": "default",
+                        "emotion": "focused",
                     },
                 )
                 console_config = client.get("/api/web/config")
@@ -1924,6 +1946,16 @@ class AppApiTests(unittest.TestCase):
             self.assertEqual("alloy-stage", created.json()["tts_voice"])
             self.assertEqual("whisper-stage", created.json()["asr_model"])
             self.assertEqual("builtin:hiyori_pro_en", created.json()["live2d_selection_key"])
+            self.assertEqual(
+                [
+                    {
+                        "emotion": "joy",
+                        "expression": "smile.exp3.json",
+                        "motion": "wave.motion3.json",
+                    },
+                ],
+                created.json()["emotion_maps"],
+            )
             self.assertTrue(str(created.json()["source_path"]).endswith("stage-host.md"))
 
             self.assertEqual(200, listed.status_code)
@@ -1940,6 +1972,21 @@ class AppApiTests(unittest.TestCase):
             self.assertEqual(200, updated.status_code)
             self.assertEqual("c", updated.json()["model_profile_id"])
             self.assertEqual("# Stage Host\n\nSpeak with warm energy.", updated.json()["prompt"])
+            self.assertEqual(
+                [
+                    {
+                        "emotion": "focused",
+                        "expression": "serious.exp3.json",
+                        "motion": "nod.motion3.json",
+                    },
+                ],
+                updated.json()["emotion_maps"],
+            )
+
+            self.assertEqual(200, mapped_stage_event.status_code)
+            self.assertEqual("focused", mapped_stage_event.json()["emotion"])
+            self.assertEqual("serious.exp3.json", mapped_stage_event.json()["expression"])
+            self.assertEqual("nod.motion3.json", mapped_stage_event.json()["motion"])
 
             self.assertEqual(200, console_config.status_code)
             self.assertEqual("c", console_config.json()["model_profiles"]["active_profile_id"])

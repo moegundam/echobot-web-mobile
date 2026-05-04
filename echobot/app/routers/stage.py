@@ -13,6 +13,7 @@ from ..services.stage_events import (
     StageEventPublishRequest,
     stage_event_to_sse,
 )
+from ..services.stage_event_enrichment import apply_character_emotion_map
 from ..state import get_app_runtime
 
 
@@ -31,6 +32,7 @@ async def publish_stage_event(
     try:
         request_payload = await request.json()
         payload = StageEventPublishRequest.model_validate(request_payload)
+        payload = await apply_character_emotion_map(runtime, payload)
         return await runtime.stage_event_broker.publish(
             scope_key=_stage_event_scope_key(runtime),
             request=payload,

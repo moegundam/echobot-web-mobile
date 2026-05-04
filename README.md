@@ -40,7 +40,7 @@
 | 後台 Admin | `/admin` | 後台索引、health、API docs、jobs 與管理頁入口 |
 | 操作說明 | `/admin/guide` | 操作、設定、預期成果、故障判斷與排除流程 |
 | 網站結構 | `/admin/structure` | Route map、Console 分區、API namespace 邊界 |
-| 角色設定 | `/admin/characters` | 管理角色 prompt、模型 profile 綁定、語音與 Live2D 摘要 |
+| 角色設定 | `/admin/characters` | 管理角色 prompt、模型 profile 綁定、語音、Live2D 摘要與 emotion map |
 | 模型設定 | `/admin/models` | 可新增、自定義名稱、啟用角色模型 profile |
 | 通訊平台 | `/admin/channels` | Telegram、QQ、LINE、Discord、WhatsApp 等 gateway 規劃入口 |
 | Open WebUI Bridge | `/admin/openwebui` | Open WebUI narrow OpenAPI bridge 接線說明 |
@@ -103,6 +103,7 @@ python -m echobot app --host 127.0.0.1 --port 8001
 - Broker v1 為 in-memory，key 包含 trusted user 與 session。
 - Stage 收到 `assistant_delta` 更新字幕，收到 `assistant_final` 才做最終字幕/TTS。
 - Stage event 可攜帶 `emotion`、`expression`、`motion`；`character_state` 可只更新 Live2D 表情/動作而不改字幕。
+- `/admin/characters` 可為每個角色維護 emotion map；當事件只有 `emotion` 且目前 session 有綁定角色時，後端會自動補上對應的 Live2D `expression` / `motion`。
 
 ### 7. Open WebUI Bridge 接口
 

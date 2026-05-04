@@ -142,10 +142,19 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn('data-i18n-key="admin.characters"', admin_html)
         self.assertIn('id="character-profile-form"', characters_html)
         self.assertIn('id="character-model-profile"', characters_html)
+        self.assertIn('id="character-emotion-map"', characters_html)
+        self.assertIn('id="character-emotion-map-add"', characters_html)
+        self.assertIn('id="character-expression-options"', characters_html)
+        self.assertIn('id="character-motion-options"', characters_html)
         self.assertIn('"/api/character-profiles"', characters_js)
+        self.assertIn('"/api/web/config"', characters_js)
+        self.assertIn("collectEmotionMaps", characters_js)
+        self.assertIn("live2dModelForCharacter", characters_js)
         self.assertIn('"characters.heading"', i18n_js)
         self.assertIn('"characters.modelProfile"', i18n_js)
         self.assertIn('"characters.effectiveProfile"', i18n_js)
+        self.assertIn('"characters.emotionMapTitle"', i18n_js)
+        self.assertIn('"characters.emotionMapCount"', i18n_js)
 
 
 if __name__ == "__main__":

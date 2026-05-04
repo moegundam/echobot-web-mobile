@@ -3,6 +3,7 @@ import { initShellDisplayMode } from "./shell-display-mode.js?v=site-public-6";
 
 const state = {
     payload: null,
+    webConfig: null,
     selectedName: "",
     isCreating: false,
     busy: false,
@@ -22,6 +23,10 @@ const DOM = {
     name: document.getElementById("character-name"),
     modelProfile: document.getElementById("character-model-profile"),
     prompt: document.getElementById("character-prompt"),
+    emotionMap: document.getElementById("character-emotion-map"),
+    emotionMapAdd: document.getElementById("character-emotion-map-add"),
+    expressionOptions: document.getElementById("character-expression-options"),
+    motionOptions: document.getElementById("character-motion-options"),
     summary: document.getElementById("character-effective-summary"),
 };
 
@@ -47,6 +52,9 @@ DOM.create.addEventListener("click", () => {
 DOM.remove.addEventListener("click", () => {
     void deleteSelectedCharacter();
 });
+DOM.emotionMapAdd.addEventListener("click", () => {
+    appendEmotionMapRow();
+});
 
 void load();
 
@@ -54,7 +62,15 @@ async function load() {
     setBusy(true);
     setStatusKey("characters.loading");
     try {
-        state.payload = await requestJson("/api/character-profiles");
+        const [payload, webConfig] = await Promise.all([
+            requestJson("/api/character-profiles"),
+            requestJson("/api/web/config").catch((error) => {
+                console.warn("Unable to load Live2D options for character emotion maps", error);
+                return null;
+            }),
+        ]);
+        state.payload = payload;
+        state.webConfig = webConfig;
         state.isCreating = false;
         const characters = characterList();
         if (!state.selectedName && characters.length > 0) {
@@ -133,7 +149,10 @@ function renderSelectedCharacter() {
     DOM.modelProfile.disabled = state.busy || (!creating && !character);
     DOM.save.disabled = state.busy || (!creating && !character);
     DOM.remove.disabled = state.busy || !deletable || creating;
+    DOM.emotionMapAdd.disabled = state.busy || (!creating && !character);
 
+    renderLive2DActionOptions(character);
+    renderEmotionMapEditor(character);
     renderEffectiveSummary(character);
 }
 
@@ -147,6 +166,9 @@ function renderEffectiveSummary(character) {
             ["models.voice", character.tts_voice || ""],
             ["models.asr", character.asr_model || ""],
             ["models.live2d", character.live2d_selection_key || ""],
+            ["characters.emotionMapCount", i18n.t("characters.emotionMapCountValue", {
+                count: String((character.emotion_maps || []).length),
+            })],
         ]
         : [["characters.effectiveProfile", i18n.t("characters.summaryAfterSave")]];
 
@@ -165,6 +187,7 @@ async function saveSelectedCharacter() {
     const name = DOM.name.value.trim();
     const prompt = DOM.prompt.value.trim();
     const modelProfileId = DOM.modelProfile.value.trim();
+    const emotionMaps = collectEmotionMaps();
     if (state.isCreating && !name) {
         setStatusKey("characters.nameRequired");
         return;
@@ -184,6 +207,7 @@ async function saveSelectedCharacter() {
                     name,
                     prompt,
                     model_profile_id: modelProfileId,
+                    emotion_maps: emotionMaps,
                 }),
             });
             state.selectedName = created.name;
@@ -198,6 +222,7 @@ async function saveSelectedCharacter() {
                     prompt: selected.editable ? prompt : undefined,
                     model_profile_id: modelProfileId || undefined,
                     clear_model_profile_binding: !modelProfileId,
+                    emotion_maps: emotionMaps,
                 }),
             });
         }
@@ -209,6 +234,129 @@ async function saveSelectedCharacter() {
     } finally {
         setBusy(false);
     }
+}
+
+function renderLive2DActionOptions(character) {
+    DOM.expressionOptions.replaceChildren();
+    DOM.motionOptions.replaceChildren();
+    const live2dModel = live2dModelForCharacter(character);
+    const expressions = Array.isArray(live2dModel && live2dModel.expressions)
+        ? live2dModel.expressions
+        : [];
+    const motions = Array.isArray(live2dModel && live2dModel.motions)
+        ? live2dModel.motions
+        : [];
+
+    expressions.forEach((item) => {
+        const option = document.createElement("option");
+        option.value = String(item.file || item.name || "");
+        option.label = String(item.name || item.file || "");
+        DOM.expressionOptions.appendChild(option);
+    });
+    motions.forEach((item) => {
+        const option = document.createElement("option");
+        option.value = String(item.file || item.name || "");
+        option.label = String(item.name || item.file || "");
+        DOM.motionOptions.appendChild(option);
+    });
+}
+
+function renderEmotionMapEditor(character) {
+    DOM.emotionMap.replaceChildren();
+    const maps = character && Array.isArray(character.emotion_maps)
+        ? character.emotion_maps
+        : [];
+    if (maps.length === 0) {
+        const empty = document.createElement("p");
+        empty.className = "model-role-binding-empty";
+        empty.textContent = i18n.t("characters.emotionMapEmpty");
+        DOM.emotionMap.appendChild(empty);
+        return;
+    }
+    maps.forEach((item) => {
+        appendEmotionMapRow(item);
+    });
+}
+
+function appendEmotionMapRow(item = {}) {
+    const empty = DOM.emotionMap.querySelector(".model-role-binding-empty");
+    if (empty) {
+        empty.remove();
+    }
+
+    const row = document.createElement("article");
+    row.className = "character-emotion-map-row";
+    row.dataset.emotionMapRow = "true";
+
+    const emotionLabel = emotionInputField(
+        "characters.emotionLabel",
+        "characters.emotionPlaceholder",
+        "emotion",
+        item.emotion,
+    );
+    const expressionLabel = emotionInputField(
+        "characters.expressionLabel",
+        "characters.expressionPlaceholder",
+        "expression",
+        item.expression,
+        "character-expression-options",
+    );
+    const motionLabel = emotionInputField(
+        "characters.motionLabel",
+        "characters.motionPlaceholder",
+        "motion",
+        item.motion,
+        "character-motion-options",
+    );
+
+    const actions = document.createElement("div");
+    actions.className = "character-emotion-map-actions";
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.textContent = i18n.t("characters.emotionMapRemove");
+    remove.addEventListener("click", () => {
+        row.remove();
+        if (!DOM.emotionMap.querySelector("[data-emotion-map-row]")) {
+            renderEmotionMapEditor({ emotion_maps: [] });
+        }
+    });
+    actions.appendChild(remove);
+    row.append(emotionLabel, expressionLabel, motionLabel, actions);
+    DOM.emotionMap.appendChild(row);
+}
+
+function emotionInputField(labelKey, placeholderKey, fieldName, value = "", listId = "") {
+    const label = document.createElement("label");
+    const labelText = document.createElement("span");
+    labelText.textContent = i18n.t(labelKey);
+    const input = document.createElement("input");
+    input.type = "text";
+    input.maxLength = 256;
+    input.autocomplete = "off";
+    input.dataset.emotionMapField = fieldName;
+    input.placeholder = i18n.t(placeholderKey);
+    input.value = String(value || "");
+    input.disabled = state.busy;
+    if (listId) {
+        input.setAttribute("list", listId);
+    }
+    label.append(labelText, input);
+    return label;
+}
+
+function collectEmotionMaps() {
+    return Array.from(DOM.emotionMap.querySelectorAll("[data-emotion-map-row]"))
+        .map((row) => ({
+            emotion: fieldValue(row, "emotion"),
+            expression: fieldValue(row, "expression"),
+            motion: fieldValue(row, "motion"),
+        }))
+        .filter((item) => item.emotion || item.expression || item.motion);
+}
+
+function fieldValue(row, fieldName) {
+    const input = row.querySelector(`[data-emotion-map-field="${fieldName}"]`);
+    return String((input && input.value) || "").trim();
 }
 
 async function deleteSelectedCharacter() {
@@ -275,6 +423,21 @@ function modelProfileList() {
     return state.payload && Array.isArray(state.payload.model_profiles)
         ? state.payload.model_profiles
         : [];
+}
+
+function live2dModelForCharacter(character) {
+    const live2d = state.webConfig && state.webConfig.live2d;
+    const models = Array.isArray(live2d && live2d.models) ? live2d.models : [];
+    const selectionKey = String(character && character.live2d_selection_key || "");
+    if (!selectionKey) {
+        return models.find((item) => item && item.model_url) || live2d || null;
+    }
+    return models.find((item) => {
+        if (!item) {
+            return false;
+        }
+        return item.selection_key === selectionKey || item.model_url === selectionKey;
+    }) || null;
 }
 
 function selectedCharacter() {
