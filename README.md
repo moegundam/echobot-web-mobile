@@ -33,8 +33,8 @@
 
 | 頁面 | 路徑 | 用途 |
 |---|---|---|
-| 前台 Stage | `/stage?session_name=<name>` | 純顯示角色、字幕、TTS、Live2D lip sync |
-| 通訊 Messenger | `/messenger` | 輕量聊天入口，預設 `chat_only` |
+| 前台 Stage | `/stage?session_name=<name>` | 純顯示角色、字幕、TTS、Live2D lip sync；可從已設定通訊平台選擇 target |
+| 通訊 Messenger | `/messenger` | 輕量聊天入口，預設 `chat_only`；可選 Telegram/Discord 等已設定 target，不必手動輸入 session |
 | 中台 Console | `/console` | 操作員工作台，承接原 `/web` 的完整控制能力 |
 | 相容 Web | `/web` | 保留原入口，對應 Console |
 | 後台 Admin | `/admin` | 後台索引、health、API docs、jobs 與管理頁入口 |
@@ -150,6 +150,7 @@ python -m echobot app --host 127.0.0.1 --port 8001
 - Discord 可設定 enabled、allow list、bot token、webhook URL、webhook secret、application/guild/channel id。
 - Secret 欄位在 API 與 UI 中只顯示 configured 狀態，不回傳明文。
 - `POST /api/channels/{channel}/smoke` 提供安全的本機 readiness check，不會把 token 回傳到 response。
+- `GET /api/channels/stage-targets` 提供無 secret 的通訊 target 清單，讓 `/stage` 與 `/messenger` 直接選擇已設定平台綁定的前台 session。
 - Telegram polling runtime 已做過本機 bot E2E smoke；測試 token 只放在 repo 外的 ignored runtime config，不寫入版本庫。
 - 正式通訊 gateway 可設定 `mirror_to_stage` 與 `stage_session_name`；Telegram 回覆已驗證會同步顯示在 `/stage` 前台。
 - Discord 目前是 config/smoke-ready，runtime adapter 仍需後續切片才會正式接收 Discord 訊息。
@@ -243,7 +244,7 @@ python -m pytest
 - 全站 10 個 route × 手機/桌面 × 3 語言瀏覽器檢查。
 - i18n key coverage。
 - API route/auth tests。
-- full pytest：`320 passed`。
+- full pytest：`321 passed`。
 
 ## 專案規矩
 

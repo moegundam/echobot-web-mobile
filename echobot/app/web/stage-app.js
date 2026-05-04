@@ -4,17 +4,20 @@ import { rememberShellSessionName } from "./shell-session-links.js?v=site-public
 
 const subtitleElement = document.getElementById("stage-subtitle");
 const sessionLabelElement = document.getElementById("stage-session-label");
+const sessionSelect = document.getElementById("stage-session-select");
 const statusElement = document.getElementById("stage-status");
 const audioButton = document.getElementById("stage-audio-enable");
 const canvasHost = document.getElementById("stage-canvas-host");
 
 const DEFAULT_LIP_SYNC_IDS = ["ParamMouthOpenY", "PARAM_MOUTH_OPEN_Y", "MouthOpenY"];
-const sessionName = resolveSessionName();
+let sessionName = resolveSessionName();
 rememberShellSessionName(sessionName);
 let subtitleText = "";
 let audioUnlocked = false;
 let currentStatusKey = "stage.status.connecting";
 let subtitleIsPlaceholder = true;
+let stageEventSource = null;
+let stageTargets = [];
 let audioElement = null;
 let activeAudioUrl = "";
 let audioContext = null;
@@ -50,10 +53,17 @@ if (audioButton) {
     });
 }
 
+if (sessionSelect) {
+    sessionSelect.addEventListener("change", () => {
+        setActiveSessionName(sessionSelect.value, { reconnect: true });
+    });
+}
+
 init();
 
 async function init() {
     setStatus("stage.status.connecting");
+    await loadStageTargets();
     initStageEvents();
     await initLive2D();
 }
@@ -67,6 +77,108 @@ function setStatus(key) {
     currentStatusKey = key;
     if (statusElement) {
         statusElement.textContent = i18n.t(key);
+    }
+}
+
+function setActiveSessionName(value, options = {}) {
+    sessionName = rememberShellSessionName(
+        String(value || "").trim() || "default",
+    );
+    updateSessionLabel();
+    if (sessionSelect && sessionSelect.value !== sessionName) {
+        sessionSelect.value = sessionName;
+    }
+    updateSessionUrl(sessionName);
+    if (options.reconnect) {
+        setSubtitle("");
+        setStatus("stage.status.connecting");
+        initStageEvents();
+    }
+}
+
+async function loadStageTargets() {
+    if (!sessionSelect) {
+        return;
+    }
+    try {
+        const response = await fetch("/api/channels/stage-targets");
+        if (!response.ok) {
+            throw await responseToError(response);
+        }
+        const payload = await response.json();
+        stageTargets = Array.isArray(payload.targets) ? payload.targets : [];
+        renderStageTargetOptions(stageTargets);
+    } catch (error) {
+        console.warn("Unable to load stage targets", error);
+        stageTargets = [];
+        renderStageTargetOptions([]);
+        setStatus("stage.sessionTargetLoadFailed");
+    }
+}
+
+function renderStageTargetOptions(targets) {
+    if (!sessionSelect) {
+        return;
+    }
+    const options = buildStageTargetOptions(targets, sessionName);
+    sessionSelect.replaceChildren(...options);
+    sessionSelect.value = sessionName;
+}
+
+function buildStageTargetOptions(targets, currentSessionName) {
+    const options = [];
+    const seenSessions = new Set();
+    for (const target of targets) {
+        const targetSessionName = String((target && target.session_name) || "").trim();
+        if (!targetSessionName || seenSessions.has(targetSessionName)) {
+            continue;
+        }
+        seenSessions.add(targetSessionName);
+        const option = document.createElement("option");
+        option.value = targetSessionName;
+        option.textContent = stageTargetLabel(target);
+        options.push(option);
+    }
+
+    if (!seenSessions.has(currentSessionName)) {
+        const fallbackOption = document.createElement("option");
+        fallbackOption.value = currentSessionName;
+        fallbackOption.textContent = i18n.t("stage.sessionFallback", {
+            session: currentSessionName,
+        });
+        options.unshift(fallbackOption);
+    }
+    return options;
+}
+
+function stageTargetLabel(target) {
+    const baseLabel = String(
+        (target && target.display_name) || (target && target.session_name) || "default",
+    );
+    if (target && target.enabled === false) {
+        return `${baseLabel} · ${i18n.t("channelTargets.disabled")}`;
+    }
+    if (target && target.running === false) {
+        return `${baseLabel} · ${i18n.t("channelTargets.notRunning")}`;
+    }
+    return baseLabel;
+}
+
+function updateSessionUrl(nextSessionName) {
+    try {
+        const url = new URL(window.location.href);
+        url.searchParams.set("session_name", nextSessionName);
+        window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+    } catch (_error) {
+        // URL replacement is a convenience only.
+    }
+}
+
+function updateSessionLabel() {
+    if (sessionLabelElement) {
+        sessionLabelElement.textContent = i18n.t("stage.sessionLabel", {
+            session: sessionName,
+        });
     }
 }
 
@@ -87,9 +199,14 @@ function initStageEvents() {
         setStatus("stage.status.sseUnavailable");
         return;
     }
+    if (stageEventSource) {
+        stageEventSource.close();
+        stageEventSource = null;
+    }
 
     const url = `/api/stage/events?session_name=${encodeURIComponent(sessionName)}`;
     const source = new EventSource(url);
+    stageEventSource = source;
 
     source.addEventListener("open", () => {
         setStatus("stage.status.live");
@@ -857,11 +974,7 @@ function markLive2DUnavailable(messageKey) {
 }
 
 function refreshLocalizedStageText() {
-    if (sessionLabelElement) {
-        sessionLabelElement.textContent = i18n.t("stage.sessionLabel", {
-            session: sessionName,
-        });
-    }
+    updateSessionLabel();
     if (statusElement) {
         statusElement.textContent = i18n.t(currentStatusKey);
     }
@@ -871,6 +984,7 @@ function refreshLocalizedStageText() {
     if (canvasHost && canvasHost.dataset.i18nFallbackKey) {
         canvasHost.textContent = i18n.t(canvasHost.dataset.i18nFallbackKey);
     }
+    renderStageTargetOptions(stageTargets);
     updateAudioButtonText();
 }
 

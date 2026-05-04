@@ -16,8 +16,9 @@
             <div class="language-switcher" data-language-switcher></div>
             <div class="display-mode-switcher" data-display-mode-switcher></div>
             <label class="session-control">
-                <span data-i18n-key="messenger.session">Session</span>
-                <input id="messenger-session" type="text" value="default" autocomplete="off">
+                <span data-i18n-key="messenger.sessionTarget">Target</span>
+                <select id="messenger-session-select" autocomplete="off"></select>
+                <input id="messenger-session" type="hidden" value="default" autocomplete="off">
             </label>
         </header>
         <section id="messenger-messages" class="messenger-messages" aria-live="polite"></section>

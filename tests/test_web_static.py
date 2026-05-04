@@ -78,9 +78,18 @@ class WebStaticAssetTests(unittest.TestCase):
             self.assertIn(f'"{key}"', i18n_js)
 
     def test_messenger_stage_stream_contract_is_explicit(self) -> None:
+        messenger_html = (WEB_ROOT / "messenger.html").read_text(encoding="utf-8")
+        stage_html = (WEB_ROOT / "stage.html").read_text(encoding="utf-8")
         messenger_js = (WEB_ROOT / "messenger-app.js").read_text(encoding="utf-8")
         stage_js = (WEB_ROOT / "stage-app.js").read_text(encoding="utf-8")
+        i18n_js = (WEB_ROOT / "shell-i18n.js").read_text(encoding="utf-8")
 
+        self.assertIn('id="messenger-session-select"', messenger_html)
+        self.assertIn('id="stage-session-select"', stage_html)
+        self.assertIn('"/api/channels/stage-targets"', messenger_js)
+        self.assertIn('"/api/channels/stage-targets"', stage_js)
+        self.assertIn("loadStageTargets", messenger_js)
+        self.assertIn("loadStageTargets", stage_js)
         self.assertIn('route_mode: DEFAULT_ROUTE_MODE', messenger_js)
         self.assertIn('const DEFAULT_ROUTE_MODE = "chat_only";', messenger_js)
         self.assertIn("extractStageDirectives", messenger_js)
@@ -94,6 +103,7 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn('"/api/stage/events"', messenger_js)
 
         self.assertIn("new EventSource(url)", stage_js)
+        self.assertIn("stageEventSource.close()", stage_js)
         self.assertIn('source.addEventListener("assistant_delta"', stage_js)
         self.assertIn('source.addEventListener("assistant_final"', stage_js)
         self.assertIn('source.addEventListener("character_state"', stage_js)
@@ -117,6 +127,18 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIsNotNone(final_handler)
         self.assertNotIn("playTts", delta_handler.group(0))
         self.assertIn("playTts(payload.text)", final_handler.group(0))
+
+        for key in (
+            "stage.sessionTarget",
+            "stage.sessionFallback",
+            "stage.sessionTargetLoadFailed",
+            "messenger.sessionTarget",
+            "messenger.sessionFallback",
+            "messenger.sessionTargetLoadFailed",
+            "channelTargets.disabled",
+            "channelTargets.notRunning",
+        ):
+            self.assertGreaterEqual(i18n_js.count(f'"{key}"'), 3)
 
     def test_stage_live2d_falls_back_before_noisy_webgl_initialization(self) -> None:
         stage_js = (WEB_ROOT / "stage-app.js").read_text(encoding="utf-8")

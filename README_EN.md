@@ -33,8 +33,8 @@ Original EchoBot mainly used `/web` as the operation page. This edition adds and
 
 | Page | Path | Purpose |
 |---|---|---|
-| Stage | `/stage?session_name=<name>` | Display-only character view, subtitles, TTS, and Live2D lip sync |
-| Messenger | `/messenger` | Lightweight chat entry, defaulting to `chat_only` |
+| Stage | `/stage?session_name=<name>` | Display-only character view, subtitles, TTS, and Live2D lip sync; can select a configured messaging target |
+| Messenger | `/messenger` | Lightweight chat entry, defaulting to `chat_only`; can select configured Telegram/Discord targets instead of typing a session |
 | Console | `/console` | Operator workbench, carrying the original `/web` control surface |
 | Compatible Web | `/web` | Preserved legacy entry, mapped to Console |
 | Admin | `/admin` | Admin index, health, API docs, jobs, and management pages |
@@ -150,6 +150,7 @@ A model profile management page was added:
 - Discord can store enabled state, allow list, bot token, webhook URL, webhook secret, application/guild/channel ids.
 - Secret fields only expose configured status in the API and UI; plaintext values are never returned.
 - `POST /api/channels/{channel}/smoke` provides safe local readiness checks without echoing tokens in responses.
+- `GET /api/channels/stage-targets` exposes a secret-free messaging target list so `/stage` and `/messenger` can select the Stage session bound to a configured platform.
 - The Telegram polling runtime has passed a local bot E2E smoke; the test token is stored only in repo-external ignored runtime config and is not committed.
 - Production messaging gateways can set `mirror_to_stage` and `stage_session_name`; Telegram replies have been verified to mirror into the `/stage` frontend.
 - Discord is config/smoke-ready for now; its runtime adapter is still a later implementation slice.
@@ -243,7 +244,7 @@ This branch has been verified with:
 - 10 routes × mobile/desktop × 3 languages browser checks.
 - i18n key coverage.
 - API route/auth tests.
-- Full pytest: `320 passed`.
+- Full pytest: `321 passed`.
 
 ## Project Rules
 

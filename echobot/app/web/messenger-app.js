@@ -7,11 +7,13 @@ const input = document.getElementById("messenger-input");
 const sendButton = document.getElementById("messenger-send");
 const messagesElement = document.getElementById("messenger-messages");
 const sessionInput = document.getElementById("messenger-session");
+const sessionSelect = document.getElementById("messenger-session-select");
 const statusElement = document.getElementById("messenger-status");
 
 const DEFAULT_ROUTE_MODE = "chat_only";
 const stageDirectivePattern = /^\s*\[(emotion|expression|motion)\s*[:=]\s*([^\]\r\n]{1,256})\]\s*/i;
 let currentStatusKey = "messenger.status.ready";
+let messengerStageTargets = [];
 const i18n = initShellI18n({
     onChange: () => {
         refreshLocalizedMessengerText();
@@ -20,13 +22,7 @@ const i18n = initShellI18n({
 });
 const displayMode = initShellDisplayMode({ t: i18n.t });
 
-if (sessionInput) {
-    sessionInput.value = resolveInitialSessionName();
-    rememberShellSessionName(sessionInput.value);
-    sessionInput.addEventListener("change", () => {
-        rememberShellSessionName(sessionInput.value);
-    });
-}
+initMessengerSessionControls();
 refreshLocalizedMessengerText();
 
 if (form) {
@@ -42,9 +38,120 @@ function resolveInitialSessionName() {
 }
 
 function currentSessionName() {
+    if (sessionSelect && sessionSelect.value) {
+        setActiveSessionName(sessionSelect.value);
+    }
     return rememberShellSessionName(
         String((sessionInput && sessionInput.value) || "default").trim() || "default",
     );
+}
+
+function initMessengerSessionControls() {
+    const initialSessionName = rememberShellSessionName(resolveInitialSessionName());
+    if (sessionInput) {
+        sessionInput.value = initialSessionName;
+    }
+    if (sessionSelect) {
+        sessionSelect.addEventListener("change", () => {
+            setActiveSessionName(sessionSelect.value, { updateUrl: true });
+        });
+        loadStageTargets();
+    }
+}
+
+function setActiveSessionName(value, options = {}) {
+    const nextSessionName = rememberShellSessionName(
+        String(value || "").trim() || "default",
+    );
+    if (sessionInput) {
+        sessionInput.value = nextSessionName;
+    }
+    if (sessionSelect && sessionSelect.value !== nextSessionName) {
+        sessionSelect.value = nextSessionName;
+    }
+    if (options.updateUrl) {
+        updateSessionUrl(nextSessionName);
+    }
+    return nextSessionName;
+}
+
+async function loadStageTargets() {
+    if (!sessionSelect) {
+        return;
+    }
+    try {
+        const response = await fetch("/api/channels/stage-targets");
+        if (!response.ok) {
+            throw await responseToError(response);
+        }
+        const payload = await response.json();
+        messengerStageTargets = Array.isArray(payload.targets) ? payload.targets : [];
+        renderStageTargetOptions(messengerStageTargets);
+    } catch (error) {
+        console.warn("Unable to load messenger targets", error);
+        messengerStageTargets = [];
+        renderStageTargetOptions([]);
+        setStatus("messenger.sessionTargetLoadFailed");
+    }
+}
+
+function renderStageTargetOptions(targets) {
+    if (!sessionSelect) {
+        return;
+    }
+    const currentSession = String((sessionInput && sessionInput.value) || "default").trim() || "default";
+    const options = buildStageTargetOptions(targets, currentSession);
+    sessionSelect.replaceChildren(...options);
+    sessionSelect.value = currentSession;
+}
+
+function buildStageTargetOptions(targets, currentSession) {
+    const options = [];
+    const seenSessions = new Set();
+    for (const target of targets) {
+        const sessionName = String((target && target.session_name) || "").trim();
+        if (!sessionName || seenSessions.has(sessionName)) {
+            continue;
+        }
+        seenSessions.add(sessionName);
+        const option = document.createElement("option");
+        option.value = sessionName;
+        option.textContent = stageTargetLabel(target);
+        options.push(option);
+    }
+
+    if (!seenSessions.has(currentSession)) {
+        const fallbackOption = document.createElement("option");
+        fallbackOption.value = currentSession;
+        fallbackOption.textContent = i18n.t("messenger.sessionFallback", {
+            session: currentSession,
+        });
+        options.unshift(fallbackOption);
+    }
+    return options;
+}
+
+function stageTargetLabel(target) {
+    const baseLabel = String(
+        (target && target.display_name) || (target && target.session_name) || "default",
+    );
+    if (target && target.enabled === false) {
+        return `${baseLabel} · ${i18n.t("channelTargets.disabled")}`;
+    }
+    if (target && target.running === false) {
+        return `${baseLabel} · ${i18n.t("channelTargets.notRunning")}`;
+    }
+    return baseLabel;
+}
+
+function updateSessionUrl(sessionName) {
+    try {
+        const url = new URL(window.location.href);
+        url.searchParams.set("session_name", sessionName);
+        window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+    } catch (_error) {
+        // Keeping the hidden input in sync is enough for the message flow.
+    }
 }
 
 function setStatus(key) {
@@ -235,6 +342,7 @@ function refreshLocalizedMessengerText() {
     document.querySelectorAll("[data-message-role]").forEach((label) => {
         label.textContent = messageRoleLabel(label.dataset.messageRole);
     });
+    renderStageTargetOptions(messengerStageTargets);
 }
 
 function messageRoleLabel(role) {

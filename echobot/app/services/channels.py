@@ -13,6 +13,7 @@ from ...channels import (
     save_channels_config,
 )
 from ...channels.platforms.telegram import TELEGRAM_AVAILABLE
+from ...runtime.sessions import normalize_session_name
 from ..schemas import CHANNEL_SECRET_FIELD_NAMES
 
 
@@ -63,6 +64,31 @@ class ChannelService:
 
     def get_definitions(self) -> list[dict[str, Any]]:
         return describe_channel_registry()
+
+    async def get_stage_targets(self) -> dict[str, list[dict[str, Any]]]:
+        config = await asyncio.to_thread(
+            load_channels_config,
+            self._config_path,
+        )
+        status = self._get_status()
+        targets: list[dict[str, Any]] = []
+        for channel_name, channel_config in config.to_dict().items():
+            target = _stage_target_from_channel_config(
+                channel_name,
+                channel_config,
+                status.get(channel_name, {}),
+            )
+            if target is not None:
+                targets.append(target)
+
+        targets.sort(
+            key=lambda target: (
+                not bool(target["selectable"]),
+                str(target["label"]).lower(),
+                str(target["session_name"]).lower(),
+            ),
+        )
+        return {"targets": targets}
 
     async def smoke_channel(self, channel_name: str) -> dict[str, Any]:
         normalized_channel_name = str(channel_name or "").strip().lower()
@@ -240,6 +266,63 @@ def _generic_smoke_result(channel_name: str, config: dict[str, Any]) -> dict[str
         ],
         "next_steps": [],
     }
+
+
+def _stage_target_from_channel_config(
+    channel_name: str,
+    channel_config: dict[str, Any],
+    status: dict[str, bool],
+) -> dict[str, Any] | None:
+    normalized_channel_name = str(channel_name or "").strip().lower()
+    if normalized_channel_name == "console":
+        return None
+    if get_channel_definition(normalized_channel_name) is None:
+        return None
+    if not bool(channel_config.get("mirror_to_stage")):
+        return None
+
+    configured = _channel_is_configured(normalized_channel_name, channel_config)
+    enabled = bool(channel_config.get("enabled")) or bool(status.get("enabled"))
+    running = bool(status.get("running"))
+    if not configured and not enabled and not running:
+        return None
+
+    session_name = _normalize_stage_session_name(channel_config)
+    label = _channel_label(normalized_channel_name)
+    return {
+        "channel": normalized_channel_name,
+        "label": label,
+        "session_name": session_name,
+        "display_name": f"{label} · {session_name}",
+        "configured": configured,
+        "enabled": enabled,
+        "running": running,
+        "selectable": configured or running,
+    }
+
+
+def _channel_is_configured(channel_name: str, config: dict[str, Any]) -> bool:
+    if channel_name == "telegram":
+        return _configured(config, "bot_token")
+    if channel_name == "discord":
+        return _configured(config, "bot_token") or _configured(config, "webhook_url")
+    if channel_name == "qq":
+        return _configured(config, "app_id") and _configured(config, "client_secret")
+    return bool(config.get("enabled"))
+
+
+def _normalize_stage_session_name(config: dict[str, Any]) -> str:
+    raw_session_name = str(config.get("stage_session_name") or "default")
+    try:
+        return normalize_session_name(raw_session_name)
+    except ValueError:
+        return "default"
+
+
+def _channel_label(channel_name: str) -> str:
+    if channel_name == "qq":
+        return "QQ"
+    return channel_name.replace("_", " ").title()
 
 
 def _check(name: str, ok: bool, message: str) -> dict[str, Any]:

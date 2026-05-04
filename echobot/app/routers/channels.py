@@ -40,6 +40,11 @@ async def get_channel_status(runtime=Depends(get_app_runtime)) -> dict[str, dict
     return await runtime.channel_service.get_status()
 
 
+@router.get("/channels/stage-targets")
+async def get_channel_stage_targets(runtime=Depends(get_app_runtime)) -> dict[str, Any]:
+    return await runtime.channel_service.get_stage_targets()
+
+
 @router.post("/channels/{channel_name}/smoke")
 async def smoke_channel(
     channel_name: str,

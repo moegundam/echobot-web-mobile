@@ -10,8 +10,8 @@
 
 | 層級 | Route | 頁面責任 | 不應承擔 |
 |---|---|---|---|
-| 前台 | `/stage?session_name=<name>` | 純顯示角色、字幕、TTS、Live2D lip sync，並接收 stage event 的 emotion/expression/motion | 不放設定、不做工具操作 |
-| 通訊 | `/messenger?session_name=<name>` | 輕量聊天入口，將最終回覆與可選 stage directive 推到 Stage | 預設不直接觸發工具型 Agent |
+| 前台 | `/stage?session_name=<name>` | 純顯示角色、字幕、TTS、Live2D lip sync，接收 stage event 的 emotion/expression/motion，並可選已設定通訊平台 target | 不放設定、不做工具操作 |
+| 通訊 | `/messenger?session_name=<name>` | 輕量聊天入口，可從 Telegram/Discord 等已設定 target 選擇前台 session，將最終回覆與可選 stage directive 推到 Stage | 預設不直接觸發工具型 Agent |
 | 中台 | `/console` | 操作員即時控制台，處理 session、角色卡、ASR/TTS、Live2D、jobs、CRON、HEARTBEAT | 不當文件庫或長期設定索引 |
 | 舊 alias | `/web` | 舊入口，等價於 `/console` | 不新增新功能 |
 | 後台 | `/admin` | 受保護索引、health、docs、設定與文件入口 | 不承擔即時舞台操作 |
@@ -96,8 +96,8 @@ This document fixes the EchoBot Web entrypoints, page responsibilities, `/consol
 
 | Layer | Route | Responsibility | Should not do |
 |---|---|---|---|
-| Front display | `/stage?session_name=<name>` | Character display, subtitles, TTS, Live2D lip sync, and stage-event emotion/expression/motion | No settings or tool operations |
-| Communication | `/messenger?session_name=<name>` | Lightweight chat entry and final reply plus optional stage directive publishing to Stage | No direct tool-capable Agent by default |
+| Front display | `/stage?session_name=<name>` | Character display, subtitles, TTS, Live2D lip sync, stage-event emotion/expression/motion, and configured messaging target selection | No settings or tool operations |
+| Communication | `/messenger?session_name=<name>` | Lightweight chat entry that can select the Stage session from configured Telegram/Discord-style targets, then publish final replies plus optional stage directives to Stage | No direct tool-capable Agent by default |
 | Console | `/console` | Real-time operator console for sessions, role cards, ASR/TTS, Live2D, jobs, CRON, HEARTBEAT | Not a documentation library or long-term settings index |
 | Legacy alias | `/web` | Existing alias for `/console` | No new feature ownership |
 | Admin | `/admin` | Protected index for health, docs, settings, and documentation pages | No live stage operation |
