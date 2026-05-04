@@ -235,6 +235,39 @@ class UpdateRoleRequest(BaseModel):
     prompt: str
 
 
+class CharacterProfileModel(BaseModel):
+    name: str
+    editable: bool = True
+    deletable: bool = True
+    source_path: str | None = None
+    prompt: str = ""
+    model_profile_id: str = ""
+    effective_model_profile_id: str = ""
+    model_profile_label: str = ""
+    chat_model: str = ""
+    tts_voice: str = ""
+    asr_model: str = ""
+    live2d_selection_key: str = ""
+
+
+class CharacterProfilesResponse(BaseModel):
+    active_model_profile_id: str = "a"
+    characters: list[CharacterProfileModel] = Field(default_factory=list)
+    model_profiles: list["ModelProfileModel"] = Field(default_factory=list)
+
+
+class CreateCharacterProfileRequest(BaseModel):
+    name: str
+    prompt: str
+    model_profile_id: str = ""
+
+
+class UpdateCharacterProfileRequest(BaseModel):
+    prompt: str | None = None
+    model_profile_id: str | None = None
+    clear_model_profile_binding: bool = False
+
+
 class StrictSchemaModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

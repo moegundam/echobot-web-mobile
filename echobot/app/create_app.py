@@ -19,6 +19,7 @@ from .auth import (
 from .routers import (
     attachments,
     chat,
+    character_profiles,
     channels,
     cron,
     health,
@@ -117,6 +118,7 @@ def create_app(
     app.include_router(sessions.router, prefix="/api")
     app.include_router(attachments.router, prefix="/api")
     app.include_router(chat.router, prefix="/api")
+    app.include_router(character_profiles.router, prefix="/api")
     app.include_router(cron.router, prefix="/api")
     app.include_router(heartbeat.router, prefix="/api")
     app.include_router(roles.router, prefix="/api")

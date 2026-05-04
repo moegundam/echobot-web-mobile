@@ -40,6 +40,7 @@ Original EchoBot mainly used `/web` as the operation page. This edition adds and
 | Admin | `/admin` | Admin index, health, API docs, jobs, and management pages |
 | Operation Guide | `/admin/guide` | Operation, setup, expected outcomes, failure signs, and troubleshooting |
 | Site Structure | `/admin/structure` | Route map, Console sections, and API namespace boundaries |
+| Characters | `/admin/characters` | Manage role prompts, model profile binding, voice, and Live2D summary |
 | Model Profiles | `/admin/models` | Create, rename, and activate role/model profiles |
 | Channels | `/admin/channels` | Planning entry for Telegram, QQ, LINE, Discord, WhatsApp, and gateway adapters |
 | Open WebUI Bridge | `/admin/openwebui` | Narrow OpenAPI bridge instructions for Open WebUI |
@@ -219,7 +220,7 @@ This branch has been verified with:
 - 10 routes × mobile/desktop × 3 languages browser checks.
 - i18n key coverage.
 - API route/auth tests.
-- Full pytest: `308 passed`.
+- Full pytest: `310 passed`.
 
 ## Project Rules
 

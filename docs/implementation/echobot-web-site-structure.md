@@ -31,6 +31,7 @@
 |---|---|---|
 | `/admin/structure` | 資訊架構 | 頁面地圖、Console 分區、API namespace 分組 |
 | `/admin/guide` | Runbook | 操作方式、預期成果、故障跡象、排除流程 |
+| `/admin/characters` | 角色設定 | 角色 prompt、模型 profile 綁定、TTS/ASR/Live2D 摘要 |
 | `/admin/models` | 設定頁 | 預設 A-E 並可持續新增的模型 profile、API key、地端模型 base URL |
 | `/admin/channels` | 通訊平台 | Telegram、QQ、LINE、Discord、WhatsApp 等外部 gateway 狀態與設定邊界 |
 | `/admin/openwebui` | Bridge 設定 | Open WebUI narrow tool bridge 狀態與接線說明 |
@@ -43,6 +44,7 @@
 | `/api/chat*` | `/console`、`/messenger` | chat、stream、jobs、trace、cancel/retry |
 | `/api/sessions*` | `/console`、`/messenger`、`/stage` | session lifecycle 與 current session |
 | `/api/stage/events` | `/stage`、`/messenger` | user/session-scoped stage event publish 與 SSE subscribe |
+| `/api/character-profiles*` | `/admin/characters` | 角色 prompt 與模型 profile 綁定的聚合 API |
 | `/api/model-profiles*` | `/admin/models`、`/console` | per-user model profile CRUD、啟用與 runtime apply |
 | `/api/openwebui/*` | `/admin/openwebui`、Open WebUI | bearer-token bridge 與窄 OpenAPI tools |
 | `/api/channels/*` | `/admin/channels` | 外部通訊平台設定與狀態 |
@@ -69,6 +71,7 @@ flowchart TD
 
     Admin --> Structure["/admin/structure site structure"]
     Admin --> Guide["/admin/guide operation guide"]
+    Admin --> Characters["/admin/characters character profiles"]
     Admin --> Models["/admin/models model profiles"]
     Admin --> Channels["/admin/channels platform gateways"]
     Admin --> OpenWebUI["/admin/openwebui bridge setup"]
@@ -78,6 +81,7 @@ flowchart TD
     Stage --> StageAPI["/api/stage/events SSE"]
     Messenger --> ChatAPI
     Messenger --> StageAPI
+    Characters --> CharacterAPI["/api/character-profiles*"]
     Models --> ModelAPI["/api/model-profiles*"]
     OpenWebUI --> BridgeAPI["/api/openwebui/*"]
 ```
@@ -113,6 +117,7 @@ This document fixes the EchoBot Web entrypoints, page responsibilities, `/consol
 |---|---|---|
 | `/admin/structure` | Information architecture | Page map, Console sections, API namespace grouping |
 | `/admin/guide` | Runbook | Operation flow, expected results, failure signs, troubleshooting |
+| `/admin/characters` | Character setup | Role prompt, model profile binding, TTS/ASR/Live2D summary |
 | `/admin/models` | Settings page | default A-E plus user-created model profiles, API keys, local model base URLs |
 | `/admin/channels` | Messaging gateways | External gateway status and setup boundaries for Telegram, QQ, LINE, Discord, WhatsApp, and later adapters |
 | `/admin/openwebui` | Bridge setup | Open WebUI narrow tool bridge status and wiring notes |
@@ -125,6 +130,7 @@ This document fixes the EchoBot Web entrypoints, page responsibilities, `/consol
 | `/api/chat*` | `/console`, `/messenger` | Chat, stream, jobs, trace, cancel/retry |
 | `/api/sessions*` | `/console`, `/messenger`, `/stage` | Session lifecycle and current session |
 | `/api/stage/events` | `/stage`, `/messenger` | User/session-scoped stage event publish and SSE subscribe |
+| `/api/character-profiles*` | `/admin/characters` | Composed API for role prompts and model profile bindings |
 | `/api/model-profiles*` | `/admin/models`, `/console` | Per-user model profile CRUD, activation, runtime apply |
 | `/api/openwebui/*` | `/admin/openwebui`, Open WebUI | Bearer-token bridge and narrow OpenAPI tools |
 | `/api/channels/*` | `/admin/channels` | External communication platform config and status |
@@ -151,6 +157,7 @@ flowchart TD
 
     Admin --> Structure["/admin/structure site structure"]
     Admin --> Guide["/admin/guide operation guide"]
+    Admin --> Characters["/admin/characters character profiles"]
     Admin --> Models["/admin/models model profiles"]
     Admin --> Channels["/admin/channels platform gateways"]
     Admin --> OpenWebUI["/admin/openwebui bridge setup"]
@@ -160,6 +167,7 @@ flowchart TD
     Stage --> StageAPI["/api/stage/events SSE"]
     Messenger --> ChatAPI
     Messenger --> StageAPI
+    Characters --> CharacterAPI["/api/character-profiles*"]
     Models --> ModelAPI["/api/model-profiles*"]
     OpenWebUI --> BridgeAPI["/api/openwebui/*"]
 ```

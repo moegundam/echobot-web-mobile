@@ -1,6 +1,7 @@
 from . import (
     attachments,
     chat,
+    character_profiles,
     channels,
     cron,
     health,
@@ -16,6 +17,7 @@ from . import (
 __all__ = [
     "attachments",
     "chat",
+    "character_profiles",
     "channels",
     "cron",
     "health",

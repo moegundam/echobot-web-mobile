@@ -127,6 +127,7 @@ textarea {
 .structure-root,
 .openwebui-root,
 .models-root,
+.characters-root,
 .channels-root {
     width: 100%;
     max-width: 100%;

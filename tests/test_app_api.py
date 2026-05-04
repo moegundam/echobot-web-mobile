@@ -1216,6 +1216,7 @@ class AppApiTests(unittest.TestCase):
                 "/admin/guide",
                 "/admin/structure",
                 "/admin/channels",
+                "/admin/characters",
                 "/admin/openwebui",
                 "/admin/models",
                 "/docs",
@@ -1243,10 +1244,12 @@ class AppApiTests(unittest.TestCase):
             self.assertIn("data-display-mode-switcher", authorized[4].text)
             self.assertIn('id="channels-root"', authorized[6].text)
             self.assertIn("data-display-mode-switcher", authorized[6].text)
-            self.assertIn('id="openwebui-root"', authorized[7].text)
+            self.assertIn('id="characters-root"', authorized[7].text)
             self.assertIn("data-display-mode-switcher", authorized[7].text)
-            self.assertIn('id="models-root"', authorized[8].text)
+            self.assertIn('id="openwebui-root"', authorized[8].text)
             self.assertIn("data-display-mode-switcher", authorized[8].text)
+            self.assertIn('id="models-root"', authorized[9].text)
+            self.assertIn("data-display-mode-switcher", authorized[9].text)
 
     def test_web_page_route_registry_serves_known_shells(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1272,6 +1275,7 @@ class AppApiTests(unittest.TestCase):
                 "/admin/guide": 'id="guide-root"',
                 "/admin/structure": 'id="structure-root"',
                 "/admin/channels": 'id="channels-root"',
+                "/admin/characters": 'id="characters-root"',
                 "/admin/openwebui": 'id="openwebui-root"',
                 "/admin/models": 'id="models-root"',
             }
@@ -1831,6 +1835,125 @@ class AppApiTests(unittest.TestCase):
                 encoding="utf-8",
             )
             self.assertNotIn("role-bound-key", stored_text)
+
+    def test_character_profiles_combine_role_prompt_and_model_binding(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            app = create_app(
+                runtime_options=RuntimeOptions(
+                    workspace=workspace,
+                    no_tools=True,
+                    no_skills=True,
+                    no_memory=True,
+                    no_heartbeat=True,
+                ),
+                channel_config_path=workspace / ".echobot" / "channels.json",
+                context_builder=build_test_context,
+            )
+
+            role_file = workspace / ".echobot" / "roles" / "stage-host.md"
+
+            with TestClient(app) as client:
+                profile = client.patch(
+                    "/api/model-profiles/b",
+                    json={
+                        "label": "Stage Host Voice",
+                        "chat": {
+                            "provider": "private-litellm",
+                            "model": "stage-host-chat",
+                            "base_url": "http://stage-host.test/v1",
+                            "api_key": "stage-host-key",
+                        },
+                        "tts": {
+                            "provider": "openai-compatible",
+                            "model": "tts-stage",
+                            "base_url": "http://tts.test/v1",
+                            "voice": "alloy-stage",
+                            "api_key": "tts-secret",
+                        },
+                        "asr": {
+                            "provider": "openai-transcriptions",
+                            "model": "whisper-stage",
+                            "base_url": "http://asr.test/v1",
+                            "language": "zh",
+                        },
+                        "live2d": {
+                            "selection_key": "builtin:hiyori_pro_en",
+                        },
+                    },
+                )
+                created = client.post(
+                    "/api/character-profiles",
+                    json={
+                        "name": "Stage Host",
+                        "prompt": "# Stage Host\n\nSpeak clearly.",
+                        "model_profile_id": "b",
+                    },
+                )
+                listed = client.get("/api/character-profiles")
+                detail = client.get("/api/character-profiles/stage-host")
+                switched = client.put(
+                    "/api/sessions/default/role",
+                    json={"role_name": "stage-host"},
+                )
+                updated = client.patch(
+                    "/api/character-profiles/stage-host",
+                    json={
+                        "prompt": "# Stage Host\n\nSpeak with warm energy.",
+                        "model_profile_id": "c",
+                    },
+                )
+                console_config = client.get("/api/web/config")
+                cleared = client.patch(
+                    "/api/character-profiles/stage-host",
+                    json={"clear_model_profile_binding": True},
+                )
+                deleted = client.delete("/api/character-profiles/stage-host")
+                listed_after_delete = client.get("/api/character-profiles")
+
+            self.assertEqual(200, profile.status_code)
+            self.assertEqual(200, created.status_code)
+            self.assertEqual("stage-host", created.json()["name"])
+            self.assertEqual("b", created.json()["model_profile_id"])
+            self.assertEqual("b", created.json()["effective_model_profile_id"])
+            self.assertEqual("Stage Host Voice", created.json()["model_profile_label"])
+            self.assertEqual("stage-host-chat", created.json()["chat_model"])
+            self.assertEqual("alloy-stage", created.json()["tts_voice"])
+            self.assertEqual("whisper-stage", created.json()["asr_model"])
+            self.assertEqual("builtin:hiyori_pro_en", created.json()["live2d_selection_key"])
+            self.assertTrue(str(created.json()["source_path"]).endswith("stage-host.md"))
+
+            self.assertEqual(200, listed.status_code)
+            listed_names = [item["name"] for item in listed.json()["characters"]]
+            self.assertEqual(["default", "stage-host"], listed_names)
+            self.assertEqual(5, len(listed.json()["model_profiles"]))
+
+            self.assertEqual(200, detail.status_code)
+            self.assertEqual("# Stage Host\n\nSpeak clearly.", detail.json()["prompt"])
+
+            self.assertEqual(200, switched.status_code)
+            self.assertEqual("stage-host", switched.json()["role_name"])
+
+            self.assertEqual(200, updated.status_code)
+            self.assertEqual("c", updated.json()["model_profile_id"])
+            self.assertEqual("# Stage Host\n\nSpeak with warm energy.", updated.json()["prompt"])
+
+            self.assertEqual(200, console_config.status_code)
+            self.assertEqual("c", console_config.json()["model_profiles"]["active_profile_id"])
+
+            self.assertEqual(200, cleared.status_code)
+            self.assertEqual("", cleared.json()["model_profile_id"])
+
+            self.assertEqual(200, deleted.status_code)
+            self.assertTrue(deleted.json()["deleted"])
+            self.assertEqual("stage-host", deleted.json()["name"])
+            self.assertFalse(role_file.exists())
+
+            self.assertEqual(200, listed_after_delete.status_code)
+            self.assertEqual(
+                ["default"],
+                [item["name"] for item in listed_after_delete.json()["characters"]],
+            )
 
     def test_openwebui_bridge_targets_user_scoped_stage_and_chat(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

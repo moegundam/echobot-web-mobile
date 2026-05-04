@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>EchoBot Characters</title>
+    <link rel="stylesheet" href="/web/assets/styles/shell-pages.css?v=site-public-6">
+</head>
+<body class="admin-page characters-page" data-page-title-key="characters.pageTitle">
+    <main id="characters-root" class="admin-root characters-root">
+        <header class="admin-header">
+            <div>
+                <h1 data-i18n-key="characters.heading">Characters</h1>
+                <p data-i18n-key="characters.description">Role prompt, model, voice, and Live2D routing.</p>
+            </div>
+            <div class="shell-header-controls">
+                <div class="language-switcher" data-language-switcher></div>
+                <div class="display-mode-switcher" data-display-mode-switcher></div>
+            </div>
+        </header>
+        <nav class="admin-grid guide-nav" aria-label="Character quick links" data-i18n-aria-label-key="characters.linksAria">
+            <a href="/admin" data-i18n-key="guide.backToAdmin">Back to Admin</a>
+            <a href="/console" data-i18n-key="admin.console">Console</a>
+            <a href="/admin/models" data-i18n-key="admin.modelProfiles">Model Profiles</a>
+            <a href="/admin/channels" data-i18n-key="admin.channels">Channels</a>
+            <a href="/admin/guide" data-i18n-key="admin.guide">Operation Guide</a>
+        </nav>
+        <section class="models-layout" aria-label="Character profile editor" data-i18n-aria-label-key="characters.editorAria">
+            <aside class="model-profile-sidebar">
+                <button id="character-profile-create" class="model-profile-create" type="button" data-i18n-key="characters.create">Add character</button>
+                <div id="character-profile-list" class="model-profile-list"></div>
+            </aside>
+            <form id="character-profile-form" class="model-profile-form">
+                <div class="model-profile-form-header">
+                    <div>
+                        <h2 id="character-profile-title">Character profile</h2>
+                        <p id="character-profile-status">loading...</p>
+                    </div>
+                    <div class="model-profile-actions">
+                        <button id="character-profile-save" type="submit" data-i18n-key="characters.save">Save</button>
+                        <button id="character-profile-delete" class="model-profile-delete" type="button" data-i18n-key="characters.delete">Delete</button>
+                    </div>
+                </div>
+                <div class="model-profile-field-grid">
+                    <label>
+                        <span data-i18n-key="characters.name">Character name</span>
+                        <input id="character-name" type="text" maxlength="80" autocomplete="off" data-i18n-placeholder-key="characters.namePlaceholder">
+                    </label>
+                    <label>
+                        <span data-i18n-key="characters.modelProfile">Model profile</span>
+                        <select id="character-model-profile"></select>
+                    </label>
+                </div>
+                <section class="model-profile-section">
+                    <h3 data-i18n-key="characters.prompt">Role prompt</h3>
+                    <textarea id="character-prompt" rows="14" data-i18n-placeholder-key="characters.promptPlaceholder"></textarea>
+                </section>
+                <section class="model-profile-section">
+                    <h3 data-i18n-key="characters.effectiveProfile">Effective profile</h3>
+                    <div id="character-effective-summary" class="model-role-bindings"></div>
+                </section>
+            </form>
+        </section>
+    </main>
+    <script type="module" src="/web/assets/characters-app.js?v=character-profile-1"></script>
+</body>
+</html>

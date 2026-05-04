@@ -40,6 +40,7 @@
 | 後台 Admin | `/admin` | 後台索引、health、API docs、jobs 與管理頁入口 |
 | 操作說明 | `/admin/guide` | 操作、設定、預期成果、故障判斷與排除流程 |
 | 網站結構 | `/admin/structure` | Route map、Console 分區、API namespace 邊界 |
+| 角色設定 | `/admin/characters` | 管理角色 prompt、模型 profile 綁定、語音與 Live2D 摘要 |
 | 模型設定 | `/admin/models` | 可新增、自定義名稱、啟用角色模型 profile |
 | 通訊平台 | `/admin/channels` | Telegram、QQ、LINE、Discord、WhatsApp 等 gateway 規劃入口 |
 | Open WebUI Bridge | `/admin/openwebui` | Open WebUI narrow OpenAPI bridge 接線說明 |
@@ -219,7 +220,7 @@ python -m pytest
 - 全站 10 個 route × 手機/桌面 × 3 語言瀏覽器檢查。
 - i18n key coverage。
 - API route/auth tests。
-- full pytest：`308 passed`。
+- full pytest：`310 passed`。
 
 ## 專案規矩
 
