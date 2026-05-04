@@ -9,7 +9,7 @@ from ..schemas import (
     CronJobsResponse,
     CronStatusResponse,
 )
-from ..state import get_app_runtime
+from ..state import get_app_runtime, require_admin_user
 
 
 router = APIRouter(tags=["cron"])
@@ -53,6 +53,7 @@ async def list_cron_jobs(
 async def delete_cron_job(
     job_id: str,
     runtime=Depends(get_app_runtime),
+    _admin_user: str = Depends(require_admin_user),
 ) -> CronDeleteResponse:
     if runtime.context is None:
         raise HTTPException(status_code=503, detail="EchoBot runtime is not ready")

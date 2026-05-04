@@ -5,7 +5,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 
 from ..schemas import channel_config_payload
-from ..state import get_app_runtime
+from ..state import get_app_runtime, require_admin_user
 
 
 router = APIRouter(tags=["channels"])
@@ -26,6 +26,7 @@ async def get_channel_config(runtime=Depends(get_app_runtime)) -> dict[str, Any]
 async def update_channel_config(
     raw_config: dict[str, Any],
     runtime=Depends(get_app_runtime),
+    _admin_user: str = Depends(require_admin_user),
 ) -> dict[str, Any]:
     try:
         updated = await runtime.channel_service.update_config(raw_config)

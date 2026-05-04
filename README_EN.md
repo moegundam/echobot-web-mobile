@@ -91,6 +91,7 @@ This edition adds trusted-header support so private-test data can be isolated by
 - When enabled, protected pages, API docs, `/api/*`, and the ASR WebSocket require a trusted user id.
 - Sessions, history, jobs, attachments, and settings are stored under `.echobot/users/<user_id>/...`.
 - Different users should not see each other's sessions, history, jobs, attachments, or Stage events.
+- `ECHOBOT_ADMIN_ALLOWLIST` can restrict high-risk mutation APIs for runtime, channels, roles, and model profiles.
 
 ### 6. Stage Event Broker
 
@@ -114,6 +115,8 @@ Security design:
 
 - The bridge uses a server-to-server Bearer token.
 - The full site `/openapi.json` is not exposed to Open WebUI.
+- By default, bridge calls require `target_user_id` or `ECHOBOT_OPENWEBUI_BRIDGE_USER_ID` so they do not write into the shared root runtime.
+- `ECHOBOT_OPENWEBUI_ALLOWED_TARGET_USERS` can restrict which user namespaces the bridge may target.
 - The default route mode is `chat_only`.
 - Operator-agent mode must be explicitly enabled before higher-risk routing is allowed.
 
@@ -216,7 +219,7 @@ This branch has been verified with:
 - 10 routes × mobile/desktop × 3 languages browser checks.
 - i18n key coverage.
 - API route/auth tests.
-- Full pytest: `292 passed`.
+- Full pytest: `308 passed`.
 
 ## Project Rules
 

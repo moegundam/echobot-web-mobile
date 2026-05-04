@@ -44,7 +44,7 @@
 | 8 | Local app startup | 已完成 | 修正 `LLM_TIMEOUT` slots 預設 bug；本機 app 已可用 dummy env 啟動 | `python -m echobot app`、`curl /api/health`、`curl /web`、`curl /docs` | 推送仍在進行 |
 | 9 | Cloudflare Tunnel 實際建立與 Access policy | 延後 | `cloudflared` 已安裝；尚未完成 Cloudflare browser login / origin cert，尚未建立 named tunnel / DNS route / Access app | `cloudflared tunnel ingress validate`、HTTPS `/web` | 依使用者指示先放後面；之後需要 Cloudflare 登入、hostname、Access email 名單 |
 | 10 | Open-LLM-VTuber 參考差距盤點 | 已完成 | 新增 reference gap note，明確列出 Live2D / ASR / TTS / voice UX 差距與第一階段取捨 | `docs/implementation/open-llm-vtuber-reference-gap.md` | 第二階段再評估桌寵/VTube Studio 類體驗 |
-| 11 | Full regression | 已完成 | 本輪全量 pytest 已通過：`292 passed`，含 Open WebUI bridge 與 Model Profiles 測試 | `.venv/bin/python -m pytest` | 無 |
+| 11 | Full regression | 已完成 | 本輪全量 pytest 已通過：`308 passed`，含 Open WebUI bridge、Model Profiles、channel secret redaction、admin allowlist、gateway user-scope 與 local model roleplay fallback 測試 | `.venv/bin/python -m pytest` | 無 |
 | 12 | Shell UI 語言切換 | 已完成 | `/stage`、`/messenger`、`/admin`、`/admin/guide`、`/admin/structure`、`/admin/channels`、`/admin/models`、`/admin/openwebui`、`/console` 新增共用 language switcher；預設英文，支援繁體中文與簡體中文，並以 `localStorage` 保存選擇 | `node --check`、trusted-route pytest、Chrome DevTools language smoke、mobile overflow smoke | 原大型 `/web`/`/console` 深層文案尚未全面 i18n，目前先補 console shell 與頂部操作文案 |
 | 13 | Admin 操作說明頁 | 已完成 | `/admin` 新增「操作說明」入口；`/admin/guide` 以三語說明頁面用途、操作流程、設定檢查、預期成果、故障判斷與排除流程 | `node --check echobot/app/web/guide-app.js`、trusted-route pytest | 後續可在 Cloudflare/真機長跑後補更多實測案例 |
 | 14 | Open WebUI 操作員 Bridge 介面 | 已完成本機介面 | 新增 `/admin/openwebui` 三語說明頁與 `/api/openwebui/*` narrow bridge；Open WebUI 可匯入專用 tool spec，但尚未實際接線 | `node --check`、`py_compile`、Open WebUI bridge pytest | 真正 Open WebUI 設定、bearer token 佈署與外部接線放後面 |
@@ -75,7 +75,7 @@
 | Mobile | 390x844 / 430x932 / 360x800 / 768x1024 無重疊 | 已完成 Chrome DevTools smoke |
 | iPhone | Safari 登入、麥克風、ASR、TTS、Live2D lip sync | 未完成真機 |
 | Android | Chrome 登入、麥克風、常開麥、ASR、TTS、Live2D lip sync | 未完成真機 |
-| Regression | 全量 pytest | 已完成，`292 passed` |
+| Regression | 全量 pytest | 已完成，`308 passed` |
 
 ### 需要使用者接手或確認的項目
 
@@ -133,7 +133,7 @@ Turn EchoBot into the private managed repo `moegundam/echobot-web-mobile`. The f
 | 8 | Local app startup | Done | Fixed the `LLM_TIMEOUT` slots default bug; local app starts with dummy env | `python -m echobot app`, `curl /api/health`, `curl /web`, `curl /docs` | Push still pending |
 | 9 | Create Cloudflare Tunnel and Access policy | Deferred | `cloudflared` is installed; Cloudflare browser login / origin cert is not complete; no named tunnel / DNS route / Access app yet | `cloudflared tunnel ingress validate`, HTTPS `/web` | Deferred by user request; later needs Cloudflare login, hostname, and Access email list |
 | 10 | Open-LLM-VTuber reference gap list | Done | Added a reference gap note covering Live2D / ASR / TTS / voice UX gaps and phase-1 scope | `docs/implementation/open-llm-vtuber-reference-gap.md` | Re-evaluate desktop pet / VTube Studio-like mode in phase 2 |
-| 11 | Full regression | Done | This round's full pytest passed: `292 passed`, including Open WebUI bridge and Model Profiles tests | `.venv/bin/python -m pytest` | None |
+| 11 | Full regression | Done | This round's full pytest passed: `308 passed`, including Open WebUI bridge, Model Profiles, channel secret redaction, admin allowlist, gateway user-scope, and local model roleplay fallback tests | `.venv/bin/python -m pytest` | None |
 | 12 | Shell UI language switcher | Done | `/stage`, `/messenger`, `/admin`, `/admin/guide`, `/admin/structure`, `/admin/channels`, `/admin/models`, `/admin/openwebui`, and `/console` now share a language switcher; default English, Traditional Chinese, and Simplified Chinese are supported, with the choice saved in `localStorage` | `node --check`, trusted-route pytest, Chrome DevTools language smoke, mobile overflow smoke | Full deep i18n for the large existing `/web`/`/console` console is not done yet; this adds console shell and top action labels first |
 | 13 | Admin operation guide page | Done | `/admin` now links to an Operation Guide; `/admin/guide` explains page roles, operation flow, configuration checklist, expected healthy results, failure signs, and troubleshooting in three languages | `node --check echobot/app/web/guide-app.js`, trusted-route pytest | Add more real Cloudflare and device long-run cases later |
 | 14 | Open WebUI operator bridge interface | Local interface done | Added `/admin/openwebui` in three languages and a narrow `/api/openwebui/*` bridge; Open WebUI can import the dedicated tool spec, but it has not been wired to a real Open WebUI instance yet | `node --check`, `py_compile`, Open WebUI bridge pytest | Real Open WebUI configuration, bearer-token deployment, and external wiring are deferred |
@@ -164,7 +164,7 @@ Turn EchoBot into the private managed repo `moegundam/echobot-web-mobile`. The f
 | Mobile | 390x844 / 430x932 / 360x800 / 768x1024 have no overlap | Chrome DevTools smoke done |
 | iPhone | Safari login, mic, ASR, TTS, Live2D lip sync | Real-device pending |
 | Android | Chrome login, mic, open mic, ASR, TTS, Live2D lip sync | Real-device pending |
-| Regression | Full pytest | Done, `292 passed` |
+| Regression | Full pytest | Done, `308 passed` |
 
 ### User Handoff Or Confirmation Needed
 

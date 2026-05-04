@@ -9,7 +9,7 @@ from ..schemas import (
     RoleSummaryModel,
     UpdateRoleRequest,
 )
-from ..state import get_app_runtime
+from ..state import get_app_runtime, require_admin_user
 
 
 router = APIRouter(tags=["roles"])
@@ -39,6 +39,7 @@ async def get_role(
 async def create_role(
     request: CreateRoleRequest,
     runtime=Depends(get_app_runtime),
+    _admin_user: str = Depends(require_admin_user),
 ) -> RoleDetailModel:
     try:
         card = await runtime.role_service.create_role(
@@ -55,6 +56,7 @@ async def update_role(
     role_name: str,
     request: UpdateRoleRequest,
     runtime=Depends(get_app_runtime),
+    _admin_user: str = Depends(require_admin_user),
 ) -> RoleDetailModel:
     try:
         card = await runtime.role_service.update_role(
@@ -70,6 +72,7 @@ async def update_role(
 async def delete_role(
     role_name: str,
     runtime=Depends(get_app_runtime),
+    _admin_user: str = Depends(require_admin_user),
 ) -> dict[str, object]:
     try:
         deleted_name = await runtime.role_service.delete_role(role_name)

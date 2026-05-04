@@ -980,6 +980,105 @@ class AppApiTests(unittest.TestCase):
             self.assertEqual(200, roles.status_code)
             self.assertEqual(["default"], [item["name"] for item in roles.json()])
 
+    def test_channel_config_api_redacts_gateway_secrets(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            config_path = workspace / ".echobot" / "channels.json"
+            app = create_app(
+                runtime_options=RuntimeOptions(
+                    workspace=workspace,
+                    no_tools=True,
+                    no_skills=True,
+                    no_memory=True,
+                    no_heartbeat=True,
+                ),
+                channel_config_path=config_path,
+                context_builder=build_test_context,
+            )
+
+            raw_config = {
+                "console": {"enabled": False, "allow_from": []},
+                "telegram": {
+                    "enabled": False,
+                    "allow_from": ["12345"],
+                    "bot_token": "telegram-secret-token",
+                    "proxy": "socks5://127.0.0.1:1080",
+                    "reply_to_message": True,
+                },
+                "qq": {
+                    "enabled": False,
+                    "allow_from": ["qq-user"],
+                    "app_id": "qq-app-id",
+                    "client_secret": "qq-client-secret",
+                },
+            }
+
+            with TestClient(app) as client:
+                updated = client.put("/api/channels/config", json=raw_config)
+                fetched = client.get("/api/channels/config")
+
+            self.assertEqual(200, updated.status_code)
+            self.assertEqual(200, fetched.status_code)
+            for payload in [updated.json(), fetched.json()]:
+                self.assertNotIn("telegram-secret-token", json.dumps(payload))
+                self.assertNotIn("qq-client-secret", json.dumps(payload))
+                self.assertEqual("", payload["telegram"]["bot_token"])
+                self.assertTrue(payload["telegram"]["bot_token_configured"])
+                self.assertEqual("", payload["qq"]["client_secret"])
+                self.assertTrue(payload["qq"]["client_secret_configured"])
+                self.assertEqual("socks5://127.0.0.1:1080", payload["telegram"]["proxy"])
+                self.assertEqual("qq-app-id", payload["qq"]["app_id"])
+
+            stored_text = config_path.read_text(encoding="utf-8")
+            self.assertIn("telegram-secret-token", stored_text)
+            self.assertIn("qq-client-secret", stored_text)
+
+    def test_channel_config_update_preserves_redacted_gateway_secrets(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            config_path = workspace / ".echobot" / "channels.json"
+            app = create_app(
+                runtime_options=RuntimeOptions(
+                    workspace=workspace,
+                    no_tools=True,
+                    no_skills=True,
+                    no_memory=True,
+                    no_heartbeat=True,
+                ),
+                channel_config_path=config_path,
+                context_builder=build_test_context,
+            )
+
+            raw_config = {
+                "console": {"enabled": False, "allow_from": []},
+                "telegram": {
+                    "enabled": False,
+                    "allow_from": ["12345"],
+                    "bot_token": "telegram-secret-token",
+                    "proxy": "socks5://127.0.0.1:1080",
+                    "reply_to_message": True,
+                },
+                "qq": {
+                    "enabled": False,
+                    "allow_from": ["qq-user"],
+                    "app_id": "qq-app-id",
+                    "client_secret": "qq-client-secret",
+                },
+            }
+
+            with TestClient(app) as client:
+                client.put("/api/channels/config", json=raw_config)
+                redacted = client.get("/api/channels/config").json()
+                redacted["telegram"]["proxy"] = "http://proxy.local:8080"
+                preserved = client.put("/api/channels/config", json=redacted)
+
+            self.assertEqual(200, preserved.status_code)
+            self.assertEqual("", preserved.json()["telegram"]["bot_token"])
+            stored_text = config_path.read_text(encoding="utf-8")
+            self.assertIn("telegram-secret-token", stored_text)
+            self.assertIn("qq-client-secret", stored_text)
+            self.assertIn("http://proxy.local:8080", stored_text)
+
     def test_trusted_user_header_is_required_when_enabled(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             workspace = Path(temp_dir)
@@ -1021,6 +1120,69 @@ class AppApiTests(unittest.TestCase):
             self.assertEqual("Trusted user header is invalid", invalid.json()["detail"])
             self.assertEqual(200, authorized.status_code)
             self.assertEqual("alpha@example.test", authorized.json()["trusted_user"])
+
+    def test_admin_allowlist_blocks_mutating_admin_apis(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+
+            with patch.dict(
+                os.environ,
+                {
+                    "ECHOBOT_TRUSTED_USER_HEADER_ENABLED": "true",
+                    "ECHOBOT_TRUSTED_USER_REQUIRED": "true",
+                    "ECHOBOT_ADMIN_ALLOWLIST": "admin@example.test",
+                },
+                clear=False,
+            ):
+                app = create_app(
+                    runtime_options=RuntimeOptions(
+                        workspace=workspace,
+                        no_tools=True,
+                        no_skills=True,
+                        no_memory=True,
+                        no_heartbeat=True,
+                    ),
+                    channel_config_path=workspace / ".echobot" / "channels.json",
+                    context_builder=build_test_context,
+                )
+
+            admin_headers = {DEFAULT_TRUSTED_USER_HEADER: "admin@example.test"}
+            user_headers = {DEFAULT_TRUSTED_USER_HEADER: "user@example.test"}
+            raw_config = {
+                "console": {"enabled": False, "allow_from": []},
+                "telegram": {"enabled": False, "allow_from": [], "bot_token": "secret"},
+                "qq": {"enabled": False, "allow_from": [], "client_secret": "secret"},
+            }
+
+            with TestClient(app) as client:
+                readonly = client.get("/api/channels/config", headers=user_headers)
+                blocked_channel_update = client.put(
+                    "/api/channels/config",
+                    headers=user_headers,
+                    json=raw_config,
+                )
+                blocked_runtime_update = client.patch(
+                    "/api/web/runtime",
+                    headers=user_headers,
+                    json={"file_write_enabled": True},
+                )
+                blocked_heartbeat_update = client.put(
+                    "/api/heartbeat",
+                    headers=user_headers,
+                    json={"content": "# HEARTBEAT.md\n\n- [ ] blocked\n"},
+                )
+                allowed_channel_update = client.put(
+                    "/api/channels/config",
+                    headers=admin_headers,
+                    json=raw_config,
+                )
+
+            self.assertEqual(200, readonly.status_code)
+            self.assertEqual(403, blocked_channel_update.status_code)
+            self.assertEqual("Admin access is required", blocked_channel_update.json()["detail"])
+            self.assertEqual(403, blocked_runtime_update.status_code)
+            self.assertEqual(403, blocked_heartbeat_update.status_code)
+            self.assertEqual(200, allowed_channel_update.status_code)
 
     def test_trusted_user_header_protects_product_routes_and_api_docs(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1186,6 +1348,13 @@ class AppApiTests(unittest.TestCase):
             )
             self.assertNotIn("/openapi.json", tool_spec.json()["paths"])
             self.assertNotIn("/api/health", tool_spec.json()["paths"])
+            paths = tool_spec.json()["paths"]
+            stage_schema = paths["/api/openwebui/stage/events"]["post"]["requestBody"]["content"]["application/json"]["schema"]
+            chat_schema = paths["/api/openwebui/chat"]["post"]["requestBody"]["content"]["application/json"]["schema"]
+            sessions_params = paths["/api/openwebui/sessions"]["get"]["parameters"]
+            self.assertIn("target_user_id", stage_schema["required"])
+            self.assertIn("target_user_id", chat_schema["required"])
+            self.assertTrue(sessions_params[0]["required"])
 
     def test_model_profiles_are_user_scoped_and_apply_to_console_runtime(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1415,6 +1584,78 @@ class AppApiTests(unittest.TestCase):
             )
             self.assertEqual("Profile B", beta_b_profile["label"])
 
+    def test_new_user_model_profiles_seed_from_parent_baseline(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+
+            with patch.dict(
+                os.environ,
+                {
+                    "ECHOBOT_TRUSTED_USER_HEADER_ENABLED": "true",
+                    "ECHOBOT_TRUSTED_USER_REQUIRED": "true",
+                    "LLM_API_KEY": "base-key",
+                    "LLM_MODEL": "base-chat-model",
+                    "LLM_BASE_URL": "http://base-llm.test/v1",
+                    "ECHOBOT_ASR_SHERPA_AUTO_DOWNLOAD": "false",
+                    "ECHOBOT_VAD_SILERO_AUTO_DOWNLOAD": "false",
+                },
+                clear=False,
+            ):
+                app = create_app(
+                    runtime_options=RuntimeOptions(
+                        workspace=workspace,
+                        no_tools=True,
+                        no_skills=True,
+                        no_memory=True,
+                        no_heartbeat=True,
+                    ),
+                    channel_config_path=workspace / ".echobot" / "channels.json",
+                    context_builder=build_test_context,
+                )
+
+                with TestClient(app) as client:
+                    runtime = app.state.runtime
+                    runtime.model_profile_service.update_profile(
+                        "b",
+                        {
+                            "label": "Parent GB10",
+                            "chat": {
+                                "model": "parent-gb10-model",
+                                "base_url": "http://parent-gb10.test/v1",
+                                "api_key": "parent-gb10-key",
+                            },
+                        },
+                    )
+                    runtime.model_profile_service.activate_profile("b")
+
+                    headers = {DEFAULT_TRUSTED_USER_HEADER: "fresh@example.test"}
+                    profiles = client.get("/api/model-profiles", headers=headers)
+                    config = client.get("/api/web/config", headers=headers)
+                    runtime = app.state.runtime
+                    user_runtime = next(
+                        item
+                        for item in runtime._user_runtimes.values()
+                        if item.user_id == "fresh@example.test"
+                    )
+
+            self.assertEqual(200, profiles.status_code)
+            self.assertEqual("b", profiles.json()["active_profile_id"])
+            seeded_profile = next(
+                item
+                for item in profiles.json()["profiles"]
+                if item["profile_id"] == "b"
+            )
+            self.assertEqual("Parent GB10", seeded_profile["label"])
+            self.assertEqual("parent-gb10-model", seeded_profile["chat"]["model"])
+            self.assertEqual("profile", seeded_profile["chat"]["api_key_source"])
+
+            self.assertEqual(200, config.status_code)
+            self.assertEqual("b", config.json()["model_profiles"]["active_profile_id"])
+            provider_settings = user_runtime.context.agent.provider.settings
+            self.assertEqual("parent-gb10-model", provider_settings.model)
+            self.assertEqual("http://parent-gb10.test/v1", provider_settings.base_url)
+            self.assertEqual("parent-gb10-key", provider_settings.api_key)
+
     def test_model_profile_role_bindings_apply_on_role_switch(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             workspace = Path(temp_dir)
@@ -1618,6 +1859,14 @@ class AppApiTests(unittest.TestCase):
 
                 auth_headers = {"Authorization": "Bearer bridge-secret"}
                 with TestClient(app) as client:
+                    missing_target = client.post(
+                        "/api/openwebui/chat",
+                        headers=auth_headers,
+                        json={
+                            "session_name": "demo",
+                            "prompt": "ping",
+                        },
+                    )
                     stage_event = client.post(
                         "/api/openwebui/stage/events",
                         headers=auth_headers,
@@ -1666,6 +1915,8 @@ class AppApiTests(unittest.TestCase):
                         "demo",
                     )
 
+            self.assertEqual(400, missing_target.status_code)
+            self.assertEqual("target_user_id is required", missing_target.json()["detail"])
             self.assertEqual(200, stage_event.status_code)
             self.assertEqual("assistant_final", stage_event.json()["kind"])
             self.assertEqual("openwebui", stage_event.json()["source"])
@@ -1683,6 +1934,70 @@ class AppApiTests(unittest.TestCase):
                 "Open WebUI operator-agent mode is disabled",
                 force_agent.json()["detail"],
             )
+
+    def test_openwebui_bridge_default_user_and_allowed_targets(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+
+            with patch.dict(
+                os.environ,
+                {
+                    "ECHOBOT_TRUSTED_USER_HEADER_ENABLED": "true",
+                    "ECHOBOT_TRUSTED_USER_REQUIRED": "true",
+                    "ECHOBOT_OPENWEBUI_BRIDGE_TOKEN": "bridge-secret",
+                    "ECHOBOT_OPENWEBUI_BRIDGE_USER_ID": "alpha@example.test",
+                    "ECHOBOT_OPENWEBUI_ALLOWED_TARGET_USERS": "alpha@example.test",
+                },
+                clear=False,
+            ):
+                app = create_app(
+                    runtime_options=RuntimeOptions(
+                        workspace=workspace,
+                        no_tools=True,
+                        no_skills=True,
+                        no_memory=True,
+                        no_heartbeat=True,
+                    ),
+                    channel_config_path=workspace / ".echobot" / "channels.json",
+                    context_builder=build_test_context,
+                )
+
+                auth_headers = {"Authorization": "Bearer bridge-secret"}
+                with TestClient(app) as client:
+                    default_user_chat = client.post(
+                        "/api/openwebui/chat",
+                        headers=auth_headers,
+                        json={
+                            "session_name": "demo",
+                            "prompt": "ping",
+                        },
+                    )
+                    disallowed_stage = client.post(
+                        "/api/openwebui/stage/events",
+                        headers=auth_headers,
+                        json={
+                            "target_user_id": "beta@example.test",
+                            "session_name": "demo",
+                            "text": "blocked",
+                        },
+                    )
+
+                    runtime = app.state.runtime
+                    alpha_history = runtime.stage_event_broker.history(
+                        user_storage_key("alpha@example.test"),
+                        "demo",
+                    )
+                    beta_history = runtime.stage_event_broker.history(
+                        user_storage_key("beta@example.test"),
+                        "demo",
+                    )
+
+            self.assertEqual(200, default_user_chat.status_code)
+            self.assertEqual("demo", default_user_chat.json()["session_name"])
+            self.assertEqual(403, disallowed_stage.status_code)
+            self.assertEqual("target_user_id is not allowed", disallowed_stage.json()["detail"])
+            self.assertEqual([], alpha_history)
+            self.assertEqual([], beta_history)
 
     def test_trusted_user_header_isolates_sessions_jobs_and_attachments(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

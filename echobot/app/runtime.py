@@ -125,6 +125,7 @@ class AppRuntime:
             self.context,
             self.bus,
             session_service=self.session_service,
+            runtime_for_user=self.for_user,
         )
         self.chat_service = ChatService(
             self.context.coordinator,
@@ -566,6 +567,8 @@ class UserScopedRuntime:
             self.context.session_store,
         )
         self.model_profile_service = ModelProfileService(self.storage_root)
+        if self.parent.model_profile_service is not None:
+            self.model_profile_service.seed_from(self.parent.model_profile_service)
         self.channel_service = self.parent.channel_service
         self.asr_service = self.parent._asr_service_builder(self.context.workspace)
         self.tts_service = self.parent._tts_service_builder(self.context.workspace)

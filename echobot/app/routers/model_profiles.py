@@ -11,7 +11,7 @@ from ..schemas import (
     SetRoleModelProfileBindingRequest,
     UpdateModelProfileRequest,
 )
-from ..state import get_app_runtime
+from ..state import get_app_runtime, require_admin_user
 
 
 router = APIRouter(tags=["model-profiles"])
@@ -28,6 +28,7 @@ async def list_model_profiles(runtime=Depends(get_app_runtime)) -> ModelProfiles
 async def create_model_profile(
     request: CreateModelProfileRequest,
     runtime=Depends(get_app_runtime),
+    _admin_user: str = Depends(require_admin_user),
 ) -> ModelProfileModel:
     _ensure_model_profiles_ready(runtime)
     try:
@@ -58,6 +59,7 @@ async def set_model_profile_role_binding(
     role_name: str,
     request: SetRoleModelProfileBindingRequest,
     runtime=Depends(get_app_runtime),
+    _admin_user: str = Depends(require_admin_user),
 ) -> ModelProfilesResponse:
     _ensure_model_profiles_ready(runtime)
     normalized_role_name = await _require_existing_role(runtime, role_name)
@@ -85,6 +87,7 @@ async def set_model_profile_role_binding(
 async def clear_model_profile_role_binding(
     role_name: str,
     runtime=Depends(get_app_runtime),
+    _admin_user: str = Depends(require_admin_user),
 ) -> ModelProfilesResponse:
     _ensure_model_profiles_ready(runtime)
     normalized_role_name = await _require_existing_role(runtime, role_name)
@@ -119,6 +122,7 @@ async def update_model_profile(
     profile_id: str,
     request: UpdateModelProfileRequest,
     runtime=Depends(get_app_runtime),
+    _admin_user: str = Depends(require_admin_user),
 ) -> ModelProfileModel:
     _ensure_model_profiles_ready(runtime)
     try:
@@ -143,6 +147,7 @@ async def update_model_profile(
 async def activate_model_profile(
     profile_id: str,
     runtime=Depends(get_app_runtime),
+    _admin_user: str = Depends(require_admin_user),
 ) -> ModelProfilesResponse:
     _ensure_model_profiles_ready(runtime)
     try:
@@ -164,6 +169,7 @@ async def activate_model_profile(
 async def delete_model_profile(
     profile_id: str,
     runtime=Depends(get_app_runtime),
+    _admin_user: str = Depends(require_admin_user),
 ) -> ModelProfilesResponse:
     _ensure_model_profiles_ready(runtime)
     try:

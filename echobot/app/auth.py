@@ -14,6 +14,9 @@ from ..naming import normalize_name_token
 DEFAULT_TRUSTED_USER_HEADER = "Cf-Access-Authenticated-User-Email"
 TRUSTED_USER_STATE_KEY = "echobot_user_id"
 MAX_TRUSTED_USER_ID_LENGTH = 320
+ADMIN_ALLOWLIST_ENV = "ECHOBOT_ADMIN_ALLOWLIST"
+ADMIN_USERS_ENV = "ECHOBOT_ADMIN_USERS"
+ADMIN_REQUIRED_ENV = "ECHOBOT_ADMIN_REQUIRED"
 OPENWEBUI_BRIDGE_PATHS = {
     "/api/openwebui/tools/openapi.json",
     "/api/openwebui/stage/events",
@@ -38,6 +41,32 @@ class TrustedUserConfig:
             or DEFAULT_TRUSTED_USER_HEADER
         )
         return cls(enabled=enabled, required=required, header_name=header_name)
+
+
+@dataclass(slots=True, frozen=True)
+class AdminAccessConfig:
+    allowlist: frozenset[str] = frozenset()
+    required: bool = False
+
+    @classmethod
+    def from_env(cls, env: Mapping[str, str] | None = None) -> "AdminAccessConfig":
+        source = os.environ if env is None else env
+        allowlist = frozenset(
+            _normalize_admin_user_id(item)
+            for item in _csv_values(source.get(ADMIN_ALLOWLIST_ENV, ""))
+            + _csv_values(source.get(ADMIN_USERS_ENV, ""))
+            if _normalize_admin_user_id(item)
+        )
+        required = _env_bool(source, ADMIN_REQUIRED_ENV, bool(allowlist))
+        return cls(allowlist=allowlist, required=required)
+
+    def is_admin(self, user_id: str) -> bool:
+        if "*" in self.allowlist:
+            return True
+        normalized_user_id = _normalize_admin_user_id(user_id)
+        if not self.required and not self.allowlist:
+            return True
+        return normalized_user_id in self.allowlist
 
 
 def is_protected_path(path: str) -> bool:
@@ -98,6 +127,18 @@ def user_storage_key(user_id: str) -> str:
 
 def user_storage_root(workspace: Path, user_id: str) -> Path:
     return workspace / ".echobot" / "users" / user_storage_key(user_id)
+
+
+def _normalize_admin_user_id(user_id: str) -> str:
+    return str(user_id or "").strip().lower()
+
+
+def _csv_values(raw_value: str) -> list[str]:
+    return [
+        item.strip()
+        for item in str(raw_value or "").split(",")
+        if item.strip()
+    ]
 
 
 def _env_bool(source: Mapping[str, str], name: str, default: bool) -> bool:

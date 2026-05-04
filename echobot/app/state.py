@@ -4,6 +4,7 @@ from fastapi import HTTPException, Request, WebSocket
 
 from .auth import (
     TRUSTED_USER_STATE_KEY,
+    AdminAccessConfig,
     TrustedUserConfig,
     is_protected_path,
     resolve_trusted_user_id,
@@ -17,6 +18,18 @@ async def get_app_runtime(request: Request):
     if user_id:
         return await runtime.for_user(user_id)
     return runtime
+
+
+async def require_admin_user(request: Request) -> str:
+    config = getattr(
+        request.app.state,
+        "admin_access_config",
+        AdminAccessConfig(),
+    )
+    user_id = getattr(request.state, TRUSTED_USER_STATE_KEY, "")
+    if config.is_admin(user_id):
+        return user_id
+    raise HTTPException(status_code=403, detail="Admin access is required")
 
 
 async def get_app_runtime_for_websocket(websocket: WebSocket):

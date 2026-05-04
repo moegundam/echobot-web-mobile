@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from ..runtime.bootstrap import RuntimeOptions
 from .auth import (
     TRUSTED_USER_STATE_KEY,
+    AdminAccessConfig,
     TrustedUserConfig,
     is_protected_path,
     resolve_trusted_user_id,
@@ -69,6 +70,7 @@ def create_app(
     )
     trusted_user_config = TrustedUserConfig.from_env()
     app.state.trusted_user_config = trusted_user_config
+    app.state.admin_access_config = AdminAccessConfig.from_env()
 
     @app.middleware("http")
     async def trusted_user_middleware(request, call_next):

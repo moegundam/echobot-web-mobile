@@ -3,6 +3,9 @@ from __future__ import annotations
 import asyncio
 import logging
 
+from collections.abc import Awaitable, Callable
+from typing import Any
+
 from ..channels import InboundMessage, MessageBus, OutboundMessage
 from ..channels.types import DeliveryTarget
 from ..commands.bindings import GatewayCommandContext, dispatch_gateway_command
@@ -37,6 +40,7 @@ class GatewayRuntime:
         route_session_store: RouteSessionStore | None = None,
         *,
         max_inflight_messages: int = 32,
+        runtime_for_user: Callable[[str], Awaitable[Any]] | None = None,
     ) -> None:
         self._context = context
         self._bus = bus
@@ -62,6 +66,9 @@ class GatewayRuntime:
         self._inflight_semaphore = asyncio.Semaphore(max(max_inflight_messages, 1))
         self._route_locks: dict[str, asyncio.Lock] = {}
         self._route_locks_guard = asyncio.Lock()
+        self._runtime_for_user = runtime_for_user
+        self._scoped_gateways: dict[str, GatewayRuntime] = {}
+        self._scoped_gateways_guard = asyncio.Lock()
 
     async def run(self) -> None:
         self._context.cron_service.on_job = self._build_cron_job_executor()
@@ -87,6 +94,11 @@ class GatewayRuntime:
             await self._shutdown()
 
     async def handle_inbound_message(self, message: InboundMessage) -> None:
+        scoped_gateway = await self._scoped_gateway_for_message(message)
+        if scoped_gateway is not None:
+            await scoped_gateway.handle_inbound_message(message)
+            return
+
         route_lock = await self._route_lock(message.route_key)
         async with route_lock:
             await self._handle_inbound_message(message)
@@ -388,6 +400,36 @@ class GatewayRuntime:
                 lock = asyncio.Lock()
                 self._route_locks[route_key] = lock
             return lock
+
+    async def _scoped_gateway_for_message(
+        self,
+        message: InboundMessage,
+    ) -> "GatewayRuntime | None":
+        if self._runtime_for_user is None:
+            return None
+        user_id = str(message.address.user_id or "").strip()
+        if not user_id:
+            return None
+
+        async with self._scoped_gateways_guard:
+            gateway = self._scoped_gateways.get(user_id)
+            if gateway is not None:
+                return gateway
+
+            runtime = await self._runtime_for_user(user_id)
+            context = getattr(runtime, "context", None)
+            session_service = getattr(runtime, "session_service", None)
+            if context is None or session_service is None:
+                raise RuntimeError("User-scoped gateway runtime is not ready")
+
+            gateway = GatewayRuntime(
+                context,
+                self._bus,
+                session_service=session_service,
+                max_inflight_messages=1,
+            )
+            self._scoped_gateways[user_id] = gateway
+            return gateway
 
 
 async def _resolve_gateway_files(

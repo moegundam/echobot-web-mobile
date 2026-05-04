@@ -193,6 +193,22 @@ class ModelProfileService:
                 normalized_id,
             )
 
+    def seed_from(self, source: "ModelProfileService") -> bool:
+        """Initialize this profile store from another store if it is still empty."""
+        if source is self:
+            return False
+
+        with source._lock:
+            source_state = deepcopy(source._load_state_unlocked())
+            source_secrets = deepcopy(source._load_secrets_unlocked())
+
+        with self._lock:
+            if self._path.exists():
+                return False
+            self._save_state_unlocked(source_state)
+            self._save_secrets_unlocked(source_secrets)
+            return True
+
     def _load_state_unlocked(self) -> dict[str, Any]:
         state = _default_state()
         if self._path.exists():

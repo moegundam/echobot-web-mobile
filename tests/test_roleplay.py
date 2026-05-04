@@ -119,6 +119,81 @@ class EmptyAfterStreamFailureProvider(LLMProvider):
         raise RuntimeError("stream roleplay exploded")
 
 
+class EmptyStreamProvider(LLMProvider):
+    async def generate(
+        self,
+        messages,
+        *,
+        tools=None,
+        tool_choice=None,
+        temperature=None,
+        max_tokens=None,
+    ) -> LLMResponse:
+        del messages, tools, tool_choice, temperature, max_tokens
+        return LLMResponse(
+            message=LLMMessage(role="assistant", content="non-stream recovery"),
+            model="empty-stream-provider",
+        )
+
+    async def stream_generate(
+        self,
+        messages,
+        *,
+        tools=None,
+        tool_choice=None,
+        temperature=None,
+        max_tokens=None,
+    ):
+        del messages, tools, tool_choice, temperature, max_tokens
+        if False:  # pragma: no cover
+            yield ""
+        return
+
+
+class EmptyThenSuccessProvider(LLMProvider):
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def generate(
+        self,
+        messages,
+        *,
+        tools=None,
+        tool_choice=None,
+        temperature=None,
+        max_tokens=None,
+    ) -> LLMResponse:
+        del messages, tools, tool_choice, temperature, max_tokens
+        self.calls += 1
+        if self.calls == 1:
+            return LLMResponse(
+                message=LLMMessage(
+                    role="assistant",
+                    content="",
+                    reasoning_content="hidden local-model reasoning",
+                ),
+                model="empty-then-success-provider",
+            )
+        return LLMResponse(
+            message=LLMMessage(role="assistant", content="visible recovery"),
+            model="empty-then-success-provider",
+        )
+
+    async def stream_generate(
+        self,
+        messages,
+        *,
+        tools=None,
+        tool_choice=None,
+        temperature=None,
+        max_tokens=None,
+    ):
+        del messages, tools, tool_choice, temperature, max_tokens
+        if False:  # pragma: no cover
+            yield ""
+        return
+
+
 class RoleplayEngineTests(unittest.IsolatedAsyncioTestCase):
     async def test_stream_delegated_ack_does_not_include_history(self) -> None:
         engine, role_card = self._build_engine()
@@ -185,6 +260,40 @@ class RoleplayEngineTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([], chunks)
         self.assertIn("Roleplay streaming failed", logs.output[0])
         self.assertEqual("stream roleplay exploded", str(logs.records[0].exc_info[1]))
+
+    async def test_stream_chat_reply_recovers_when_provider_stream_has_no_chunks(self) -> None:
+        engine, role_card = self._build_engine(EmptyStreamProvider())
+        session = self._session_with_history()
+        chunks: list[str] = []
+
+        async def on_chunk(chunk: str) -> None:
+            chunks.append(chunk)
+
+        result = await engine.stream_chat_reply(
+            session=session,
+            user_input="继续聊天",
+            role_card=role_card,
+            on_chunk=on_chunk,
+        )
+
+        self.assertEqual("non-stream recovery", result)
+        self.assertEqual(["non-stream recovery"], chunks)
+
+    async def test_chat_reply_retries_when_generation_has_no_visible_content(self) -> None:
+        provider = EmptyThenSuccessProvider()
+        engine, role_card = self._build_engine(provider)
+        session = self._session_with_history()
+
+        with self.assertLogs("echobot.orchestration.roleplay", level="WARNING") as logs:
+            result = await engine.chat_reply(
+                session=session,
+                user_input="继续聊天",
+                role_card=role_card,
+            )
+
+        self.assertEqual("visible recovery", result)
+        self.assertEqual(2, provider.calls)
+        self.assertIn("empty visible content", logs.output[0])
 
     async def test_delegated_ack_logs_warning_when_response_is_truncated(self) -> None:
         engine, role_card = self._build_engine(TruncatedProvider(""))

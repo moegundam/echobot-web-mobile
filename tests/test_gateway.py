@@ -14,7 +14,12 @@ from echobot.channels import (
     MessageBus,
     load_channels_config,
 )
-from echobot.gateway import DeliveryStore, GatewayRuntime, RouteSessionStore
+from echobot.gateway import (
+    DeliveryStore,
+    GatewayRuntime,
+    GatewaySessionService,
+    RouteSessionStore,
+)
 from echobot.orchestration import (
     ConversationCoordinator,
     DecisionEngine,
@@ -23,6 +28,7 @@ from echobot.orchestration import (
 )
 from echobot.providers.base import LLMProvider
 from echobot.runtime.bootstrap import RuntimeContext
+from echobot.runtime.session_service import SessionLifecycleService
 from echobot.runtime.settings import RuntimeConfigSnapshot, RuntimeControls
 from echobot.runtime.session_runner import SessionAgentRunner, SessionRunResult
 from echobot.runtime.sessions import SessionStore
@@ -180,11 +186,12 @@ def make_inbound(
     message_id: int | str = 1,
     channel: str = "telegram",
     chat_id: str = "12345",
+    user_id: str | None = None,
     image_urls: list[str] | None = None,
     files: list[dict[str, str]] | None = None,
 ) -> InboundMessage:
     return InboundMessage(
-        address=ChannelAddress(channel=channel, chat_id=chat_id),
+        address=ChannelAddress(channel=channel, chat_id=chat_id, user_id=user_id),
         sender_id="u1",
         text=text,
         image_urls=list(image_urls or []),
@@ -255,7 +262,79 @@ class RouteSessionStoreTests(unittest.TestCase):
             self.assertEqual("Personal", current.title)
 
 
+def _gateway_scope(workspace: Path):
+    context, session_store = build_test_runtime(workspace)
+    core_session_service = SessionLifecycleService(
+        context.session_store,
+        context.agent_session_store,
+        coordinator=context.coordinator,
+    )
+    session_service = GatewaySessionService(
+        core_session_service,
+        route_session_store=RouteSessionStore(workspace / "route_sessions.json"),
+        delivery_store=DeliveryStore(workspace / "delivery.json"),
+    )
+    return SimpleNamespace(context=context, session_service=session_service), session_store
+
+
 class GatewayRuntimeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_inbound_user_id_routes_to_user_scoped_runtime(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            parent_context, parent_session_store = build_test_runtime(workspace / "parent")
+            alpha_scope, alpha_session_store = _gateway_scope(workspace / "alpha")
+            beta_scope, beta_session_store = _gateway_scope(workspace / "beta")
+            bus = MessageBus()
+
+            async def runtime_for_user(user_id: str):
+                return {
+                    "alpha@example.test": alpha_scope,
+                    "beta@example.test": beta_scope,
+                }[user_id]
+
+            gateway = GatewayRuntime(
+                parent_context,
+                bus,
+                runtime_for_user=runtime_for_user,
+            )
+
+            try:
+                await gateway.handle_inbound_message(
+                    make_inbound(
+                        "hello alpha",
+                        message_id=1,
+                        chat_id="shared-chat",
+                        user_id="alpha@example.test",
+                    ),
+                )
+                alpha_outbound = await asyncio.wait_for(
+                    bus.consume_outbound(),
+                    timeout=0.2,
+                )
+
+                await gateway.handle_inbound_message(
+                    make_inbound(
+                        "hello beta",
+                        message_id=2,
+                        chat_id="shared-chat",
+                        user_id="beta@example.test",
+                    ),
+                )
+                beta_outbound = await asyncio.wait_for(
+                    bus.consume_outbound(),
+                    timeout=0.2,
+                )
+            finally:
+                await parent_context.coordinator.close()
+                await alpha_scope.context.coordinator.close()
+                await beta_scope.context.coordinator.close()
+
+            self.assertEqual("pong", alpha_outbound.text)
+            self.assertEqual("pong", beta_outbound.text)
+            self.assertEqual([], list(parent_session_store.base_dir.glob("*.jsonl")))
+            self.assertEqual(1, len(list(alpha_session_store.base_dir.glob("*.jsonl"))))
+            self.assertEqual(1, len(list(beta_session_store.base_dir.glob("*.jsonl"))))
+
     async def test_handle_inbound_message_routes_response_and_remembers_delivery(
         self,
     ) -> None:

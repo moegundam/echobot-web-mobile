@@ -8,7 +8,7 @@ from ...scheduling.heartbeat import (
     write_heartbeat_file,
 )
 from ..schemas import HeartbeatConfigResponse, UpdateHeartbeatRequest
-from ..state import get_app_runtime
+from ..state import get_app_runtime, require_admin_user
 
 
 router = APIRouter(tags=["heartbeat"])
@@ -35,6 +35,7 @@ async def get_heartbeat_config(
 async def update_heartbeat_config(
     request: UpdateHeartbeatRequest,
     runtime=Depends(get_app_runtime),
+    _admin_user: str = Depends(require_admin_user),
 ) -> HeartbeatConfigResponse:
     context = runtime.context
     if context is None:

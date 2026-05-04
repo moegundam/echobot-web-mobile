@@ -91,6 +91,7 @@ python -m echobot app --host 127.0.0.1 --port 8001
 - 啟用後，受保護頁面、API docs、`/api/*` 與 ASR WebSocket 都需要可信 user id。
 - session、history、jobs、attachments、settings 會寫入 `.echobot/users/<user_id>/...`。
 - 不同 user 不應互看 session、history、job、attachment 或 Stage event。
+- 可用 `ECHOBOT_ADMIN_ALLOWLIST` 限制 runtime、channel、role、model profile 等高風險 mutation API。
 
 ### 6. Stage Event Broker
 
@@ -114,6 +115,8 @@ python -m echobot app --host 127.0.0.1 --port 8001
 
 - Bridge 使用 server-to-server Bearer token。
 - 不暴露全站 `/openapi.json` 給 Open WebUI。
+- 預設要求 `target_user_id` 或 `ECHOBOT_OPENWEBUI_BRIDGE_USER_ID`，避免寫入 shared root runtime。
+- 可用 `ECHOBOT_OPENWEBUI_ALLOWED_TARGET_USERS` 限制 bridge 可操作的 user namespace。
 - 預設 `chat_only`。
 - operator-agent mode 必須明確啟用才允許更高風險路由。
 
@@ -216,7 +219,7 @@ python -m pytest
 - 全站 10 個 route × 手機/桌面 × 3 語言瀏覽器檢查。
 - i18n key coverage。
 - API route/auth tests。
-- full pytest：`292 passed`。
+- full pytest：`308 passed`。
 
 ## 專案規矩
 

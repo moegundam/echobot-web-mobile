@@ -24,7 +24,7 @@ from ..schemas import (
     WebStageConfigModel,
 )
 from ..services.web_console import Live2DUploadFile
-from ..state import get_app_runtime, get_app_runtime_for_websocket
+from ..state import get_app_runtime, get_app_runtime_for_websocket, require_admin_user
 from ...runtime.settings import RuntimeSettingsManager
 
 
@@ -66,6 +66,7 @@ async def get_web_config(
 async def update_web_runtime_config(
     request: UpdateWebRuntimeConfigRequest,
     runtime=Depends(get_app_runtime),
+    _admin_user: str = Depends(require_admin_user),
 ) -> WebRuntimeConfigModel:
     if runtime.context is None:
         raise HTTPException(status_code=503, detail="EchoBot runtime is not ready")
@@ -92,6 +93,7 @@ async def update_web_runtime_config(
 @router.post("/web/runtime/reset", response_model=WebRuntimeConfigModel)
 async def reset_web_runtime_config(
     runtime=Depends(get_app_runtime),
+    _admin_user: str = Depends(require_admin_user),
 ) -> WebRuntimeConfigModel:
     if runtime.context is None:
         raise HTTPException(status_code=503, detail="EchoBot runtime is not ready")

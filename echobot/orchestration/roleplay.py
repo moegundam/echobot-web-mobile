@@ -92,6 +92,12 @@ _USER_INPUT_REQUEST_PRESENTATION_INSTRUCTION = (
     "The exact follow-up request will be appended after your sentence."
 )
 
+_VISIBLE_CONTENT_RETRY_INSTRUCTION = (
+    "Your previous response did not include visible assistant text. "
+    "Reply again with only the final visible answer for the user. "
+    "Do not include reasoning, analysis, hidden notes, or tool-use claims."
+)
+
 
 @dataclass(slots=True)
 class ScheduledCronJobInfo:
@@ -398,6 +404,33 @@ class RoleplayEngine:
             return fallback_text
 
         content = response.message.content_text.strip()
+        if not content and response.finish_reason != "length":
+            logger.warning(
+                "Roleplay generation returned empty visible content for session '%s' with role '%s'; retrying once",
+                session.name,
+                role_card.name,
+            )
+            try:
+                response = await self._role_agent.ask(
+                    user_input,
+                    image_urls=image_urls,
+                    file_attachments=file_attachments,
+                    history=history,
+                    extra_system_messages=[
+                        *system_messages,
+                        _VISIBLE_CONTENT_RETRY_INSTRUCTION,
+                    ],
+                    temperature=self._default_temperature,
+                    max_tokens=self._resolve_max_tokens(max_tokens),
+                )
+            except RuntimeError:
+                logger.exception(
+                    "Roleplay empty-content retry failed for session '%s' with role '%s'",
+                    session.name,
+                    role_card.name,
+                )
+                return fallback_text
+            content = response.message.content_text.strip()
         if response.finish_reason == "length":
             action = "using fallback text" if not content else "returning truncated text"
             logger.warning(
@@ -468,7 +501,20 @@ class RoleplayEngine:
         content = "".join(chunks).strip()
         if content:
             return content
-        return await self._emit_fallback_text(fallback_text, on_chunk)
+        recovered_text = await self._generate(
+            session=session,
+            user_input=user_input,
+            image_urls=image_urls,
+            file_attachments=file_attachments,
+            role_card=role_card,
+            extra_system_messages=extra_system_messages,
+            fallback_text=fallback_text,
+            include_history=include_history,
+            max_tokens=max_tokens,
+        )
+        if recovered_text:
+            await on_chunk(recovered_text)
+        return recovered_text
 
     def _resolve_max_tokens(self, max_tokens: int | None) -> int | None:
         if max_tokens is None:

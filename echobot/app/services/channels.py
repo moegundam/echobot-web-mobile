@@ -11,6 +11,7 @@ from ...channels import (
     load_channels_config,
     save_channels_config,
 )
+from ..schemas import CHANNEL_SECRET_FIELD_NAMES
 
 
 ChannelReloadCallback = Callable[[ChannelsConfig], Awaitable[None]]
@@ -37,7 +38,16 @@ class ChannelService:
         return config.to_dict()
 
     async def update_config(self, raw_config: dict[str, Any]) -> dict[str, Any]:
-        config = ChannelsConfig.from_dict(raw_config)
+        existing_config = await asyncio.to_thread(
+            load_channels_config,
+            self._config_path,
+        )
+        config = ChannelsConfig.from_dict(
+            _merge_redacted_channel_config(
+                raw_config,
+                existing_config.to_dict(),
+            )
+        )
         await asyncio.to_thread(
             save_channels_config,
             config,
@@ -51,3 +61,53 @@ class ChannelService:
 
     def get_definitions(self) -> list[dict[str, Any]]:
         return describe_channel_registry()
+
+
+def _merge_redacted_channel_config(
+    raw_config: dict[str, Any],
+    existing_config: dict[str, Any],
+) -> dict[str, Any]:
+    merged: dict[str, Any] = {}
+    for channel_name, channel_config in dict(raw_config).items():
+        if not isinstance(channel_config, dict):
+            merged[channel_name] = channel_config
+            continue
+
+        existing_channel_config = existing_config.get(channel_name, {})
+        if not isinstance(existing_channel_config, dict):
+            existing_channel_config = {}
+
+        next_channel_config: dict[str, Any] = {}
+        for key, value in channel_config.items():
+            key_text = str(key)
+            if _is_secret_configured_marker(key_text):
+                continue
+            if _is_secret_field(key_text) and _is_empty_secret_value(value):
+                existing_value = existing_channel_config.get(key_text, "")
+                if not _is_empty_secret_value(existing_value):
+                    next_channel_config[key_text] = existing_value
+                    continue
+            next_channel_config[key_text] = value
+
+        for key, existing_value in existing_channel_config.items():
+            key_text = str(key)
+            if _is_secret_field(key_text) and key_text not in next_channel_config:
+                next_channel_config[key_text] = existing_value
+
+        merged[channel_name] = next_channel_config
+    return merged
+
+
+def _is_secret_configured_marker(field_name: str) -> bool:
+    suffix = "_configured"
+    if not field_name.endswith(suffix):
+        return False
+    return _is_secret_field(field_name[: -len(suffix)])
+
+
+def _is_secret_field(field_name: str) -> bool:
+    return field_name.strip().lower() in CHANNEL_SECRET_FIELD_NAMES
+
+
+def _is_empty_secret_value(value: object) -> bool:
+    return not str(value or "").strip()

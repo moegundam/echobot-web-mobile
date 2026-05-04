@@ -15,6 +15,8 @@ from ..auth import is_valid_trusted_user_id, user_storage_key
 BRIDGE_TOKEN_ENV = "ECHOBOT_OPENWEBUI_BRIDGE_TOKEN"
 BRIDGE_DEFAULT_USER_ENV = "ECHOBOT_OPENWEBUI_BRIDGE_USER_ID"
 BRIDGE_AGENT_ENABLED_ENV = "ECHOBOT_OPENWEBUI_OPERATOR_AGENT_ENABLED"
+BRIDGE_ALLOWED_TARGET_USERS_ENV = "ECHOBOT_OPENWEBUI_ALLOWED_TARGET_USERS"
+BRIDGE_REQUIRE_TARGET_USER_ENV = "ECHOBOT_OPENWEBUI_REQUIRE_TARGET_USER"
 
 
 @dataclass(slots=True, frozen=True)
@@ -22,6 +24,8 @@ class OpenWebUIBridgeSettings:
     token: str = ""
     default_user_id: str = ""
     operator_agent_enabled: bool = False
+    allowed_target_users: frozenset[str] = frozenset()
+    require_target_user: bool = True
 
     @classmethod
     def from_env(cls) -> "OpenWebUIBridgeSettings":
@@ -29,6 +33,12 @@ class OpenWebUIBridgeSettings:
             token=os.environ.get(BRIDGE_TOKEN_ENV, "").strip(),
             default_user_id=os.environ.get(BRIDGE_DEFAULT_USER_ENV, "").strip(),
             operator_agent_enabled=_env_bool(BRIDGE_AGENT_ENABLED_ENV, False),
+            allowed_target_users=frozenset(
+                _normalize_user_id(item)
+                for item in _csv_env(BRIDGE_ALLOWED_TARGET_USERS_ENV)
+                if _normalize_user_id(item)
+            ),
+            require_target_user=_env_bool(BRIDGE_REQUIRE_TARGET_USER_ENV, True),
         )
 
     @property
@@ -56,6 +66,8 @@ def openwebui_bridge_status() -> dict[str, Any]:
         "token_configured": settings.token_configured,
         "default_user_configured": bool(settings.default_user_id),
         "operator_agent_enabled": settings.operator_agent_enabled,
+        "allowed_target_users_configured": bool(settings.allowed_target_users),
+        "require_target_user": settings.require_target_user,
         "tool_spec_url": "/api/openwebui/tools/openapi.json",
         "stage_event_url": "/api/openwebui/stage/events",
         "chat_url": "/api/openwebui/chat",
@@ -70,9 +82,14 @@ def resolve_bridge_target_user(
 ) -> str:
     user_id = str(target_user_id or "").strip() or settings.default_user_id
     if not user_id:
+        if settings.require_target_user:
+            raise HTTPException(status_code=400, detail="target_user_id is required")
         return ""
     if not is_valid_trusted_user_id(user_id):
         raise HTTPException(status_code=400, detail="target_user_id is invalid")
+    allowed_users = settings.allowed_target_users
+    if allowed_users and _normalize_user_id(user_id) not in allowed_users:
+        raise HTTPException(status_code=403, detail="target_user_id is not allowed")
     return user_id
 
 
@@ -134,7 +151,11 @@ def build_openwebui_tools_openapi() -> dict[str, Any]:
                             "application/json": {
                                 "schema": {
                                     "type": "object",
-                                    "required": ["session_name", "text"],
+                                    "required": [
+                                        "session_name",
+                                        "text",
+                                        "target_user_id",
+                                    ],
                                     "properties": {
                                         "session_name": {"type": "string"},
                                         "text": {"type": "string"},
@@ -158,7 +179,11 @@ def build_openwebui_tools_openapi() -> dict[str, Any]:
                             "application/json": {
                                 "schema": {
                                     "type": "object",
-                                    "required": ["session_name", "prompt"],
+                                    "required": [
+                                        "session_name",
+                                        "prompt",
+                                        "target_user_id",
+                                    ],
                                     "properties": {
                                         "session_name": {"type": "string"},
                                         "prompt": {"type": "string"},
@@ -183,7 +208,7 @@ def build_openwebui_tools_openapi() -> dict[str, Any]:
                         {
                             "name": "target_user_id",
                             "in": "query",
-                            "required": False,
+                            "required": True,
                             "schema": {"type": "string"},
                         }
                     ],
@@ -217,3 +242,15 @@ def _env_bool(name: str, default: bool) -> bool:
     if not cleaned:
         return default
     return cleaned not in {"0", "false", "no", "off"}
+
+
+def _csv_env(name: str) -> list[str]:
+    return [
+        item.strip()
+        for item in os.environ.get(name, "").split(",")
+        if item.strip()
+    ]
+
+
+def _normalize_user_id(user_id: str) -> str:
+    return str(user_id or "").strip().lower()
