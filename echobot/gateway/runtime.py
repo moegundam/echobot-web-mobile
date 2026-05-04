@@ -30,6 +30,9 @@ from .session_service import GatewaySessionService
 logger = logging.getLogger(__name__)
 
 
+StageEventPublisher = Callable[[str, OutboundMessage], Awaitable[None]]
+
+
 class GatewayRuntime:
     def __init__(
         self,
@@ -41,6 +44,7 @@ class GatewayRuntime:
         *,
         max_inflight_messages: int = 32,
         runtime_for_user: Callable[[str], Awaitable[Any]] | None = None,
+        stage_event_publisher: StageEventPublisher | None = None,
     ) -> None:
         self._context = context
         self._bus = bus
@@ -67,6 +71,7 @@ class GatewayRuntime:
         self._route_locks: dict[str, asyncio.Lock] = {}
         self._route_locks_guard = asyncio.Lock()
         self._runtime_for_user = runtime_for_user
+        self._stage_event_publisher = stage_event_publisher
         self._scoped_gateways: dict[str, GatewayRuntime] = {}
         self._scoped_gateways_guard = asyncio.Lock()
 
@@ -177,12 +182,13 @@ class GatewayRuntime:
             if execution.delegated and not execution.completed:
                 try:
                     if not is_message_content_empty(content):
-                        await self._bus.publish_outbound(
+                        await self._publish_assistant_outbound(
+                            route_session.session_name,
                             OutboundMessage(
                                 address=message.address,
                                 content=content,
                                 metadata=dict(message.metadata),
-                            )
+                            ),
                         )
                 finally:
                     immediate_response_sent.set()
@@ -206,12 +212,13 @@ class GatewayRuntime:
         except RuntimeError as exc:
             immediate_response_sent.set()
             content = f"Request failed: {exc}"
-        await self._bus.publish_outbound(
+        await self._publish_assistant_outbound(
+            route_session.session_name,
             OutboundMessage(
                 address=message.address,
                 content=content,
                 metadata=dict(message.metadata),
-            )
+            ),
         )
 
     def _completion_callback_for_session(
@@ -297,13 +304,37 @@ class GatewayRuntime:
         next_metadata = dict(target.metadata)
         if metadata is not None:
             next_metadata.update(metadata)
-        await self._bus.publish_outbound(
+        await self._publish_assistant_outbound(
+            session_name,
             OutboundMessage(
                 address=target.address,
                 content=content,
                 metadata=next_metadata,
-            )
+            ),
         )
+
+    async def _publish_assistant_outbound(
+        self,
+        session_name: str,
+        outbound: OutboundMessage,
+    ) -> None:
+        await self._publish_stage_event(session_name, outbound)
+        await self._bus.publish_outbound(outbound)
+
+    async def _publish_stage_event(
+        self,
+        session_name: str,
+        outbound: OutboundMessage,
+    ) -> None:
+        if self._stage_event_publisher is None:
+            return
+        try:
+            await self._stage_event_publisher(session_name, outbound)
+        except Exception:
+            logger.exception(
+                "Failed to publish gateway response to stage for session %s",
+                session_name,
+            )
 
     async def _notify_latest(self, content: MessageContent) -> None:
         target = await self._session_service.get_latest_target()
@@ -427,6 +458,7 @@ class GatewayRuntime:
                 self._bus,
                 session_service=session_service,
                 max_inflight_messages=1,
+                stage_event_publisher=self._stage_event_publisher,
             )
             self._scoped_gateways[user_id] = gateway
             return gateway

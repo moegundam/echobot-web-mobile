@@ -33,7 +33,7 @@
 | `/admin/guide` | Runbook | 操作方式、預期成果、故障跡象、排除流程 |
 | `/admin/characters` | 角色設定 | 角色 prompt、模型 profile 綁定、TTS/ASR/Live2D 摘要、emotion-to-expression/motion map、單角色 package 匯入/匯出 |
 | `/admin/models` | 設定頁 | 預設 A-E 並可持續新增的模型 profile、API key、地端模型 base URL |
-| `/admin/channels` | 通訊平台 | Telegram、QQ、LINE、Discord、WhatsApp 等外部 gateway 狀態與設定邊界 |
+| `/admin/channels` | 通訊平台 | Telegram / Discord 設定、Stage 前台同步、smoke readiness，並保留 QQ/LINE/WhatsApp gateway 邊界 |
 | `/admin/openwebui` | Bridge 設定 | Open WebUI narrow tool bridge 狀態與接線說明 |
 
 ### API 分組
@@ -47,7 +47,7 @@
 | `/api/character-profiles*` | `/admin/characters` | 角色 prompt、模型 profile 綁定、emotion map 與單角色 package 匯入/匯出的聚合 API |
 | `/api/model-profiles*` | `/admin/models`、`/console` | per-user model profile CRUD、啟用與 runtime apply |
 | `/api/openwebui/*` | `/admin/openwebui`、Open WebUI | bearer-token bridge 與窄 OpenAPI tools |
-| `/api/channels/*` | `/admin/channels` | 外部通訊平台設定與狀態 |
+| `/api/channels/*` | `/admin/channels` | 外部通訊平台設定、Stage 同步設定、狀態與 admin-gated smoke checks |
 | `/api/roles*`、`/api/attachments*`、`/api/cron*`、`/api/heartbeat*` | `/console` | 支援角色卡、檔案、排程與週期任務 |
 
 ### Route 規則
@@ -55,7 +55,7 @@
 - 新增即時操作能力時，優先放 `/console`，並維持目前 session scope。
 - 新增長期設定或文件時，放 `/admin/<topic>`。
 - 新增展示能力時，優先放 `/stage`，但 Stage 不取得設定權限。
-- 新增外部通訊平台時，先建立 `/admin/channels` 設定頁，再接 runtime adapter。
+- 新增外部通訊平台時，先建立 `/admin/channels` 設定頁，再接 runtime adapter；正式互動入口的 assistant 回覆預設要可同步到 `/stage`。
 - `/web` 僅保留相容；新文件與導覽以 `/console` 為 canonical route。
 
 ### Site Map
@@ -119,7 +119,7 @@ This document fixes the EchoBot Web entrypoints, page responsibilities, `/consol
 | `/admin/guide` | Runbook | Operation flow, expected results, failure signs, troubleshooting |
 | `/admin/characters` | Character setup | Role prompt, model profile binding, TTS/ASR/Live2D summary, emotion-to-expression/motion maps, and single-character package import/export |
 | `/admin/models` | Settings page | default A-E plus user-created model profiles, API keys, local model base URLs |
-| `/admin/channels` | Messaging gateways | External gateway status and setup boundaries for Telegram, QQ, LINE, Discord, WhatsApp, and later adapters |
+| `/admin/channels` | Messaging gateways | Telegram / Discord settings, Stage frontend mirroring, smoke readiness, plus QQ/LINE/WhatsApp gateway boundaries |
 | `/admin/openwebui` | Bridge setup | Open WebUI narrow tool bridge status and wiring notes |
 
 ### API Groups
@@ -133,7 +133,7 @@ This document fixes the EchoBot Web entrypoints, page responsibilities, `/consol
 | `/api/character-profiles*` | `/admin/characters` | Composed API for role prompts, model profile bindings, emotion maps, and single-character package import/export |
 | `/api/model-profiles*` | `/admin/models`, `/console` | Per-user model profile CRUD, activation, runtime apply |
 | `/api/openwebui/*` | `/admin/openwebui`, Open WebUI | Bearer-token bridge and narrow OpenAPI tools |
-| `/api/channels/*` | `/admin/channels` | External communication platform config and status |
+| `/api/channels/*` | `/admin/channels` | External communication platform config, Stage mirroring config, status, and admin-gated smoke checks |
 | `/api/roles*`, `/api/attachments*`, `/api/cron*`, `/api/heartbeat*` | `/console` | Supporting role cards, files, schedules, and periodic tasks |
 
 ### Route Rules
@@ -141,7 +141,7 @@ This document fixes the EchoBot Web entrypoints, page responsibilities, `/consol
 - Put new real-time operation features in `/console`, scoped to the current session.
 - Put long-term settings or documentation in `/admin/<topic>`.
 - Put display-only features in `/stage`; Stage should not gain settings authority.
-- Add external communication platforms through `/admin/channels` first, then wire runtime adapters.
+- Add external communication platforms through `/admin/channels` first, then wire runtime adapters; assistant replies from production interaction entries should be able to mirror to `/stage` by default.
 - Keep `/web` only for compatibility; use `/console` as the canonical route in docs and navigation.
 
 ### Site Map

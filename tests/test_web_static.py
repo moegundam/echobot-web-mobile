@@ -165,6 +165,59 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn('"characters.exportPackage"', i18n_js)
         self.assertIn('"characters.importPackageTitle"', i18n_js)
 
+    def test_channels_page_has_edit_and_smoke_controls(self) -> None:
+        channels_js = (WEB_ROOT / "channels-app.js").read_text(encoding="utf-8")
+        i18n_js = (WEB_ROOT / "shell-i18n.js").read_text(encoding="utf-8")
+
+        self.assertIn('buildEditableChannelCard', channels_js)
+        self.assertIn('/api/channels/definitions', channels_js)
+        self.assertIn('/api/channels/config', channels_js)
+        self.assertIn('/api/channels/${encodeURIComponent(channelName)}/smoke', channels_js)
+        self.assertIn('i18n.t("channels.saveChanges")', channels_js)
+        self.assertIn('i18n.t("channels.reload")', channels_js)
+        self.assertIn('i18n.t("channels.smokeTest")', channels_js)
+
+        self.assertIn('"channels.saveChanges"', i18n_js)
+        self.assertIn('"channels.reload"', i18n_js)
+        self.assertIn('"channels.smokeTest"', i18n_js)
+
+    def test_channels_i18n_keys_cover_multiple_languages(self) -> None:
+        i18n_js = (WEB_ROOT / "shell-i18n.js").read_text(encoding="utf-8")
+        required_keys = [
+            "channels.fieldEnabled",
+            "channels.fieldAllowFrom",
+            "channels.fieldAllowFromPlaceholder",
+            "channels.fieldMirrorToStage",
+            "channels.fieldStageSessionName",
+            "channels.fieldBotToken",
+            "channels.fieldProxy",
+            "channels.fieldReplyToMessage",
+            "channels.fieldWebhookSecret",
+            "channels.fieldWebhookUrl",
+            "channels.fieldChannelId",
+            "channels.fieldApiId",
+            "channels.fieldAppId",
+            "channels.fieldApplicationId",
+            "channels.fieldGuildId",
+            "channels.secretConfigured",
+            "channels.secretNotConfigured",
+            "channels.saveChanges",
+            "channels.reload",
+            "channels.smokeTest",
+            "channels.saving",
+            "channels.saved",
+            "channels.saveFailed",
+            "channels.smokeRunning",
+            "channels.smokeStarted",
+            "channels.smokeOk",
+            "channels.smokeFailed",
+            "channels.ok",
+            "channels.fail",
+            "channels.unknown",
+        ]
+        for key in required_keys:
+            self.assertGreaterEqual(i18n_js.count(f'"{key}"'), 3)
+
 
 if __name__ == "__main__":
     unittest.main()

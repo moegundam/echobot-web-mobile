@@ -42,7 +42,7 @@
 | 網站結構 | `/admin/structure` | Route map、Console 分區、API namespace 邊界 |
 | 角色設定 | `/admin/characters` | 管理角色 prompt、模型 profile 綁定、語音、Live2D 摘要、emotion map 與角色 package 匯入/匯出 |
 | 模型設定 | `/admin/models` | 可新增、自定義名稱、啟用角色模型 profile |
-| 通訊平台 | `/admin/channels` | Telegram、QQ、LINE、Discord、WhatsApp 等 gateway 規劃入口 |
+| 通訊平台 | `/admin/channels` | Telegram / Discord 設定與 smoke 驗證，QQ/LINE/WhatsApp 等 gateway 管理入口 |
 | Open WebUI Bridge | `/admin/openwebui` | Open WebUI narrow OpenAPI bridge 接線說明 |
 
 ### 2. 手機與桌面顯示模式
@@ -142,7 +142,19 @@ python -m echobot app --host 127.0.0.1 --port 8001
 - 匯入時可指定新角色名稱，也可選擇覆蓋既有角色。
 - v1 使用 JSON package，不打包 Live2D asset 檔案；模型 API key 仍需在 `/admin/models` 補填。
 
-### 10. 部署與架構文件
+### 10. Channels 管理頁
+
+`/admin/channels` 已從只讀規劃頁升級為通訊平台設定入口：
+
+- Telegram 可設定 enabled、allow list、bot token、proxy 與 reply-to-message。
+- Discord 可設定 enabled、allow list、bot token、webhook URL、webhook secret、application/guild/channel id。
+- Secret 欄位在 API 與 UI 中只顯示 configured 狀態，不回傳明文。
+- `POST /api/channels/{channel}/smoke` 提供安全的本機 readiness check，不會把 token 回傳到 response。
+- Telegram polling runtime 已做過本機 bot E2E smoke；測試 token 只放在 repo 外的 ignored runtime config，不寫入版本庫。
+- 正式通訊 gateway 可設定 `mirror_to_stage` 與 `stage_session_name`；Telegram 回覆已驗證會同步顯示在 `/stage` 前台。
+- Discord 目前是 config/smoke-ready，runtime adapter 仍需後續切片才會正式接收 Discord 訊息。
+
+### 11. 部署與架構文件
 
 新增專案規劃、網站結構與參考文件：
 
@@ -158,12 +170,12 @@ python -m echobot app --host 127.0.0.1 --port 8001
 - `/stage`、`/messenger`、`/console`、`/admin` 與後台說明/結構/模型/Open WebUI/channels 頁面已建立。
 - 英文、繁體中文、簡體中文語言切換已套用到靜態頁面與主要動態 UI。
 - 手機/平板/桌面顯示模式已加入，並驗證 360x800、390x844、430x932、768x1024 viewport 不應水平溢出。
-- Cloudflare Local Tunnel、trusted-user、Stage Event Broker、Open WebUI bridge API、Model Profiles 的第一版接口與文件已建立。
+- Cloudflare Local Tunnel、trusted-user、Stage Event Broker、Open WebUI bridge API、Model Profiles、Character Packages 與 Channels 設定/smoke 的第一版接口與文件已建立。
 - 公開前安全預設已調整為 `ECHOBOT_SHELL_SAFETY_MODE=workspace-write`。
 
 尚未完成或仍屬規劃中的部分：
 
-- Telegram 與 QQ 已有 built-in runtime adapter；`/admin/channels` 目前偏向狀態與規劃入口，尚未完成公開內測等級的 token/webhook 管理 UI。LINE、Discord、WhatsApp 仍屬規劃中 adapter。
+- Telegram 與 QQ 已有 built-in runtime adapter；`/admin/channels` 已可保存 Telegram / Discord 設定並做 smoke readiness，Telegram 本機 bot polling E2E 與前台同步已通過。Discord、LINE、WhatsApp 正式 runtime adapter 仍屬規劃中。
 - Open WebUI bridge 已有 EchoBot 端 narrow API 與說明頁，但尚未要求使用者實際接入 Open WebUI。
 - `/admin` 第一版偏向索引、說明與狀態檢視，還不是完整 production SaaS 管理後台。
 - Stage / Live2D / ASR / TTS 已有 v1 整合與本機 smoke；真機麥克風與長時間語音互動仍需在 HTTPS + 真機環境逐項驗收。
@@ -231,7 +243,7 @@ python -m pytest
 - 全站 10 個 route × 手機/桌面 × 3 語言瀏覽器檢查。
 - i18n key coverage。
 - API route/auth tests。
-- full pytest：`313 passed`。
+- full pytest：`320 passed`。
 
 ## 專案規矩
 

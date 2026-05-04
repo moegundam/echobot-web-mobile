@@ -38,3 +38,15 @@ async def update_channel_config(
 @router.get("/channels/status")
 async def get_channel_status(runtime=Depends(get_app_runtime)) -> dict[str, dict[str, bool]]:
     return await runtime.channel_service.get_status()
+
+
+@router.post("/channels/{channel_name}/smoke")
+async def smoke_channel(
+    channel_name: str,
+    runtime=Depends(get_app_runtime),
+    _admin_user: str = Depends(require_admin_user),
+) -> dict[str, Any]:
+    try:
+        return await runtime.channel_service.smoke_channel(channel_name)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Unknown channel") from exc

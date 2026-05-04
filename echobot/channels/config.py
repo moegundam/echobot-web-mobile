@@ -13,6 +13,8 @@ DEFAULT_CHANNEL_CONFIG_PATH = Path(".echobot/channels.json")
 class BaseChannelConfig:
     enabled: bool = False
     allow_from: list[str] = field(default_factory=list)
+    mirror_to_stage: bool = False
+    stage_session_name: str = ""
 
 
 @dataclass(slots=True)
@@ -22,13 +24,29 @@ class ConsoleChannelConfig(BaseChannelConfig):
 
 @dataclass(slots=True)
 class TelegramChannelConfig(BaseChannelConfig):
+    mirror_to_stage: bool = True
+    stage_session_name: str = "default"
     bot_token: str = ""
     proxy: str = ""
     reply_to_message: bool = False
 
 
 @dataclass(slots=True)
+class DiscordChannelConfig(BaseChannelConfig):
+    mirror_to_stage: bool = True
+    stage_session_name: str = "default"
+    bot_token: str = ""
+    webhook_url: str = ""
+    webhook_secret: str = ""
+    application_id: str = ""
+    guild_id: str = ""
+    channel_id: str = ""
+
+
+@dataclass(slots=True)
 class QQChannelConfig(BaseChannelConfig):
+    mirror_to_stage: bool = True
+    stage_session_name: str = "default"
     app_id: str = ""
     client_secret: str = ""
 

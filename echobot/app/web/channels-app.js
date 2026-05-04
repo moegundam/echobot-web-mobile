@@ -4,14 +4,54 @@ import { initShellSessionLinks } from "./shell-session-links.js?v=site-public-6"
 
 const PLANNED_CHANNELS = [
     { name: "line", label: "LINE" },
-    { name: "discord", label: "Discord" },
     { name: "whatsapp", label: "WhatsApp" },
 ];
+
+const EDITABLE_CHANNELS = new Set(["telegram", "discord"]);
+
+const FALLBACK_FIELDS = {
+    telegram: [
+        { name: "allow_from", kind: "textarea" },
+        { name: "mirror_to_stage", kind: "bool" },
+        { name: "stage_session_name", kind: "text" },
+        { name: "bot_token", kind: "secret" },
+        { name: "proxy", kind: "text" },
+        { name: "reply_to_message", kind: "bool" },
+    ],
+    discord: [
+        { name: "allow_from", kind: "textarea" },
+        { name: "mirror_to_stage", kind: "bool" },
+        { name: "stage_session_name", kind: "text" },
+        { name: "bot_token", kind: "secret" },
+        { name: "webhook_url", kind: "text" },
+        { name: "webhook_secret", kind: "secret" },
+        { name: "application_id", kind: "text" },
+        { name: "guild_id", kind: "text" },
+        { name: "channel_id", kind: "text" },
+    ],
+};
+
+const FIELD_LABEL_KEYS = {
+    enabled: "channels.fieldEnabled",
+    allow_from: "channels.fieldAllowFrom",
+    mirror_to_stage: "channels.fieldMirrorToStage",
+    stage_session_name: "channels.fieldStageSessionName",
+    bot_token: "channels.fieldBotToken",
+    proxy: "channels.fieldProxy",
+    reply_to_message: "channels.fieldReplyToMessage",
+    webhook_secret: "channels.fieldWebhookSecret",
+    webhook_url: "channels.fieldWebhookUrl",
+    channel_id: "channels.fieldChannelId",
+    api_id: "channels.fieldApiId",
+    app_id: "channels.fieldAppId",
+    application_id: "channels.fieldApplicationId",
+    guild_id: "channels.fieldGuildId",
+};
 
 const channelText = {
     en: {
         builtInTitle: "Available runtime channels",
-        builtInBody: "These channels already exist in the EchoBot runtime registry. This page is read-only for now so secrets are not entered into an unfinished UI.",
+        builtInBody: "Telegram and Discord are editable here for configuration and smoke testing. Other channels remain in a read-only state on this page.",
         plannedTitle: "Planned messaging integrations",
         plannedBody: "These gateways should be added here before they are wired to runtime adapters.",
         rulesTitle: "Integration rules",
@@ -25,12 +65,13 @@ const channelText = {
         descriptions: {
             console: "Local console output channel for smoke testing.",
             telegram: "Telegram bot polling channel.",
+            discord: "Discord bot channel configuration and polling/webhook integration.",
             qq: "QQ official bot direct-message channel.",
         },
     },
     "zh-Hant": {
         builtInTitle: "目前可用 runtime channels",
-        builtInBody: "這些 channel 已存在於 EchoBot runtime registry。此頁目前先做只讀狀態與設定邊界，避免在未完成 UI 中輸入 secrets。",
+        builtInBody: "Telegram 與 Discord 在此頁可編輯並可做 smoke test；其他 channel 目前仍維持唯讀。",
         plannedTitle: "規劃中的通訊平台整合",
         plannedBody: "這些 gateway 應先在此頁建立設定邊界，再接 runtime adapter。",
         rulesTitle: "整合規則",
@@ -44,12 +85,13 @@ const channelText = {
         descriptions: {
             console: "本機 console output channel，用於 smoke test。",
             telegram: "Telegram bot polling channel。",
+            discord: "Discord bot 頻道設定與 webhook/polling 整合。",
             qq: "QQ 官方 bot direct-message channel。",
         },
     },
     "zh-Hans": {
         builtInTitle: "当前可用 runtime channels",
-        builtInBody: "这些 channel 已存在于 EchoBot runtime registry。此页目前先做只读状态与设置边界，避免在未完成 UI 中输入 secrets。",
+        builtInBody: "Telegram 与 Discord 在此页可编辑并可做 smoke test；其他 channel 目前仍保持只读。",
         plannedTitle: "规划中的通讯平台整合",
         plannedBody: "这些 gateway 应先在此页建立设置边界，再接 runtime adapter。",
         rulesTitle: "整合规则",
@@ -57,12 +99,13 @@ const channelText = {
         rules: [
             "每个新平台先在此页补状态、设置字段与 smoke-test checklist。",
             "Bot token 与 secrets 放 repo 外；UI 必须遮罩，不回显明文 token。",
-            "外部使用者流量默认 chat-only，等 approval gate 完成后才开工具型 Agent。",
-            "接收 inbound message 前必须验证 webhook 签章或 polling 身分。",
+            "外部用户流量默认 chat-only，等 approval gate 完成后才开工具型 Agent。",
+            "接收 inbound message 前必须验证 webhook 签章或 polling 身份。",
         ],
         descriptions: {
             console: "本机 console output channel，用于 smoke test。",
             telegram: "Telegram bot polling channel。",
+            discord: "Discord bot 频道配置与 webhook/polling 整合。",
             qq: "QQ 官方 bot direct-message channel。",
         },
     },
@@ -74,6 +117,10 @@ const state = {
     status: {},
     error: "",
     loaded: false,
+    saving: false,
+    smokeInFlight: false,
+    messages: {},
+    smokeResults: {},
 };
 
 const statusGrid = document.getElementById("channels-status-grid");
@@ -160,28 +207,36 @@ function renderContent() {
     if (!contentRoot) {
         return;
     }
-    const content = currentText();
+    const builtInCards = state.definitions.map((definition) => {
+        const channelName = String(definition.name || "");
+        if (EDITABLE_CHANNELS.has(channelName)) {
+            return buildEditableChannelCard(definition);
+        }
+        return buildChannelCardFromDefinition(definition);
+    });
+    const builtInText = currentText();
+
     contentRoot.replaceChildren(
         buildChannelSection(
-            content.builtInTitle,
-            content.builtInBody,
-            state.definitions.map((definition) => channelCardFromDefinition(definition)),
+            builtInText.builtInTitle,
+            builtInText.builtInBody,
+            builtInCards,
         ),
         buildChannelSection(
-            content.plannedTitle,
-            content.plannedBody,
-            PLANNED_CHANNELS.map((channel) => plannedChannelCard(channel)),
+            builtInText.plannedTitle,
+            builtInText.plannedBody,
+            PLANNED_CHANNELS.map(plannedChannelCard),
         ),
-        buildRuleSection(content),
+        buildRuleSection(builtInText),
     );
 }
 
-function channelCardFromDefinition(definition) {
+function buildChannelCardFromDefinition(definition) {
     const channelName = String(definition.name || "");
     const fields = Array.isArray(definition.config_fields)
         ? definition.config_fields
         : [];
-    return {
+    return buildChannelCard({
         label: channelLabel(channelName),
         owner: channelConfig(channelName).enabled
             ? i18n.t("channels.enabled")
@@ -189,22 +244,304 @@ function channelCardFromDefinition(definition) {
         route: `/api/channels/config:${channelName}`,
         purpose: currentText().descriptions[channelName] || String(definition.description || ""),
         fields: fields.map((field) => String(field.name || "")).filter(Boolean),
+        channelName,
+    });
+}
+
+function buildEditableChannelCard(definition) {
+    const channelName = String(definition.name || "");
+    const config = channelConfig(channelName);
+    const article = document.createElement("article");
+    article.className = "structure-card";
+
+    const header = document.createElement("div");
+    header.className = "structure-card-header";
+    const title = document.createElement("h3");
+    title.textContent = channelLabel(channelName);
+    const owner = document.createElement("span");
+    owner.className = "structure-owner";
+    owner.textContent = channelConfig(channelName).enabled
+        ? i18n.t("channels.enabled")
+        : i18n.t("channels.disabled");
+    header.append(title, owner);
+
+    const route = document.createElement("code");
+    route.className = "structure-route";
+    route.textContent = `/api/channels/config:${channelName}`;
+
+    const purpose = document.createElement("p");
+    purpose.textContent = currentText().descriptions[channelName] || i18n.t("channels.plannedPurpose");
+
+    const form = document.createElement("form");
+    form.dataset.channel = channelName;
+    form.autocomplete = "off";
+
+    const enabledField = buildFieldRow({
+        fieldName: "enabled",
+        configValue: String(Boolean(config.enabled)),
+        fieldType: "checkbox",
+        label: i18n.t("channels.fieldEnabled"),
+        isSecret: false,
+        isTextArea: false,
+    });
+    const enabledInput = enabledField.querySelector("input");
+    if (enabledInput) {
+        enabledInput.checked = Boolean(config.enabled);
+    }
+    form.appendChild(enabledField);
+
+    const fieldList = collectConfigFieldDefinitions(channelName, definition);
+    fieldList.forEach((fieldMeta) => {
+        const fieldName = fieldMeta.name;
+        if (!fieldName || fieldName === "enabled") {
+            return;
+        }
+        if (fieldName === "allow_from") {
+            const row = buildFieldRow({
+                fieldName,
+                configValue: allowFromText(config[fieldName]),
+                fieldType: "textarea",
+                label: i18n.t("channels.fieldAllowFrom"),
+                isSecret: false,
+                isTextArea: true,
+                placeholder: i18n.t("channels.fieldAllowFromPlaceholder"),
+            });
+            form.appendChild(row);
+            return;
+        }
+        const isSecret = isSecretField(fieldMeta);
+        const isBoolean = isBooleanField(fieldMeta);
+        const value = String(config[fieldName] || "");
+        const row = buildFieldRow({
+            fieldName,
+            label: fieldLabel(fieldName),
+            configValue: isSecret ? "" : value,
+            fieldType: isBoolean ? "checkbox" : isSecret ? "password" : "text",
+            isSecret,
+            isTextArea: false,
+            placeholder: isSecret ? secretFieldPlaceholder(fieldName, config) : "",
+        });
+        const input = row.querySelector("input");
+        if (input) {
+            if (isSecret && value) {
+                input.value = "";
+            }
+            if (isBoolean) {
+                input.checked = Boolean(config[fieldName]);
+            }
+        }
+        form.appendChild(row);
+    });
+    form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        void saveChannelConfig(form, channelName);
+    });
+
+    const controls = document.createElement("div");
+    controls.className = "shell-form-actions";
+
+    const saveButton = document.createElement("button");
+    saveButton.type = "submit";
+    saveButton.textContent = i18n.t("channels.saveChanges");
+    saveButton.disabled = state.saving || state.smokeInFlight;
+    saveButton.addEventListener("click", (event) => {
+        event.preventDefault();
+        void saveChannelConfig(form, channelName);
+    });
+
+    const reloadButton = document.createElement("button");
+    reloadButton.type = "button";
+    reloadButton.textContent = i18n.t("channels.reload");
+    reloadButton.disabled = state.saving || state.smokeInFlight;
+    reloadButton.addEventListener("click", () => {
+        void loadChannels();
+    });
+
+    const smokeButton = document.createElement("button");
+    smokeButton.type = "button";
+    smokeButton.textContent = i18n.t("channels.smokeTest");
+    smokeButton.disabled = state.saving || state.smokeInFlight;
+    smokeButton.addEventListener("click", () => {
+        void runSmokeTest(channelName);
+    });
+
+    controls.append(saveButton, reloadButton, smokeButton);
+
+    const message = buildFeedbackMessage(channelName);
+    const checks = buildSmokeChecks(channelName);
+
+    article.append(header, route, purpose, form, controls, message, checks);
+    return article;
+}
+
+function collectConfigFieldDefinitions(channelName, definition) {
+    const fallback = FALLBACK_FIELDS[channelName] || [];
+    const configured = Array.isArray(definition.config_fields)
+        ? definition.config_fields.map(normalizeFieldMeta)
+        : [];
+    const configuredByName = new Set(
+        configured
+            .map((item) => item.name)
+            .filter(Boolean),
+    );
+    const fields = [
+        ...configured,
+        ...fallback.filter((field) => !configuredByName.has(field.name)),
+    ];
+
+    const ordered = [];
+    const seen = new Set();
+    fields.forEach((field) => {
+        if (!field.name) {
+            return;
+        }
+        const normalized = String(field.name).trim().toLowerCase();
+        if (seen.has(normalized)) {
+            return;
+        }
+        seen.add(normalized);
+        ordered.push({ ...field, name: normalized });
+    });
+    return ordered;
+}
+
+function normalizeFieldMeta(field) {
+    if (!field) {
+        return { name: "", kind: "", isSecret: false };
+    }
+    if (typeof field === "string") {
+        return { name: String(field).trim().toLowerCase(), kind: "", isSecret: false };
+    }
+    return {
+        name: String(field.name || "").trim().toLowerCase(),
+        kind: String(field.kind || field.type || "").trim().toLowerCase(),
+        isSecret: Boolean(field.secret || field.sensitive),
     };
 }
 
-function plannedChannelCard(channel) {
-    return {
-        label: channel.label,
-        owner: i18n.t("channels.planned"),
-        route: `/admin/channels:${channel.name}`,
-        purpose: i18n.t("channels.plannedPurpose"),
-        fields: [
-            "enabled",
-            "allow_from",
-            "bot_token / webhook_secret",
-            "webhook_url / polling",
-        ],
-    };
+function isSecretField(fieldMeta) {
+    if (!fieldMeta || !fieldMeta.name) {
+        return false;
+    }
+    if (fieldMeta.isSecret) {
+        return true;
+    }
+    const name = fieldMeta.name.toLowerCase();
+    return name.includes("token") || name.includes("secret") || name.includes("key") || name.includes("password");
+}
+
+function isBooleanField(fieldMeta) {
+    if (!fieldMeta || !fieldMeta.name) {
+        return false;
+    }
+    const kind = String(fieldMeta.kind || "").trim().toLowerCase();
+    return kind === "bool" || kind === "boolean" || kind.endsWith(".bool");
+}
+
+function fieldLabel(fieldName) {
+    const key = FIELD_LABEL_KEYS[fieldName];
+    if (key) {
+        return i18n.t(key);
+    }
+    const spaced = fieldName.replace(/_/g, " ");
+    return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+function allowFromText(value) {
+    if (Array.isArray(value)) {
+        return value
+            .map((item) => String(item || "").trim())
+            .filter(Boolean)
+            .join("\n");
+    }
+    return String(value || "");
+}
+
+function secretFieldPlaceholder(fieldName, config) {
+    if (Boolean(config[`${fieldName}_configured`])) {
+        return i18n.t("channels.secretConfigured");
+    }
+    return i18n.t("channels.secretNotConfigured");
+}
+
+function buildFieldRow({
+    fieldName,
+    label,
+    configValue,
+    fieldType,
+    isSecret,
+    isTextArea,
+    placeholder,
+}) {
+    const field = document.createElement("label");
+    field.className = "channels-field-row";
+
+    const title = document.createElement("span");
+    title.textContent = label;
+    field.appendChild(title);
+
+    let control;
+    if (isTextArea) {
+        control = document.createElement("textarea");
+        control.value = configValue;
+        control.rows = 4;
+    } else if (fieldType === "checkbox") {
+        control = document.createElement("input");
+        control.type = "checkbox";
+        control.checked = configValue === "true";
+    } else {
+        control = document.createElement("input");
+        control.type = fieldType || "text";
+        if (!isSecret) {
+            control.value = configValue;
+        }
+    }
+    control.dataset.channelField = fieldName;
+    if (isTextArea || isSecret) {
+        control.setAttribute("placeholder", placeholder || "");
+    }
+    if (!isTextArea && !isSecret && control.type !== "checkbox") {
+        control.autocomplete = "off";
+    }
+    field.appendChild(control);
+    return field;
+}
+
+function buildFeedbackMessage(channelName) {
+    const block = document.createElement("p");
+    block.className = "channels-field-list";
+    const message = state.messages[channelName];
+    if (message) {
+        block.textContent = message;
+        return block;
+    }
+    const smokeResult = state.smokeResults[channelName];
+    if (!smokeResult) {
+        block.textContent = "";
+        return block;
+    }
+    const details = Array.isArray(smokeResult.checks)
+        ? smokeResult.checks
+            .map((check) => `${check.name || ""}: ${check.ok ? i18n.t("channels.ok") : i18n.t("channels.fail")} ${check.message || ""}`.trim())
+            .join(" | ")
+        : "";
+    block.textContent = `${smokeResult.ok ? i18n.t("channels.smokeOk") : i18n.t("channels.smokeFailed")}: ${smokeResult.status || ""} ${details}`.trim();
+    return block;
+}
+
+function buildSmokeChecks(channelName) {
+    const smokeResult = state.smokeResults[channelName];
+    const list = document.createElement("div");
+    list.className = "channels-field-list";
+    if (!smokeResult || !Array.isArray(smokeResult.checks) || smokeResult.checks.length === 0) {
+        return list;
+    }
+    smokeResult.checks.forEach((check) => {
+        const item = document.createElement("p");
+        item.textContent = `${check.name || i18n.t("channels.unknown")}: ${check.ok ? i18n.t("channels.ok") : i18n.t("channels.fail")} ${check.message || ""}`.trim();
+        list.appendChild(item);
+    });
+    return list;
 }
 
 function buildChannelSection(titleText, bodyText, cards) {
@@ -219,7 +556,7 @@ function buildChannelSection(titleText, bodyText, cards) {
 
     const grid = document.createElement("div");
     grid.className = "structure-card-grid";
-    grid.replaceChildren(...cards.map((card) => buildChannelCard(card)));
+    grid.replaceChildren(...cards.map((card) => card));
 
     section.append(title, body, grid);
     return section;
@@ -248,6 +585,15 @@ function buildChannelCard(card) {
     const fields = document.createElement("p");
     fields.className = "channels-field-list";
     fields.textContent = `${i18n.t("channels.configFields")}: ${card.fields.join(", ") || i18n.t("channels.none")}`;
+
+    const status = state.messages[card.channelName] || "";
+    if (status) {
+        const text = document.createElement("p");
+        text.className = "channels-field-list";
+        text.textContent = status;
+        article.append(header, route, purpose, fields, text);
+        return article;
+    }
 
     article.append(header, route, purpose, fields);
     return article;
@@ -311,12 +657,121 @@ function currentText() {
     return channelText[i18n.language] || channelText.en;
 }
 
-async function requestJson(url) {
-    const response = await fetch(url, {
-        headers: {
-            Accept: "application/json",
-        },
+async function saveChannelConfig(form, channelName) {
+    if (state.saving || state.smokeInFlight) {
+        return;
+    }
+    const updates = readFormValues(form);
+    const nextConfig = {
+        ...(state.config && typeof state.config === "object" ? state.config : {}),
+    };
+    nextConfig[channelName] = {
+        ...channelConfig(channelName),
+        ...updates,
+    };
+    state.saving = true;
+    state.messages[channelName] = i18n.t("channels.saving");
+    renderAll();
+    try {
+        await requestJson("/api/channels/config", {
+            method: "PUT",
+            body: JSON.stringify(nextConfig),
+        });
+        await loadChannels();
+        state.messages[channelName] = i18n.t("channels.saved");
+    } catch (error) {
+        state.messages[channelName] = `${i18n.t("channels.saveFailed")}: ${error.message || String(error)}`;
+    } finally {
+        state.saving = false;
+        renderAll();
+    }
+}
+
+function readFormValues(form) {
+    const result = {};
+    const inputs = Array.from(form.querySelectorAll("[data-channel-field]"));
+    inputs.forEach((input) => {
+        if (!input.dataset.channelField) {
+            return;
+        }
+        const fieldName = input.dataset.channelField;
+        if (input.type === "checkbox") {
+            result[fieldName] = Boolean(input.checked);
+            return;
+        }
+        if (fieldName === "allow_from") {
+            result[fieldName] = String(input.value || "")
+                .split(/\r?\n|,/)
+                .map((item) => item.trim())
+                .filter(Boolean);
+            return;
+        }
+        if (input.type === "password") {
+            result[fieldName] = String(input.value || "").trim();
+            return;
+        }
+        result[fieldName] = String(input.value || "").trim();
     });
+    return result;
+}
+
+async function runSmokeTest(channelName) {
+    if (state.saving || state.smokeInFlight) {
+        return;
+    }
+    state.smokeInFlight = true;
+    state.messages[channelName] = i18n.t("channels.smokeRunning");
+    state.smokeResults[channelName] = null;
+    renderAll();
+    try {
+        const result = await requestJson(`/api/channels/${encodeURIComponent(channelName)}/smoke`, {
+            method: "POST",
+        });
+        state.smokeResults[channelName] = result;
+        state.messages[channelName] = result.ok
+            ? i18n.t("channels.smokeStarted")
+            : i18n.t("channels.smokeFailed");
+    } catch (error) {
+        state.smokeResults[channelName] = null;
+        state.messages[channelName] = `${i18n.t("channels.smokeFailed")}: ${error.message || String(error)}`;
+    } finally {
+        state.smokeInFlight = false;
+        renderAll();
+    }
+}
+
+function plannedChannelCard(channel) {
+    return buildChannelCard({
+        label: channel.label,
+        owner: i18n.t("channels.planned"),
+        route: `/admin/channels:${channel.name}`,
+        purpose: i18n.t("channels.plannedPurpose"),
+        fields: [
+            "enabled",
+            "allow_from",
+            "bot_token / webhook_secret",
+            "webhook_url / polling",
+        ],
+    });
+}
+
+async function requestJson(url, options = {}) {
+    const headers = {
+        Accept: "application/json",
+    };
+    const requestInit = { ...options };
+    const explicitContentType = requestInit.headers
+        ? (requestInit.headers["Content-Type"] || requestInit.headers["content-type"])
+        : null;
+    if (requestInit.body && !explicitContentType) {
+        headers["Content-Type"] = "application/json";
+    }
+    requestInit.headers = {
+        ...headers,
+        ...(requestInit.headers || {}),
+    };
+
+    const response = await fetch(url, requestInit);
     if (!response.ok) {
         let detail = `${response.status} ${response.statusText}`;
         try {

@@ -12,6 +12,7 @@ from echobot.channels import (
     ChannelAddress,
     InboundMessage,
     MessageBus,
+    OutboundMessage,
     load_channels_config,
 )
 from echobot.gateway import (
@@ -209,10 +210,12 @@ class ChannelConfigTests(unittest.TestCase):
 
             self.assertFalse(config.console.enabled)
             self.assertFalse(config.telegram.enabled)
+            self.assertFalse(config.discord.enabled)
             self.assertFalse(config.qq.enabled)
             self.assertTrue(config_path.exists())
             text = config_path.read_text(encoding="utf-8")
             self.assertIn('"telegram"', text)
+            self.assertIn('"discord"', text)
             self.assertIn('"qq"', text)
 
 
@@ -368,6 +371,38 @@ class GatewayRuntimeTests(unittest.IsolatedAsyncioTestCase):
             assert target is not None
             self.assertEqual(7, target.metadata["message_id"])
             self.assertIsNone(delivery_store.get_session_target(inbound.session_name))
+
+    async def test_handle_inbound_message_publishes_stage_event_before_reply(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            context, _session_store = build_test_runtime(workspace)
+            bus = MessageBus()
+            captured_events: list[tuple[str, OutboundMessage]] = []
+
+            async def publish_stage_event(
+                session_name: str,
+                outbound: OutboundMessage,
+            ) -> None:
+                captured_events.append((session_name, outbound))
+
+            gateway = GatewayRuntime(
+                context,
+                bus,
+                stage_event_publisher=publish_stage_event,
+            )
+            inbound = make_inbound("ping", message_id=7)
+
+            await gateway.handle_inbound_message(inbound)
+            outbound = await bus.consume_outbound()
+
+            self.assertEqual("pong", outbound.text)
+            self.assertEqual(1, len(captured_events))
+            stage_session_name, stage_outbound = captured_events[0]
+            self.assertNotEqual(inbound.session_name, stage_session_name)
+            self.assertEqual("pong", stage_outbound.text)
+            self.assertEqual("telegram", stage_outbound.address.channel)
 
     async def test_handle_inbound_message_supports_image_only_payloads(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -940,6 +975,42 @@ class GatewayRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual("due-visible", outbound.text)
             self.assertTrue(outbound.metadata["scheduled"])
             self.assertEqual("cron", outbound.metadata["schedule_kind"])
+
+    async def test_async_job_completion_publishes_stage_event_before_reply(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            context, _session_store = build_test_runtime(workspace)
+            bus = MessageBus()
+            delivery_store = DeliveryStore(workspace / "delivery.json")
+            route_session_store = RouteSessionStore(workspace / "route_sessions.json")
+            captured_events: list[tuple[str, OutboundMessage]] = []
+
+            async def publish_stage_event(
+                session_name: str,
+                outbound: OutboundMessage,
+            ) -> None:
+                captured_events.append((session_name, outbound))
+
+            gateway = GatewayRuntime(
+                context,
+                bus,
+                delivery_store=delivery_store,
+                route_session_store=route_session_store,
+                stage_event_publisher=publish_stage_event,
+            )
+            delivery_store.remember(
+                "demo",
+                ChannelAddress(channel="telegram", chat_id="12345"),
+                {"message_id": 11},
+            )
+
+            await gateway._publish_session_response("demo", "async done")
+            outbound = await bus.consume_outbound()
+
+            self.assertEqual("async done", outbound.text)
+            self.assertEqual(1, len(captured_events))
+            self.assertEqual("demo", captured_events[0][0])
+            self.assertEqual("async done", captured_events[0][1].text)
 
     async def test_session_commands_create_switch_rename_and_delete(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

@@ -42,7 +42,7 @@ Original EchoBot mainly used `/web` as the operation page. This edition adds and
 | Site Structure | `/admin/structure` | Route map, Console sections, and API namespace boundaries |
 | Characters | `/admin/characters` | Manage role prompts, model profile binding, voice, Live2D summary, emotion maps, and character package import/export |
 | Model Profiles | `/admin/models` | Create, rename, and activate role/model profiles |
-| Channels | `/admin/channels` | Planning entry for Telegram, QQ, LINE, Discord, WhatsApp, and gateway adapters |
+| Channels | `/admin/channels` | Telegram / Discord setup and smoke checks, plus QQ/LINE/WhatsApp gateway management entry |
 | Open WebUI Bridge | `/admin/openwebui` | Narrow OpenAPI bridge instructions for Open WebUI |
 
 ### 2. Mobile And Desktop Display Modes
@@ -142,7 +142,19 @@ A model profile management page was added:
 - Imports can use a new character name or overwrite an existing character.
 - v1 uses JSON packages and does not bundle Live2D asset files; model API keys are still filled from `/admin/models`.
 
-### 10. Deployment And Architecture Documentation
+### 10. Channels Admin Page
+
+`/admin/channels` has been upgraded from a read-only planning page into a messaging-platform setup entry:
+
+- Telegram can store enabled state, allow list, bot token, proxy, and reply-to-message behavior.
+- Discord can store enabled state, allow list, bot token, webhook URL, webhook secret, application/guild/channel ids.
+- Secret fields only expose configured status in the API and UI; plaintext values are never returned.
+- `POST /api/channels/{channel}/smoke` provides safe local readiness checks without echoing tokens in responses.
+- The Telegram polling runtime has passed a local bot E2E smoke; the test token is stored only in repo-external ignored runtime config and is not committed.
+- Production messaging gateways can set `mirror_to_stage` and `stage_session_name`; Telegram replies have been verified to mirror into the `/stage` frontend.
+- Discord is config/smoke-ready for now; its runtime adapter is still a later implementation slice.
+
+### 11. Deployment And Architecture Documentation
 
 This edition adds planning, site structure, and reference documents:
 
@@ -158,12 +170,12 @@ Completed so far:
 - `/stage`, `/messenger`, `/console`, `/admin`, and the Admin guide/structure/models/Open WebUI/channels pages have been added.
 - English, Traditional Chinese, and Simplified Chinese switching is applied to static pages and the main dynamic UI.
 - Mobile/tablet/desktop display modes have been added, with 360x800, 390x844, 430x932, and 768x1024 viewport checks expected to avoid horizontal overflow.
-- First-version interfaces and documentation exist for Cloudflare Local Tunnel, trusted-user isolation, Stage Event Broker, Open WebUI bridge APIs, and Model Profiles.
+- First-version interfaces and documentation exist for Cloudflare Local Tunnel, trusted-user isolation, Stage Event Broker, Open WebUI bridge APIs, Model Profiles, Character Packages, and Channels setup/smoke checks.
 - The public-facing safety default is now `ECHOBOT_SHELL_SAFETY_MODE=workspace-write`.
 
 Not finished or still planned:
 
-- Telegram and QQ already have built-in runtime adapters. `/admin/channels` is currently a status and planning entry, not a production-ready token/webhook management UI. LINE, Discord, and WhatsApp remain planned adapters.
+- Telegram and QQ already have built-in runtime adapters. `/admin/channels` can now save Telegram / Discord settings and run smoke readiness checks, and Telegram local bot polling E2E plus Stage mirroring have passed. Discord, LINE, and WhatsApp production runtime adapters remain planned.
 - The EchoBot-side narrow Open WebUI bridge API and documentation page exist, but Open WebUI does not need to be connected yet.
 - `/admin` v1 is mostly an index, guide, and status surface. It is not a complete production SaaS admin console.
 - Stage / Live2D / ASR / TTS have v1 integration and local smoke coverage. Real-device microphone and long-running voice interaction checks still need HTTPS plus real-device validation.
@@ -231,7 +243,7 @@ This branch has been verified with:
 - 10 routes × mobile/desktop × 3 languages browser checks.
 - i18n key coverage.
 - API route/auth tests.
-- Full pytest: `313 passed`.
+- Full pytest: `320 passed`.
 
 ## Project Rules
 

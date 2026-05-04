@@ -13,7 +13,13 @@ from ..asr import (
     build_default_asr_service,
 )
 from ..asr.factory import DEFAULT_ASR_PROVIDER
-from ..channels import ChannelManager, ChannelsConfig, MessageBus, load_channels_config
+from ..channels import (
+    ChannelManager,
+    ChannelsConfig,
+    MessageBus,
+    OutboundMessage,
+    load_channels_config,
+)
 from ..gateway import (
     DeliveryStore,
     GatewayRuntime,
@@ -22,6 +28,7 @@ from ..gateway import (
 )
 from ..runtime.bootstrap import RuntimeContext, RuntimeOptions, build_runtime_context
 from ..runtime.session_service import SessionLifecycleService
+from ..models import message_content_to_text
 from ..providers.openai_compatible import (
     OpenAICompatibleProvider,
     OpenAICompatibleSettings,
@@ -39,7 +46,7 @@ from .services.character_profiles import CharacterProfileSettingsService
 from .services.channels import ChannelService
 from .services.model_profiles import ModelProfileService
 from .services.roles import RoleService
-from .services.stage_events import StageEventBroker
+from .services.stage_events import StageEventBroker, StageEventPublishRequest
 from .services.web_console import WebConsoleService
 
 
@@ -128,6 +135,7 @@ class AppRuntime:
             self.bus,
             session_service=self.session_service,
             runtime_for_user=self.for_user,
+            stage_event_publisher=self.publish_gateway_stage_event,
         )
         self.chat_service = ChatService(
             self.context.coordinator,
@@ -244,6 +252,40 @@ class AppRuntime:
         if self.channel_manager is None:
             return {}
         return self.channel_manager.get_status()
+
+    async def publish_gateway_stage_event(
+        self,
+        session_name: str,
+        outbound: OutboundMessage,
+    ) -> None:
+        if self.channels_config is None:
+            return
+        channel_config = self.channels_config.get(outbound.address.channel)
+        if not bool(getattr(channel_config, "mirror_to_stage", False)):
+            return
+
+        stage_session_name = (
+            str(getattr(channel_config, "stage_session_name", "") or "").strip()
+            or session_name
+        )
+        text = message_content_to_text(outbound.content or outbound.text).strip()
+        if not text:
+            return
+
+        await self.stage_event_broker.publish(
+            scope_key="default",
+            request=StageEventPublishRequest(
+                kind="assistant_final",
+                session_name=stage_session_name,
+                text=text,
+                speaker="Echo",
+                source=outbound.address.channel,
+                metadata={
+                    "gateway_channel": outbound.address.channel,
+                    "gateway_session_name": session_name,
+                },
+            ),
+        )
 
     async def health_snapshot(self) -> dict[str, object]:
         if self.context is None or self.bus is None or self.session_service is None:
@@ -610,6 +652,13 @@ class UserScopedRuntime:
 
     def channel_status(self) -> dict[str, dict[str, bool]]:
         return self.parent.channel_status()
+
+    async def publish_gateway_stage_event(
+        self,
+        session_name: str,
+        outbound: OutboundMessage,
+    ) -> None:
+        await self.parent.publish_gateway_stage_event(session_name, outbound)
 
     async def reload_channels(
         self,

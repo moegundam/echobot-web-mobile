@@ -974,7 +974,10 @@ class AppApiTests(unittest.TestCase):
             self.assertEqual("default", health.json()["current_session"])
             self.assertEqual("default", health.json()["current_role"])
             self.assertEqual(200, definitions.status_code)
-            self.assertEqual(["console", "telegram", "qq"], [item["name"] for item in definitions.json()])
+            self.assertEqual(
+                ["console", "telegram", "discord", "qq"],
+                [item["name"] for item in definitions.json()],
+            )
             self.assertEqual(200, config.status_code)
             self.assertIn("telegram", config.json())
             self.assertEqual(200, roles.status_code)
@@ -1001,9 +1004,22 @@ class AppApiTests(unittest.TestCase):
                 "telegram": {
                     "enabled": False,
                     "allow_from": ["12345"],
+                    "mirror_to_stage": True,
+                    "stage_session_name": "stage",
                     "bot_token": "telegram-secret-token",
                     "proxy": "socks5://127.0.0.1:1080",
                     "reply_to_message": True,
+                },
+                "discord": {
+                    "enabled": False,
+                    "allow_from": ["discord-user"],
+                    "mirror_to_stage": True,
+                    "stage_session_name": "stage",
+                    "bot_token": "discord-secret-token",
+                    "webhook_url": "https://discord.com/api/webhooks/1/token",
+                    "webhook_secret": "discord-webhook-secret",
+                    "application_id": "discord-app-id",
+                    "guild_id": "discord-guild-id",
                 },
                 "qq": {
                     "enabled": False,
@@ -1021,9 +1037,20 @@ class AppApiTests(unittest.TestCase):
             self.assertEqual(200, fetched.status_code)
             for payload in [updated.json(), fetched.json()]:
                 self.assertNotIn("telegram-secret-token", json.dumps(payload))
+                self.assertNotIn("discord-secret-token", json.dumps(payload))
+                self.assertNotIn("discord-webhook-secret", json.dumps(payload))
                 self.assertNotIn("qq-client-secret", json.dumps(payload))
                 self.assertEqual("", payload["telegram"]["bot_token"])
                 self.assertTrue(payload["telegram"]["bot_token_configured"])
+                self.assertEqual("", payload["discord"]["bot_token"])
+                self.assertTrue(payload["discord"]["bot_token_configured"])
+                self.assertEqual("", payload["discord"]["webhook_secret"])
+                self.assertTrue(payload["discord"]["webhook_secret_configured"])
+                self.assertEqual(
+                    "https://discord.com/api/webhooks/1/token",
+                    payload["discord"]["webhook_url"],
+                )
+                self.assertEqual("discord-app-id", payload["discord"]["application_id"])
                 self.assertEqual("", payload["qq"]["client_secret"])
                 self.assertTrue(payload["qq"]["client_secret_configured"])
                 self.assertEqual("socks5://127.0.0.1:1080", payload["telegram"]["proxy"])
@@ -1031,6 +1058,8 @@ class AppApiTests(unittest.TestCase):
 
             stored_text = config_path.read_text(encoding="utf-8")
             self.assertIn("telegram-secret-token", stored_text)
+            self.assertIn("discord-secret-token", stored_text)
+            self.assertIn("discord-webhook-secret", stored_text)
             self.assertIn("qq-client-secret", stored_text)
 
     def test_channel_config_update_preserves_redacted_gateway_secrets(self) -> None:
@@ -1058,6 +1087,15 @@ class AppApiTests(unittest.TestCase):
                     "proxy": "socks5://127.0.0.1:1080",
                     "reply_to_message": True,
                 },
+                "discord": {
+                    "enabled": False,
+                    "allow_from": ["discord-user"],
+                    "bot_token": "discord-secret-token",
+                    "webhook_url": "https://discord.com/api/webhooks/1/token",
+                    "webhook_secret": "discord-webhook-secret",
+                    "application_id": "discord-app-id",
+                    "guild_id": "discord-guild-id",
+                },
                 "qq": {
                     "enabled": False,
                     "allow_from": ["qq-user"],
@@ -1074,10 +1112,179 @@ class AppApiTests(unittest.TestCase):
 
             self.assertEqual(200, preserved.status_code)
             self.assertEqual("", preserved.json()["telegram"]["bot_token"])
+            self.assertEqual("", preserved.json()["discord"]["bot_token"])
+            self.assertEqual("", preserved.json()["discord"]["webhook_secret"])
             stored_text = config_path.read_text(encoding="utf-8")
             self.assertIn("telegram-secret-token", stored_text)
+            self.assertIn("discord-secret-token", stored_text)
+            self.assertIn("discord-webhook-secret", stored_text)
             self.assertIn("qq-client-secret", stored_text)
             self.assertIn("http://proxy.local:8080", stored_text)
+
+    def test_channel_smoke_checks_validate_config_without_echoing_secrets(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            config_path = workspace / ".echobot" / "channels.json"
+            app = create_app(
+                runtime_options=RuntimeOptions(
+                    workspace=workspace,
+                    no_tools=True,
+                    no_skills=True,
+                    no_memory=True,
+                    no_heartbeat=True,
+                ),
+                channel_config_path=config_path,
+                context_builder=build_test_context,
+            )
+
+            raw_config = {
+                "console": {"enabled": False, "allow_from": []},
+                "telegram": {
+                    "enabled": False,
+                    "allow_from": ["12345"],
+                    "mirror_to_stage": True,
+                    "stage_session_name": "stage",
+                    "bot_token": "telegram-secret-token",
+                    "proxy": "",
+                    "reply_to_message": False,
+                },
+                "discord": {
+                    "enabled": False,
+                    "allow_from": ["discord-user"],
+                    "mirror_to_stage": True,
+                    "stage_session_name": "stage",
+                    "bot_token": "discord-secret-token",
+                    "webhook_url": "https://discord.com/api/webhooks/1/token",
+                    "webhook_secret": "discord-webhook-secret",
+                    "application_id": "discord-app-id",
+                    "guild_id": "discord-guild-id",
+                },
+                "qq": {"enabled": False, "allow_from": [], "client_secret": ""},
+            }
+
+            with TestClient(app) as client:
+                client.put("/api/channels/config", json=raw_config)
+                telegram = client.post("/api/channels/telegram/smoke")
+                discord = client.post("/api/channels/discord/smoke")
+                unknown = client.post("/api/channels/slack/smoke")
+
+            self.assertEqual(200, telegram.status_code)
+            self.assertEqual("telegram", telegram.json()["channel"])
+            self.assertTrue(telegram.json()["ok"])
+            self.assertEqual("configured_disabled", telegram.json()["status"])
+            self.assertNotIn("telegram-secret-token", json.dumps(telegram.json()))
+
+            self.assertEqual(200, discord.status_code)
+            self.assertEqual("discord", discord.json()["channel"])
+            self.assertTrue(discord.json()["ok"])
+            self.assertEqual("configuration_ready", discord.json()["status"])
+            self.assertIn(
+                "runtime adapter",
+                " ".join(discord.json()["next_steps"]).lower(),
+            )
+            self.assertNotIn("discord-secret-token", json.dumps(discord.json()))
+            self.assertNotIn("discord-webhook-secret", json.dumps(discord.json()))
+
+            self.assertEqual(404, unknown.status_code)
+
+    def test_channel_smoke_requires_admin_allowlist(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+
+            with patch.dict(
+                os.environ,
+                {
+                    "ECHOBOT_TRUSTED_USER_HEADER_ENABLED": "true",
+                    "ECHOBOT_TRUSTED_USER_REQUIRED": "true",
+                    "ECHOBOT_ADMIN_ALLOWLIST": "admin@example.test",
+                },
+                clear=False,
+            ):
+                app = create_app(
+                    runtime_options=RuntimeOptions(
+                        workspace=workspace,
+                        no_tools=True,
+                        no_skills=True,
+                        no_memory=True,
+                        no_heartbeat=True,
+                    ),
+                    channel_config_path=workspace / ".echobot" / "channels.json",
+                    context_builder=build_test_context,
+                )
+
+            admin_headers = {DEFAULT_TRUSTED_USER_HEADER: "admin@example.test"}
+            user_headers = {DEFAULT_TRUSTED_USER_HEADER: "user@example.test"}
+
+            with TestClient(app) as client:
+                blocked = client.post(
+                    "/api/channels/telegram/smoke",
+                    headers=user_headers,
+                )
+                allowed = client.post(
+                    "/api/channels/telegram/smoke",
+                    headers=admin_headers,
+                )
+
+            self.assertEqual(403, blocked.status_code)
+            self.assertEqual("Admin access is required", blocked.json()["detail"])
+            self.assertEqual(200, allowed.status_code)
+
+    def test_gateway_response_is_mirrored_to_stage_when_channel_enabled(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            config_path = workspace / ".echobot" / "channels.json"
+            app = create_app(
+                runtime_options=RuntimeOptions(
+                    workspace=workspace,
+                    no_tools=True,
+                    no_skills=True,
+                    no_memory=True,
+                    no_heartbeat=True,
+                ),
+                channel_config_path=config_path,
+                context_builder=build_test_context,
+            )
+
+            raw_config = {
+                "console": {"enabled": False, "allow_from": []},
+                "telegram": {
+                    "enabled": False,
+                    "allow_from": ["12345"],
+                    "mirror_to_stage": True,
+                    "stage_session_name": "front",
+                    "bot_token": "telegram-secret-token",
+                    "proxy": "",
+                    "reply_to_message": False,
+                },
+                "discord": {"enabled": False, "allow_from": []},
+                "qq": {"enabled": False, "allow_from": []},
+            }
+
+            with TestClient(app) as client:
+                client.put("/api/channels/config", json=raw_config)
+                runtime = app.state.runtime
+                context = runtime.context
+                assert context is not None
+                outbound = ChannelAddress(
+                    channel="telegram",
+                    chat_id="12345",
+                )
+                awaitable = runtime.publish_gateway_stage_event(
+                    "telegram__12345__session",
+                    SimpleNamespace(
+                        address=outbound,
+                        text="stage mirror ok",
+                        content="stage mirror ok",
+                    ),
+                )
+                asyncio.run(awaitable)
+                events = runtime.stage_event_broker.history("default", "front")
+
+            self.assertEqual(1, len(events))
+            self.assertEqual("assistant_final", events[0].kind)
+            self.assertEqual("stage mirror ok", events[0].text)
+            self.assertEqual("telegram", events[0].source)
+            self.assertEqual("telegram__12345__session", events[0].metadata["gateway_session_name"])
 
     def test_trusted_user_header_is_required_when_enabled(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

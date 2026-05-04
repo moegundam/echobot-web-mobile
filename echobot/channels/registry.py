@@ -4,8 +4,13 @@ from dataclasses import MISSING, dataclass, fields, is_dataclass
 from typing import Any
 
 from .base import BaseChannel
-from .config import ConsoleChannelConfig, QQChannelConfig, TelegramChannelConfig
-from .platforms import ConsoleChannel, QQChannel, TelegramChannel
+from .config import (
+    ConsoleChannelConfig,
+    DiscordChannelConfig,
+    QQChannelConfig,
+    TelegramChannelConfig,
+)
+from .platforms import ConsoleChannel, DiscordChannel, QQChannel, TelegramChannel
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,6 +33,12 @@ _BUILTIN_CHANNELS: dict[str, ChannelDefinition] = {
         description="Telegram bot polling channel.",
         config_cls=TelegramChannelConfig,
         channel_cls=TelegramChannel,
+    ),
+    "discord": ChannelDefinition(
+        name="discord",
+        description="Discord bot configuration and smoke-test channel.",
+        config_cls=DiscordChannelConfig,
+        channel_cls=DiscordChannel,
     ),
     "qq": ChannelDefinition(
         name="qq",

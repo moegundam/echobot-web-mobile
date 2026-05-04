@@ -8,9 +8,11 @@ from typing import Any
 from ...channels import (
     ChannelsConfig,
     describe_channel_registry,
+    get_channel_definition,
     load_channels_config,
     save_channels_config,
 )
+from ...channels.platforms.telegram import TELEGRAM_AVAILABLE
 from ..schemas import CHANNEL_SECRET_FIELD_NAMES
 
 
@@ -62,6 +64,22 @@ class ChannelService:
     def get_definitions(self) -> list[dict[str, Any]]:
         return describe_channel_registry()
 
+    async def smoke_channel(self, channel_name: str) -> dict[str, Any]:
+        normalized_channel_name = str(channel_name or "").strip().lower()
+        if get_channel_definition(normalized_channel_name) is None:
+            raise KeyError(normalized_channel_name)
+
+        config = await asyncio.to_thread(
+            load_channels_config,
+            self._config_path,
+        )
+        channel_config = config.to_dict().get(normalized_channel_name, {})
+        if normalized_channel_name == "telegram":
+            return _telegram_smoke_result(channel_config)
+        if normalized_channel_name == "discord":
+            return _discord_smoke_result(channel_config)
+        return _generic_smoke_result(normalized_channel_name, channel_config)
+
 
 def _merge_redacted_channel_config(
     raw_config: dict[str, Any],
@@ -111,3 +129,143 @@ def _is_secret_field(field_name: str) -> bool:
 
 def _is_empty_secret_value(value: object) -> bool:
     return not str(value or "").strip()
+
+
+def _telegram_smoke_result(config: dict[str, Any]) -> dict[str, Any]:
+    bot_token_ok = _configured(config, "bot_token")
+    enabled = bool(config.get("enabled"))
+    allow_list = _string_list(config.get("allow_from"))
+    checks = [
+        _check(
+            "bot_token",
+            bot_token_ok,
+            "configured" if bot_token_ok else "missing bot token",
+        ),
+        _check(
+            "python_telegram_bot",
+            TELEGRAM_AVAILABLE,
+            "installed" if TELEGRAM_AVAILABLE else "missing python-telegram-bot",
+        ),
+        _check(
+            "allow_from",
+            bool(allow_list),
+            "restricted senders configured" if allow_list else "open to all senders",
+        ),
+        _check(
+            "enabled",
+            enabled,
+            "enabled" if enabled else "saved but disabled",
+        ),
+    ]
+    ok = bot_token_ok and TELEGRAM_AVAILABLE
+    if not ok:
+        status = "missing_config"
+    elif enabled:
+        status = "ready"
+    else:
+        status = "configured_disabled"
+    return {
+        "channel": "telegram",
+        "ok": ok,
+        "status": status,
+        "checks": checks,
+        "next_steps": [
+            "Enable Telegram after checking allow_from and local network access.",
+            "Use HTTPS tunnel only when switching to webhook mode in a later slice.",
+        ],
+    }
+
+
+def _discord_smoke_result(config: dict[str, Any]) -> dict[str, Any]:
+    token_ok = _configured(config, "bot_token")
+    webhook_ok = _configured(config, "webhook_url")
+    secret_ok = _configured(config, "webhook_secret")
+    enabled = bool(config.get("enabled"))
+    allow_list = _string_list(config.get("allow_from"))
+    credential_ok = token_ok or webhook_ok
+    checks = [
+        _check(
+            "credential",
+            credential_ok,
+            "bot token or webhook URL configured"
+            if credential_ok
+            else "missing bot token or webhook URL",
+        ),
+        _check(
+            "webhook_secret",
+            secret_ok,
+            "configured" if secret_ok else "optional until inbound webhook is implemented",
+        ),
+        _check(
+            "allow_from",
+            bool(allow_list),
+            "restricted senders configured" if allow_list else "open to all senders",
+        ),
+        _check(
+            "runtime_adapter",
+            True,
+            "configuration-only v1; runtime adapter is still planned",
+        ),
+        _check(
+            "enabled",
+            enabled,
+            "enabled" if enabled else "saved but disabled",
+        ),
+    ]
+    status = "configuration_ready" if credential_ok else "missing_config"
+    return {
+        "channel": "discord",
+        "ok": credential_ok,
+        "status": status,
+        "checks": checks,
+        "next_steps": [
+            "Add the Discord runtime adapter before enabling live inbound messages.",
+            "Verify Discord intents and interaction/webhook mode in the Discord Developer Portal.",
+        ],
+    }
+
+
+def _generic_smoke_result(channel_name: str, config: dict[str, Any]) -> dict[str, Any]:
+    enabled = bool(config.get("enabled"))
+    return {
+        "channel": channel_name,
+        "ok": True,
+        "status": "enabled" if enabled else "configured_disabled",
+        "checks": [
+            _check(
+                "enabled",
+                enabled,
+                "enabled" if enabled else "saved but disabled",
+            )
+        ],
+        "next_steps": [],
+    }
+
+
+def _check(name: str, ok: bool, message: str) -> dict[str, Any]:
+    return {
+        "name": name,
+        "ok": bool(ok),
+        "message": message,
+    }
+
+
+def _configured(config: dict[str, Any], field_name: str) -> bool:
+    return bool(str(config.get(field_name, "") or "").strip())
+
+
+def _string_list(value: object) -> list[str]:
+    if isinstance(value, list):
+        return [
+            str(item).strip()
+            for item in value
+            if str(item).strip()
+        ]
+    text = str(value or "").strip()
+    if not text:
+        return []
+    return [
+        item.strip()
+        for item in text.replace(",", "\n").splitlines()
+        if item.strip()
+    ]
