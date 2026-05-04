@@ -2097,12 +2097,22 @@ class AppApiTests(unittest.TestCase):
                 deleted_bound_profile.json()["role_bindings"],
             )
             self.assertNotIn(
+                "b",
+                [item["profile_id"] for item in deleted_bound_profile.json()["profiles"]],
+            )
+            self.assertNotIn(
                 "helper-cat",
                 after_delete.json()["role_bindings"],
+            )
+            self.assertNotIn(
+                "b",
+                [item["profile_id"] for item in after_delete.json()["profiles"]],
             )
             stored_text = (alpha_storage / "model_profiles.json").read_text(
                 encoding="utf-8",
             )
+            stored_payload = json.loads(stored_text)
+            self.assertNotIn("b", stored_payload["profiles"])
             self.assertNotIn("role-bound-key", stored_text)
 
     def test_character_profiles_combine_role_prompt_and_model_binding(self) -> None:

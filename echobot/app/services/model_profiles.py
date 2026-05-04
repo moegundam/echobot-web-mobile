@@ -210,35 +210,35 @@ class ModelProfileService:
             return True
 
     def _load_state_unlocked(self) -> dict[str, Any]:
-        state = _default_state()
-        if self._path.exists():
-            payload = json.loads(self._path.read_text(encoding="utf-8"))
-            if not isinstance(payload, dict):
-                raise ValueError("Model profile store must contain a JSON object")
-            raw_profiles = payload.get("profiles", {})
-            if isinstance(raw_profiles, dict):
-                for raw_profile_id, raw_profile in raw_profiles.items():
-                    if isinstance(raw_profile, dict):
-                        try:
-                            profile_id = _normalize_profile_id(raw_profile_id)
-                        except ValueError:
-                            continue
-                        default_profile = state["profiles"].get(
-                            profile_id,
-                            _default_profile(profile_id),
-                        )
-                        state["profiles"][profile_id] = _merge_profile(
-                            default_profile,
-                            raw_profile,
-                        )
-            state["active_profile_id"] = _coerce_active_profile_id(
-                payload.get("active_profile_id"),
-                state["profiles"],
-            )
-            state["role_bindings"] = _coerce_role_bindings(
-                payload.get("role_bindings"),
-                state["profiles"],
-            )
+        if not self._path.exists():
+            return _default_state()
+
+        state = _empty_state()
+        payload = json.loads(self._path.read_text(encoding="utf-8"))
+        if not isinstance(payload, dict):
+            raise ValueError("Model profile store must contain a JSON object")
+        raw_profiles = payload.get("profiles", {})
+        if isinstance(raw_profiles, dict):
+            for raw_profile_id, raw_profile in raw_profiles.items():
+                if isinstance(raw_profile, dict):
+                    try:
+                        profile_id = _normalize_profile_id(raw_profile_id)
+                    except ValueError:
+                        continue
+                    state["profiles"][profile_id] = _merge_profile(
+                        _default_profile(profile_id),
+                        raw_profile,
+                    )
+        if not state["profiles"]:
+            state = _default_state()
+        state["active_profile_id"] = _coerce_active_profile_id(
+            payload.get("active_profile_id"),
+            state["profiles"],
+        )
+        state["role_bindings"] = _coerce_role_bindings(
+            payload.get("role_bindings"),
+            state["profiles"],
+        )
         return state
 
     def _save_state_unlocked(self, state: dict[str, Any]) -> None:
@@ -331,6 +331,14 @@ def _default_state() -> dict[str, Any]:
         "active_profile_id": DEFAULT_ACTIVE_PROFILE_ID,
         "role_bindings": {},
         "profiles": profiles,
+    }
+
+
+def _empty_state() -> dict[str, Any]:
+    return {
+        "active_profile_id": DEFAULT_ACTIVE_PROFILE_ID,
+        "role_bindings": {},
+        "profiles": {},
     }
 
 
