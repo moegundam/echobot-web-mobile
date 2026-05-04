@@ -152,11 +152,11 @@ button {
 .model-profile-badge {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
+    gap: 8px;
     min-width: 0;
-    padding: 6px 10px;
+    padding: 5px 9px;
     border: 1px solid rgba(87, 57, 34, 0.12);
-    border-radius: 999px;
+    border-radius: 10px;
     background: rgba(255, 251, 246, 0.78);
     color: var(--muted);
     font-size: 0.82rem;
@@ -167,10 +167,34 @@ button {
     display: none;
 }
 
-.model-profile-badge a {
+.model-profile-select-label {
     display: inline-flex;
     align-items: center;
-    max-width: min(46vw, 240px);
+    gap: 6px;
+    min-width: 0;
+}
+
+.model-profile-select {
+    min-height: 28px;
+    max-width: min(44vw, 260px);
+    min-width: 150px;
+    border: 1px solid rgba(87, 57, 34, 0.16);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.82);
+    color: var(--text);
+    font: inherit;
+    font-weight: 700;
+}
+
+.model-profile-select:disabled {
+    cursor: progress;
+    opacity: 0.72;
+}
+
+.model-profile-manage-link {
+    display: inline-flex;
+    align-items: center;
+    max-width: min(24vw, 120px);
     min-height: 24px;
     overflow: hidden;
     color: var(--text);
@@ -180,8 +204,8 @@ button {
     white-space: nowrap;
 }
 
-.model-profile-badge a:hover,
-.model-profile-badge a:focus-visible {
+.model-profile-manage-link:hover,
+.model-profile-manage-link:focus-visible {
     color: var(--accent);
     text-decoration: underline;
 }

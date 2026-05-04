@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>EchoBot Live2D</title>
     <link rel="icon" href="/favicon.ico" type="image/svg+xml">
-    <link rel="stylesheet" href="/web/assets/styles/index.css?v=site-public-6">
+    <link rel="stylesheet" href="/web/assets/styles/index.css?v=console-model-profile-1">
 </head>
 <body data-page-title-key="console.pageTitle">
     <div class="page-shell">
@@ -16,8 +16,11 @@
                     <span id="connection-badge" class="status-badge status-idle" data-i18n-key="console.status.initializing">initializing</span>
                     <span id="session-label" class="muted-text" data-i18n-key="console.sessionDefault">session: default</span>
                     <span id="model-profile-badge" class="model-profile-badge" hidden>
-                        <span data-i18n-key="console.modelProfile">Model</span>:
-                        <a id="model-profile-link" href="/admin/models">Profile A</a>
+                        <label class="model-profile-select-label">
+                            <span data-i18n-key="console.modelProfile">Model</span>
+                            <select id="model-profile-select" class="model-profile-select" autocomplete="off"></select>
+                        </label>
+                        <a id="model-profile-link" class="model-profile-manage-link" href="/admin/models" data-i18n-key="console.modelProfileManage">Manage</a>
                     </span>
                 </div>
                 <div class="stage-actions">
@@ -987,6 +990,6 @@
     <script src="/web/assets/vendor/pixi.min.js"></script>
     <script src="/web/assets/vendor/live2dcubismcore.min.js"></script>
     <script src="/web/assets/vendor/cubism4.min.js"></script>
-    <script type="module" src="/web/assets/app.js?v=site-public-6"></script>
+    <script type="module" src="/web/assets/app.js?v=console-model-profile-1"></script>
 </body>
 </html>

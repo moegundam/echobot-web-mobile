@@ -20,12 +20,13 @@ import { createRolesModule } from "./features/roles.js?v=site-public-6";
 import { createSessionsModule } from "./features/sessions.js?v=site-public-6";
 import { createTtsModule } from "./features/tts.js?v=site-public-6";
 import { initShellDisplayMode } from "./shell-display-mode.js?v=site-public-6";
-import { initShellI18n } from "./shell-i18n.js?v=site-public-6";
+import { initShellI18n } from "./shell-i18n.js?v=console-model-profile-1";
 import {
     MODEL_PROFILE_UPDATE_STORAGE_KEY,
     activeModelProfileFromConfig,
     applyModelProfileToLocalPreferences,
     modelProfileScopeFromConfig,
+    notifyModelProfileChanged,
 } from "./model-profile-runtime.js?v=model-profile-2";
 import {
     addMessage,
@@ -198,6 +199,7 @@ async function initializePage() {
     layout.ensureSidebarToggleButtons();
     layout.initializeLive2DDrawer();
     layout.initializePageSplit();
+    initializeModelProfileControls();
     initializeMessageInteractions();
     wireAppEvents({
         asr,
@@ -227,9 +229,9 @@ async function initializePage() {
         currentModelProfileScope = modelProfileScopeFromConfig(config);
         const activeModelProfile = activeModelProfileFromConfig(config);
         currentActiveModelProfile = activeModelProfile;
+        appState.config = config;
         applyModelProfileToLocalPreferences(activeModelProfile);
         renderActiveModelProfile(activeModelProfile);
-        appState.config = config;
         layout.applyRuntimeConfig(config.runtime);
         const activeLive2DConfig = live2d.applyConfigToUI(config);
 
@@ -291,6 +293,70 @@ async function refreshConsoleControlsFromConfig(config) {
     asr.applyAsrStatus(config.asr);
 }
 
+function initializeModelProfileControls() {
+    const select = document.getElementById("model-profile-select");
+    if (!select || select.dataset.bound === "true") {
+        return;
+    }
+    select.dataset.bound = "true";
+    select.addEventListener("change", () => {
+        void activateConsoleModelProfile(select.value);
+    });
+}
+
+async function activateConsoleModelProfile(profileId) {
+    const nextProfileId = String(profileId || "").trim();
+    const currentProfileId = String(
+        (currentActiveModelProfile && currentActiveModelProfile.profile_id) || "",
+    ).trim();
+    if (!nextProfileId || nextProfileId === currentProfileId) {
+        renderActiveModelProfile(currentActiveModelProfile);
+        return;
+    }
+
+    const select = document.getElementById("model-profile-select");
+    if (select) {
+        select.disabled = true;
+    }
+    status.setRunStatus(
+        i18n.t("console.modelProfileSwitching"),
+        "console.modelProfileSwitching",
+    );
+
+    try {
+        const payload = await requestJson(
+            `/api/model-profiles/${encodeURIComponent(nextProfileId)}/activate`,
+            { method: "POST" },
+        );
+        appState.config = {
+            ...(appState.config || {}),
+            model_profiles: payload,
+        };
+        const activeProfile = activeModelProfileFromConfig({ model_profiles: payload });
+        currentActiveModelProfile = activeProfile;
+        applyModelProfileToLocalPreferences(activeProfile);
+        renderActiveModelProfile(activeProfile);
+        if (activeProfile && activeProfile.profile_id) {
+            notifyModelProfileChanged(activeProfile.profile_id, currentModelProfileScope);
+        }
+        await syncModelProfileFromServer();
+        const profileLabel = modelProfileOptionLabel(activeProfile);
+        status.setRunStatus(
+            i18n.t("console.modelProfileSwitched", { profile: profileLabel }),
+            "console.modelProfileSwitched",
+            { profile: profileLabel },
+        );
+    } catch (error) {
+        console.error(error);
+        renderActiveModelProfile(currentActiveModelProfile);
+        status.setRunStatus(error.message || i18n.t("console.modelProfileSwitchFailed"));
+    } finally {
+        if (select) {
+            select.disabled = false;
+        }
+    }
+}
+
 function parseModelProfileUpdateScope(value) {
     try {
         const payload = JSON.parse(String(value || "{}"));
@@ -302,19 +368,63 @@ function parseModelProfileUpdateScope(value) {
 
 function renderActiveModelProfile(profile) {
     const badge = document.getElementById("model-profile-badge");
+    const select = document.getElementById("model-profile-select");
     const link = document.getElementById("model-profile-link");
-    if (!badge || !link) {
+    if (!badge) {
         return;
     }
 
-    if (!profile) {
+    const payload = (appState.config && appState.config.model_profiles) || {};
+    const profiles = Array.isArray(payload.profiles) ? [...payload.profiles] : [];
+    const activeProfileId = String(
+        payload.active_profile_id || (profile && profile.profile_id) || "",
+    ).trim();
+    if (!profile && activeProfileId) {
+        profile = profiles.find((item) => item && item.profile_id === activeProfileId) || null;
+    }
+    if (profile && !profiles.some((item) => item && item.profile_id === profile.profile_id)) {
+        profiles.push(profile);
+    }
+
+    if (!profile && profiles.length === 0) {
         badge.hidden = true;
         return;
     }
 
+    renderModelProfileSelectOptions(select, profiles, activeProfileId);
+    if (link) {
+        link.textContent = i18n.t("console.modelProfileManage");
+    }
+    badge.hidden = false;
+}
+
+function renderModelProfileSelectOptions(select, profiles, activeProfileId) {
+    if (!select) {
+        return;
+    }
+    const selectedProfileId = String(activeProfileId || "").trim();
+    const currentValue = selectedProfileId || select.value;
+    select.replaceChildren();
+    for (const profile of profiles) {
+        if (!profile || !profile.profile_id) {
+            continue;
+        }
+        const option = document.createElement("option");
+        option.value = String(profile.profile_id);
+        option.textContent = modelProfileOptionLabel(profile);
+        select.appendChild(option);
+    }
+    if (currentValue && [...select.options].some((option) => option.value === currentValue)) {
+        select.value = currentValue;
+    }
+}
+
+function modelProfileOptionLabel(profile) {
+    if (!profile) {
+        return i18n.t("models.defaultProfile");
+    }
     const profileId = String(profile.profile_id || "").trim();
     const code = profileId ? profileId.toUpperCase() : "";
     const label = String(profile.label || code || i18n.t("models.defaultProfile")).trim();
-    link.textContent = code ? `${code} · ${label}` : label;
-    badge.hidden = false;
+    return code ? `${code} · ${label}` : label;
 }

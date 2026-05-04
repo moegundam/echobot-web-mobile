@@ -58,14 +58,23 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn('id="role-model-profile-card"', html)
         self.assertIn('id="role-model-profile-link"', html)
         self.assertIn('id="role-model-profile-detail"', html)
+        self.assertIn('id="model-profile-select"', html)
+        self.assertIn('id="model-profile-link"', html)
         self.assertIn('data-i18n-key="console.groupModelRouting"', html)
         self.assertIn('data-i18n-key="console.groupVoice"', html)
         self.assertIn('data-i18n-key="console.groupLive2dStage"', html)
         self.assertIn('data-i18n-key="console.groupRuntimeJobs"', html)
         self.assertIn("syncModelProfileFromServer", app_js)
+        self.assertIn("activateConsoleModelProfile", app_js)
+        self.assertIn("/api/model-profiles/${encodeURIComponent(nextProfileId)}/activate", app_js)
+        self.assertIn("notifyModelProfileChanged", app_js)
         self.assertIn("renderRoleModelProfileCard", roles_js)
 
         for key in (
+            "console.modelProfileManage",
+            "console.modelProfileSwitching",
+            "console.modelProfileSwitched",
+            "console.modelProfileSwitchFailed",
             "console.roleModelProfile",
             "console.roleModelProfileBound",
             "console.roleModelProfileUnbound",
