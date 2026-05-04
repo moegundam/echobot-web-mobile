@@ -10,6 +10,7 @@ const sessionInput = document.getElementById("messenger-session");
 const statusElement = document.getElementById("messenger-status");
 
 const DEFAULT_ROUTE_MODE = "chat_only";
+const stageDirectivePattern = /^\s*\[(emotion|expression|motion)\s*[:=]\s*([^\]\r\n]{1,256})\]\s*/i;
 let currentStatusKey = "messenger.status.ready";
 const i18n = initShellI18n({
     onChange: () => {
@@ -88,9 +89,14 @@ async function submitMessage() {
                 },
                 onDone: async (event) => {
                     const finalText = String(event.response || event.response_content || assistantText || "");
-                    assistantText = finalText;
-                    assistantNode.textContent = finalText;
-                    await publishStageEvent("assistant_final", sessionName, finalText);
+                    const stageMessage = extractStageDirectives(finalText);
+                    assistantText = stageMessage.text;
+                    assistantNode.textContent = stageMessage.text;
+                    await publishStageEvent("assistant_final", sessionName, stageMessage.text, {}, {
+                        emotion: stageMessage.emotion,
+                        expression: stageMessage.expression,
+                        motion: stageMessage.motion,
+                    });
                 },
             },
         );
@@ -237,7 +243,33 @@ function messageRoleLabel(role) {
         : i18n.t("messenger.assistantLabel");
 }
 
-async function publishStageEvent(kind, sessionName, text, metadata = {}) {
+function extractStageDirectives(text) {
+    const directives = {
+        text: String(text || ""),
+        emotion: "",
+        expression: "",
+        motion: "",
+    };
+    let remaining = directives.text;
+
+    while (true) {
+        const match = remaining.match(stageDirectivePattern);
+        if (!match) {
+            break;
+        }
+        const key = String(match[1] || "").toLowerCase();
+        const value = String(match[2] || "").trim();
+        if (key && Object.prototype.hasOwnProperty.call(directives, key)) {
+            directives[key] = value;
+        }
+        remaining = remaining.slice(match[0].length);
+    }
+
+    directives.text = remaining.trimStart();
+    return directives;
+}
+
+async function publishStageEvent(kind, sessionName, text, metadata = {}, state = {}) {
     try {
         const response = await fetch("/api/stage/events", {
             method: "POST",
@@ -248,6 +280,9 @@ async function publishStageEvent(kind, sessionName, text, metadata = {}) {
                 kind: kind,
                 session_name: sessionName,
                 text: String(text || ""),
+                emotion: String(state.emotion || ""),
+                expression: String(state.expression || ""),
+                motion: String(state.motion || ""),
                 speaker: "EchoBot",
                 source: "messenger",
                 metadata: metadata,

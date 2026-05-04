@@ -102,6 +102,7 @@ A user/session scoped Stage event flow was added:
 - `POST /api/stage/events`: publish subtitles and stage events.
 - Broker v1 is in-memory and keyed by trusted user plus session.
 - Stage updates subtitles on `assistant_delta` and performs final subtitle/TTS behavior on `assistant_final`.
+- Stage events can carry `emotion`, `expression`, and `motion`; `character_state` can update Live2D expression/motion without changing subtitles.
 
 ### 7. Open WebUI Bridge Interface
 
@@ -220,7 +221,7 @@ This branch has been verified with:
 - 10 routes × mobile/desktop × 3 languages browser checks.
 - i18n key coverage.
 - API route/auth tests.
-- Full pytest: `310 passed`.
+- Full pytest: `312 passed`.
 
 ## Project Rules
 

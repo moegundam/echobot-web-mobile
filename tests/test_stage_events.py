@@ -100,6 +100,9 @@ class StageEventBrokerTests(unittest.IsolatedAsyncioTestCase):
                 kind="assistant_final",
                 session_name="demo",
                 text="hello stage",
+                emotion="joy",
+                expression="smile.exp3.json",
+                motion="wave.motion3.json",
                 source="messenger",
             ),
         )
@@ -109,3 +112,38 @@ class StageEventBrokerTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("id: evt_000001", payload)
         self.assertIn("event: assistant_final", payload)
         self.assertIn('"text": "hello stage"', payload)
+        self.assertIn('"emotion": "joy"', payload)
+        self.assertIn('"expression": "smile.exp3.json"', payload)
+        self.assertIn('"motion": "wave.motion3.json"', payload)
+
+    async def test_stage_character_state_event_accepts_visual_directives_without_text(self) -> None:
+        broker = StageEventBroker()
+        event = await broker.publish(
+            scope_key="alpha",
+            request=StageEventPublishRequest(
+                kind="character_state",
+                session_name="demo",
+                emotion="focused",
+                expression="serious.exp3.json",
+                motion="nod.motion3.json",
+            ),
+        )
+
+        self.assertEqual("character_state", event.kind)
+        self.assertEqual("", event.text)
+        self.assertEqual("focused", event.emotion)
+        self.assertEqual("serious.exp3.json", event.expression)
+        self.assertEqual("nod.motion3.json", event.motion)
+
+    async def test_stage_visual_directives_are_size_limited(self) -> None:
+        broker = StageEventBroker()
+
+        with self.assertRaisesRegex(ValueError, "Stage event expression is too large"):
+            await broker.publish(
+                scope_key="alpha",
+                request=StageEventPublishRequest(
+                    kind="character_state",
+                    session_name="demo",
+                    expression="x" * 257,
+                ),
+            )

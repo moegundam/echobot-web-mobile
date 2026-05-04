@@ -160,6 +160,9 @@ def build_openwebui_tools_openapi() -> dict[str, Any]:
                                         "session_name": {"type": "string"},
                                         "text": {"type": "string"},
                                         "target_user_id": {"type": "string"},
+                                        "emotion": {"type": "string"},
+                                        "expression": {"type": "string"},
+                                        "motion": {"type": "string"},
                                         "speaker": {"type": "string"},
                                     },
                                 }

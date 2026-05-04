@@ -1357,6 +1357,9 @@ class AppApiTests(unittest.TestCase):
             chat_schema = paths["/api/openwebui/chat"]["post"]["requestBody"]["content"]["application/json"]["schema"]
             sessions_params = paths["/api/openwebui/sessions"]["get"]["parameters"]
             self.assertIn("target_user_id", stage_schema["required"])
+            self.assertIn("emotion", stage_schema["properties"])
+            self.assertIn("expression", stage_schema["properties"])
+            self.assertIn("motion", stage_schema["properties"])
             self.assertIn("target_user_id", chat_schema["required"])
             self.assertTrue(sessions_params[0]["required"])
 
@@ -1997,6 +2000,9 @@ class AppApiTests(unittest.TestCase):
                             "target_user_id": "alpha@example.test",
                             "session_name": "demo",
                             "text": "hello from Open WebUI",
+                            "emotion": "joy",
+                            "expression": "smile.exp3.json",
+                            "motion": "wave.motion3.json",
                             "speaker": "Operator",
                         },
                     )
@@ -2043,6 +2049,9 @@ class AppApiTests(unittest.TestCase):
             self.assertEqual(200, stage_event.status_code)
             self.assertEqual("assistant_final", stage_event.json()["kind"])
             self.assertEqual("openwebui", stage_event.json()["source"])
+            self.assertEqual("joy", stage_event.json()["emotion"])
+            self.assertEqual("smile.exp3.json", stage_event.json()["expression"])
+            self.assertEqual("wave.motion3.json", stage_event.json()["motion"])
             self.assertEqual(["hello from Open WebUI"], [item.text for item in alpha_history])
             self.assertEqual([], beta_history)
             self.assertEqual(200, chat.status_code)
@@ -2398,6 +2407,9 @@ class AppApiTests(unittest.TestCase):
                         "text": "hello stage",
                         "speaker": "Echo",
                         "source": "messenger",
+                        "emotion": "joy",
+                        "expression": "smile.exp3.json",
+                        "motion": "wave.motion3.json",
                     },
                     headers=alpha_headers,
                 )
@@ -2433,6 +2445,9 @@ class AppApiTests(unittest.TestCase):
             self.assertEqual(200, alpha_event.status_code)
             self.assertEqual("evt_000001", alpha_event.json()["event_id"])
             self.assertEqual("assistant_final", alpha_event.json()["kind"])
+            self.assertEqual("joy", alpha_event.json()["emotion"])
+            self.assertEqual("smile.exp3.json", alpha_event.json()["expression"])
+            self.assertEqual("wave.motion3.json", alpha_event.json()["motion"])
             self.assertEqual(200, beta_event.status_code)
             self.assertEqual(["hello stage"], [item.text for item in alpha_history])
             self.assertEqual(["beta stage"], [item.text for item in beta_history])

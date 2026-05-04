@@ -26,6 +26,9 @@ let currentMouthValue = 0;
 let live2dApp = null;
 let live2dModel = null;
 let live2dConfig = null;
+let activeStageExpressionDefinition = null;
+let stageExpressionHook = null;
+const expressionDataCache = new Map();
 const i18n = initShellI18n({
     onChange: () => {
         refreshLocalizedStageText();
@@ -100,25 +103,52 @@ function initStageEvents() {
     });
     source.addEventListener("subtitle", (event) => {
         const payload = parseStageEvent(event);
+        applyStageVisualState(payload);
         setSubtitle(payload.text);
     });
     source.addEventListener("assistant_final", async (event) => {
         const payload = parseStageEvent(event);
+        applyStageVisualState(payload);
         setSubtitle(payload.text);
         await playTts(payload.text);
+    });
+    source.addEventListener("character_state", (event) => {
+        const payload = parseStageEvent(event);
+        applyStageVisualState(payload);
     });
 }
 
 function parseStageEvent(event) {
     try {
         const payload = JSON.parse(event.data || "{}");
+        const metadata = payload && typeof payload.metadata === "object" && payload.metadata
+            ? payload.metadata
+            : {};
         return {
             text: String(payload.text || ""),
+            emotion: String(payload.emotion || metadata.emotion || ""),
+            expression: String(payload.expression || metadata.expression || ""),
+            motion: String(payload.motion || metadata.motion || ""),
         };
     } catch (_error) {
         return {
             text: "",
+            emotion: "",
+            expression: "",
+            motion: "",
         };
+    }
+}
+
+function applyStageVisualState(payload) {
+    if (!payload) {
+        return;
+    }
+    if (payload.expression || payload.emotion) {
+        applyStageExpression(payload.expression || payload.emotion);
+    }
+    if (payload.motion) {
+        playStageMotion(payload.motion);
     }
 }
 
@@ -336,6 +366,152 @@ function applyMouthValue(value) {
     }
 }
 
+async function applyStageExpression(expressionName) {
+    const expressionItem = findLive2DExpression(expressionName);
+    if (!expressionItem || !live2dModel) {
+        return;
+    }
+
+    try {
+        const expressionDefinition = await loadStageExpressionDefinition(expressionItem);
+        activeStageExpressionDefinition = expressionDefinition;
+        applyActiveStageExpression();
+    } catch (error) {
+        console.warn("Failed to apply stage expression", error);
+    }
+}
+
+function applyActiveStageExpression() {
+    if (!activeStageExpressionDefinition) {
+        return;
+    }
+    applyStageExpressionDefinition(activeStageExpressionDefinition);
+}
+
+function applyStageExpressionDefinition(expressionDefinition) {
+    const internalModel = live2dModel && live2dModel.internalModel;
+    const coreModel = internalModel && internalModel.coreModel;
+    if (!coreModel || typeof coreModel.setParameterValueById !== "function") {
+        return;
+    }
+
+    expressionDefinition.parameters.forEach((parameter) => {
+        try {
+            if (parameter.blend === "Add" && typeof coreModel.addParameterValueById === "function") {
+                coreModel.addParameterValueById(parameter.id, parameter.value);
+                return;
+            }
+            if (
+                parameter.blend === "Multiply"
+                && typeof coreModel.multiplyParameterValueById === "function"
+            ) {
+                coreModel.multiplyParameterValueById(parameter.id, parameter.value);
+                return;
+            }
+            coreModel.setParameterValueById(parameter.id, parameter.value);
+        } catch (error) {
+            console.warn(`Failed to apply stage expression parameter ${parameter.id}`, error);
+        }
+    });
+}
+
+async function playStageMotion(motionName) {
+    const motionItem = findLive2DMotion(motionName);
+    if (!motionItem || !live2dModel || typeof live2dModel.motion !== "function") {
+        return;
+    }
+
+    try {
+        await live2dModel.motion(motionItem.group, motionItem.index);
+    } catch (error) {
+        console.warn("Failed to play stage motion", error);
+    }
+}
+
+function findLive2DExpression(expressionName) {
+    const normalizedName = normalizeStageDirective(expressionName);
+    const expressions = live2dConfig && Array.isArray(live2dConfig.expressions)
+        ? live2dConfig.expressions
+        : [];
+    if (!normalizedName || expressions.length === 0) {
+        return null;
+    }
+    return expressions.find((item) => (
+        item.url
+        && directiveMatchesLive2DItem(item, normalizedName)
+    )) || null;
+}
+
+function findLive2DMotion(motionName) {
+    const normalizedName = normalizeStageDirective(motionName);
+    const motions = live2dConfig && Array.isArray(live2dConfig.motions)
+        ? live2dConfig.motions
+        : [];
+    if (!normalizedName || motions.length === 0) {
+        return null;
+    }
+    return motions.find((item) => (
+        item.group
+        && directiveMatchesLive2DItem(item, normalizedName)
+    )) || null;
+}
+
+function directiveMatchesLive2DItem(item, normalizedName) {
+    if (!item || !normalizedName) {
+        return false;
+    }
+    return [
+        item.file,
+        item.name,
+        item.note,
+    ].some((value) => normalizeStageDirective(value) === normalizedName);
+}
+
+function normalizeStageDirective(value) {
+    return String(value || "").trim().toLowerCase();
+}
+
+async function loadStageExpressionDefinition(expressionItem) {
+    if (expressionDataCache.has(expressionItem.url)) {
+        return expressionDataCache.get(expressionItem.url);
+    }
+
+    const response = await fetch(expressionItem.url, {
+        cache: "no-store",
+    });
+    if (!response.ok) {
+        throw await responseToError(response);
+    }
+
+    const payload = await response.json();
+    const parameters = Array.isArray(payload && payload.Parameters)
+        ? payload.Parameters
+            .filter((item) => item && typeof item === "object")
+            .map((item) => ({
+                id: String(item.Id || ""),
+                value: typeof item.Value === "number" ? item.Value : 0,
+                blend: normalizeExpressionBlend(item.Blend),
+            }))
+            .filter((item) => item.id)
+        : [];
+    const expressionDefinition = {
+        parameters: parameters,
+    };
+    expressionDataCache.set(expressionItem.url, expressionDefinition);
+    return expressionDefinition;
+}
+
+function normalizeExpressionBlend(blend) {
+    const normalizedBlend = String(blend || "").trim().toLowerCase();
+    if (normalizedBlend === "add") {
+        return "Add";
+    }
+    if (normalizedBlend === "multiply") {
+        return "Multiply";
+    }
+    return "Set";
+}
+
 function clamp(value, min, max) {
     return Math.min(Math.max(value, min), max);
 }
@@ -382,6 +558,7 @@ async function initLive2D() {
                 autoInteract: false,
             });
             live2dApp.stage.addChild(live2dModel);
+            attachStageExpressionHook(live2dModel);
             fitLive2DModel();
             window.addEventListener("resize", fitLive2DModel);
             canvasHost.dataset.live2d = "ready";
@@ -394,6 +571,30 @@ async function initLive2D() {
                 : "stage.fallback.subtitleMode",
         );
     }
+}
+
+function attachStageExpressionHook(model) {
+    detachStageExpressionHook();
+    const internalModel = model && model.internalModel;
+    if (!internalModel || typeof internalModel.on !== "function") {
+        return;
+    }
+    stageExpressionHook = () => {
+        applyActiveStageExpression();
+    };
+    internalModel.on("beforeModelUpdate", stageExpressionHook);
+}
+
+function detachStageExpressionHook() {
+    if (!stageExpressionHook || !live2dModel || !live2dModel.internalModel) {
+        stageExpressionHook = null;
+        return;
+    }
+    const internalModel = live2dModel.internalModel;
+    if (typeof internalModel.off === "function") {
+        internalModel.off("beforeModelUpdate", stageExpressionHook);
+    }
+    stageExpressionHook = null;
 }
 
 function canUsePixiLive2D() {
@@ -502,6 +703,8 @@ function normalizeLive2DConfig(sourceConfig) {
             model_url: "",
             lip_sync_parameter_ids: DEFAULT_LIP_SYNC_IDS.slice(),
             mouth_form_parameter_id: null,
+            expressions: [],
+            motions: [],
         };
     }
 
@@ -520,7 +723,25 @@ function normalizeLive2DConfig(sourceConfig) {
         mouth_form_parameter_id: typeof modelConfig.mouth_form_parameter_id === "string"
             ? modelConfig.mouth_form_parameter_id
             : null,
+        expressions: normalizeLive2DActionList(modelConfig.expressions),
+        motions: normalizeLive2DActionList(modelConfig.motions),
     };
+}
+
+function normalizeLive2DActionList(items) {
+    return Array.isArray(items)
+        ? items
+            .filter((item) => item && typeof item === "object")
+            .map((item) => ({
+                file: String(item.file || ""),
+                name: String(item.name || item.file || ""),
+                note: String(item.note || ""),
+                url: String(item.url || ""),
+                group: String(item.group || ""),
+                index: Number.isInteger(item.index) ? item.index : 0,
+            }))
+            .filter((item) => item.file || item.name)
+        : [];
 }
 
 async function withPixiInitializationGuard(callback) {
@@ -584,6 +805,8 @@ async function createPixiApplication(host) {
 function destroyLive2DApp() {
     window.removeEventListener("resize", fitLive2DModel);
     applyMouthValue(0);
+    detachStageExpressionHook();
+    activeStageExpressionDefinition = null;
     live2dModel = null;
     if (live2dApp && typeof live2dApp.destroy === "function") {
         try {

@@ -15,12 +15,14 @@ from ...runtime.sessions import normalize_session_name
 
 MAX_STAGE_EVENT_TEXT_LENGTH = 8192
 MAX_STAGE_EVENT_METADATA_BYTES = 4096
+MAX_STAGE_EVENT_DIRECTIVE_LENGTH = 256
 DEFAULT_STAGE_EVENT_HISTORY_LIMIT = 100
 DEFAULT_STAGE_EVENT_QUEUE_LIMIT = 100
 DEFAULT_STAGE_EVENT_HEARTBEAT_SECONDS = 15.0
 VALID_STAGE_EVENT_KINDS = {
     "assistant_delta",
     "assistant_final",
+    "character_state",
     "state",
     "subtitle",
 }
@@ -30,6 +32,9 @@ class StageEventPublishRequest(BaseModel):
     kind: str
     session_name: str
     text: str = ""
+    emotion: str = ""
+    expression: str = ""
+    motion: str = ""
     speaker: str = "Echo"
     source: str = "console"
     metadata: dict[str, Any] = Field(default_factory=dict)
@@ -40,6 +45,9 @@ class StageEventModel(BaseModel):
     kind: str
     session_name: str
     text: str = ""
+    emotion: str = ""
+    expression: str = ""
+    motion: str = ""
     speaker: str = "Echo"
     source: str = "console"
     created_at: str
@@ -172,6 +180,10 @@ class StageEventBroker:
         if len(text) > MAX_STAGE_EVENT_TEXT_LENGTH:
             raise ValueError("Stage event text is too large")
 
+        emotion = self._clean_directive("emotion", request.emotion)
+        expression = self._clean_directive("expression", request.expression)
+        motion = self._clean_directive("motion", request.motion)
+
         metadata = dict(request.metadata or {})
         metadata_bytes = json.dumps(metadata, ensure_ascii=False).encode("utf-8")
         if len(metadata_bytes) > MAX_STAGE_EVENT_METADATA_BYTES:
@@ -186,11 +198,21 @@ class StageEventBroker:
             kind=kind,
             session_name=normalized_session,
             text=text,
+            emotion=emotion,
+            expression=expression,
+            motion=motion,
             speaker=str(request.speaker or "Echo").strip() or "Echo",
             source=str(request.source or "console").strip() or "console",
             created_at=datetime.now().astimezone().isoformat(timespec="microseconds"),
             metadata=metadata,
         )
+
+    @staticmethod
+    def _clean_directive(field_name: str, value: str) -> str:
+        cleaned = str(value or "").strip()
+        if len(cleaned) > MAX_STAGE_EVENT_DIRECTIVE_LENGTH:
+            raise ValueError(f"Stage event {field_name} is too large")
+        return cleaned
 
     def _get_or_create_channel(
         self,

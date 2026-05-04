@@ -102,6 +102,7 @@ python -m echobot app --host 127.0.0.1 --port 8001
 - `POST /api/stage/events`：發布字幕與舞台事件。
 - Broker v1 為 in-memory，key 包含 trusted user 與 session。
 - Stage 收到 `assistant_delta` 更新字幕，收到 `assistant_final` 才做最終字幕/TTS。
+- Stage event 可攜帶 `emotion`、`expression`、`motion`；`character_state` 可只更新 Live2D 表情/動作而不改字幕。
 
 ### 7. Open WebUI Bridge 接口
 
@@ -220,7 +221,7 @@ python -m pytest
 - 全站 10 個 route × 手機/桌面 × 3 語言瀏覽器檢查。
 - i18n key coverage。
 - API route/auth tests。
-- full pytest：`310 passed`。
+- full pytest：`312 passed`。
 
 ## 專案規矩
 

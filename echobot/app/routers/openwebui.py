@@ -32,6 +32,9 @@ class OpenWebUIStageEventRequest(BaseModel):
     session_name: str
     text: str
     target_user_id: str | None = None
+    emotion: str = ""
+    expression: str = ""
+    motion: str = ""
     speaker: str = "Open WebUI"
     metadata: dict[str, Any] = Field(default_factory=dict)
 
@@ -80,6 +83,9 @@ async def publish_openwebui_stage_event(
             kind="assistant_final",
             session_name=normalized_session_name(request.session_name),
             text=request.text,
+            emotion=request.emotion,
+            expression=request.expression,
+            motion=request.motion,
             speaker=request.speaker,
             source="openwebui",
             metadata={
