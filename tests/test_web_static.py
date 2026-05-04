@@ -98,10 +98,15 @@ class WebStaticAssetTests(unittest.TestCase):
 
         self.assertIn('id="messenger-session-select"', messenger_html)
         self.assertIn('id="stage-session-select"', stage_html)
+        self.assertIn('id="stage-role-label"', stage_html)
+        self.assertIn('id="stage-model-profile-label"', stage_html)
         self.assertIn('"/api/channels/stage-targets"', messenger_js)
         self.assertIn('"/api/channels/stage-targets"', stage_js)
         self.assertIn("loadStageTargets", messenger_js)
         self.assertIn("loadStageTargets", stage_js)
+        self.assertIn("/api/stage/context?session_name=", stage_js)
+        self.assertIn("loadStageContext", stage_js)
+        self.assertIn("renderStageContext", stage_js)
         self.assertIn('route_mode: DEFAULT_ROUTE_MODE', messenger_js)
         self.assertIn("response_language: i18n.language", messenger_js)
         self.assertIn('const DEFAULT_ROUTE_MODE = "chat_only";', messenger_js)
@@ -145,6 +150,9 @@ class WebStaticAssetTests(unittest.TestCase):
             "stage.sessionTarget",
             "stage.sessionFallback",
             "stage.sessionTargetLoadFailed",
+            "stage.roleLabel",
+            "stage.modelProfileLabel",
+            "stage.modelProfileNone",
             "messenger.sessionTarget",
             "messenger.sessionFallback",
             "messenger.sessionTargetLoadFailed",

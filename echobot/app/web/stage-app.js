@@ -1,9 +1,11 @@
-import { initShellI18n } from "./shell-i18n.js?v=site-public-6";
+import { initShellI18n } from "./shell-i18n.js?v=stage-context-1";
 import { initShellDisplayMode } from "./shell-display-mode.js?v=site-public-6";
 import { rememberShellSessionName } from "./shell-session-links.js?v=site-public-6";
 
 const subtitleElement = document.getElementById("stage-subtitle");
 const sessionLabelElement = document.getElementById("stage-session-label");
+const roleLabelElement = document.getElementById("stage-role-label");
+const modelProfileLabelElement = document.getElementById("stage-model-profile-label");
 const sessionSelect = document.getElementById("stage-session-select");
 const statusElement = document.getElementById("stage-status");
 const audioButton = document.getElementById("stage-audio-enable");
@@ -18,6 +20,7 @@ let currentStatusKey = "stage.status.connecting";
 let subtitleIsPlaceholder = true;
 let stageEventSource = null;
 let stageTargets = [];
+let stageContext = null;
 let audioElement = null;
 let activeAudioUrl = "";
 let audioContext = null;
@@ -64,6 +67,7 @@ init();
 async function init() {
     setStatus("stage.status.connecting");
     await loadStageTargets();
+    await loadStageContext();
     initStageEvents();
     await initLive2D();
 }
@@ -89,6 +93,7 @@ function setActiveSessionName(value, options = {}) {
         sessionSelect.value = sessionName;
     }
     updateSessionUrl(sessionName);
+    void loadStageContext();
     if (options.reconnect) {
         setSubtitle("");
         setStatus("stage.status.connecting");
@@ -114,6 +119,51 @@ async function loadStageTargets() {
         renderStageTargetOptions([]);
         setStatus("stage.sessionTargetLoadFailed");
     }
+}
+
+async function loadStageContext() {
+    try {
+        const response = await fetch(
+            `/api/stage/context?session_name=${encodeURIComponent(sessionName)}`,
+        );
+        if (!response.ok) {
+            throw await responseToError(response);
+        }
+        stageContext = await response.json();
+    } catch (error) {
+        console.warn("Unable to load stage context", error);
+        stageContext = null;
+    }
+    renderStageContext();
+}
+
+function renderStageContext() {
+    const context = stageContext && typeof stageContext === "object"
+        ? stageContext
+        : {};
+    const roleName = String(context.role_name || "default");
+    if (roleLabelElement) {
+        roleLabelElement.textContent = i18n.t("stage.roleLabel", {
+            role: roleName,
+        });
+    }
+    if (modelProfileLabelElement) {
+        modelProfileLabelElement.textContent = i18n.t("stage.modelProfileLabel", {
+            profile: stageModelProfileText(context),
+        });
+    }
+}
+
+function stageModelProfileText(context) {
+    const label = String(context.model_profile_label || "").trim();
+    const profileId = String(context.model_profile_id || "").trim();
+    if (label) {
+        return label;
+    }
+    if (profileId) {
+        return profileId;
+    }
+    return i18n.t("stage.modelProfileNone");
 }
 
 function renderStageTargetOptions(targets) {
@@ -227,6 +277,7 @@ function initStageEvents() {
         const payload = parseStageEvent(event);
         applyStageVisualState(payload);
         setSubtitle(payload.text);
+        void loadStageContext();
         await playTts(payload.text);
     });
     source.addEventListener("character_state", (event) => {
@@ -975,6 +1026,7 @@ function markLive2DUnavailable(messageKey) {
 
 function refreshLocalizedStageText() {
     updateSessionLabel();
+    renderStageContext();
     if (statusElement) {
         statusElement.textContent = i18n.t(currentStatusKey);
     }

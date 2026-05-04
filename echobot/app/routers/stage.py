@@ -8,6 +8,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import ValidationError
 
 from ..auth import user_storage_key
+from ..schemas import StageContextResponse
 from ..services.stage_events import (
     StageEventModel,
     StageEventPublishRequest,
@@ -18,6 +19,42 @@ from ..state import get_app_runtime
 
 
 router = APIRouter(tags=["stage"])
+
+
+@router.get("/stage/context", response_model=StageContextResponse)
+async def get_stage_context(
+    session_name: str = "default",
+    runtime=Depends(get_app_runtime),
+) -> StageContextResponse:
+    if runtime.context is None:
+        raise HTTPException(status_code=503, detail="EchoBot runtime is not ready")
+
+    normalized_session_name = str(session_name or "").strip() or "default"
+    role_name = await runtime.context.coordinator.current_role_name(
+        normalized_session_name,
+    )
+    model_profile_id = ""
+    model_profile_label = ""
+    model_profile_source = ""
+
+    if runtime.model_profile_service is not None:
+        payload = await asyncio.to_thread(runtime.model_profile_service.list_profiles)
+        role_bindings = dict(payload.get("role_bindings", {}))
+        active_profile_id = str(payload.get("active_profile_id") or "")
+        model_profile_id = str(role_bindings.get(role_name) or active_profile_id)
+        model_profile_source = "role_binding" if role_bindings.get(role_name) else "active"
+        model_profile_label = _model_profile_label(
+            payload.get("profiles", []),
+            model_profile_id,
+        )
+
+    return StageContextResponse(
+        session_name=normalized_session_name,
+        role_name=role_name,
+        model_profile_id=model_profile_id,
+        model_profile_label=model_profile_label,
+        model_profile_source=model_profile_source,
+    )
 
 
 @router.post("/stage/events", response_model=StageEventModel)
@@ -89,3 +126,14 @@ def _stage_event_scope_key(runtime) -> str:
     if user_id:
         return user_storage_key(user_id)
     return "default"
+
+
+def _model_profile_label(profiles: object, profile_id: str) -> str:
+    if not isinstance(profiles, list) or not profile_id:
+        return ""
+    for item in profiles:
+        if not isinstance(item, dict):
+            continue
+        if str(item.get("profile_id") or "") == profile_id:
+            return str(item.get("label") or profile_id)
+    return profile_id

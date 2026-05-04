@@ -2115,6 +2115,109 @@ class AppApiTests(unittest.TestCase):
             self.assertNotIn("b", stored_payload["profiles"])
             self.assertNotIn("role-bound-key", stored_text)
 
+    def test_stage_context_exposes_current_role_and_safe_model_profile(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+
+            with patch.dict(
+                os.environ,
+                {
+                    "ECHOBOT_TRUSTED_USER_HEADER_ENABLED": "true",
+                    "ECHOBOT_TRUSTED_USER_REQUIRED": "true",
+                    "LLM_API_KEY": "base-key",
+                    "LLM_MODEL": "base-chat-model",
+                    "LLM_BASE_URL": "http://base-llm.test/v1",
+                    "ECHOBOT_ASR_SHERPA_AUTO_DOWNLOAD": "false",
+                    "ECHOBOT_VAD_SILERO_AUTO_DOWNLOAD": "false",
+                },
+                clear=False,
+            ):
+                app = create_app(
+                    runtime_options=RuntimeOptions(
+                        workspace=workspace,
+                        no_tools=True,
+                        no_skills=True,
+                        no_memory=True,
+                        no_heartbeat=True,
+                    ),
+                    channel_config_path=workspace / ".echobot" / "channels.json",
+                    context_builder=build_test_context,
+                )
+
+                alpha_headers = {DEFAULT_TRUSTED_USER_HEADER: "alpha@example.test"}
+                beta_headers = {DEFAULT_TRUSTED_USER_HEADER: "beta@example.test"}
+
+                with TestClient(app) as client:
+                    active_context = client.get(
+                        "/api/stage/context?session_name=demo",
+                        headers=alpha_headers,
+                    )
+                    updated_profile = client.patch(
+                        "/api/model-profiles/b",
+                        headers=alpha_headers,
+                        json={
+                            "label": "Stage Voice",
+                            "chat": {
+                                "provider": "private-litellm",
+                                "model": "stage-chat-model",
+                                "base_url": "http://stage-model.test/v1",
+                                "api_key": "stage-profile-secret",
+                            },
+                        },
+                    )
+                    created_role = client.post(
+                        "/api/roles",
+                        headers=alpha_headers,
+                        json={
+                            "name": "Stage Host",
+                            "prompt": "# Stage Host\n\nSpeak clearly.",
+                        },
+                    )
+                    bound = client.put(
+                        "/api/model-profiles/role-bindings/stage-host",
+                        headers=alpha_headers,
+                        json={"profile_id": "b"},
+                    )
+                    switched = client.put(
+                        "/api/sessions/demo/role",
+                        headers=alpha_headers,
+                        json={"role_name": "stage-host"},
+                    )
+                    bound_context = client.get(
+                        "/api/stage/context?session_name=demo",
+                        headers=alpha_headers,
+                    )
+                    beta_context = client.get(
+                        "/api/stage/context?session_name=demo",
+                        headers=beta_headers,
+                    )
+
+            self.assertEqual(200, active_context.status_code)
+            self.assertEqual("demo", active_context.json()["session_name"])
+            self.assertEqual("default", active_context.json()["role_name"])
+            self.assertEqual("a", active_context.json()["model_profile_id"])
+            self.assertEqual("Profile A", active_context.json()["model_profile_label"])
+            self.assertEqual("active", active_context.json()["model_profile_source"])
+
+            self.assertEqual(200, updated_profile.status_code)
+            self.assertNotIn("api_key", updated_profile.json()["chat"])
+            self.assertEqual(200, created_role.status_code)
+            self.assertEqual(200, bound.status_code)
+            self.assertEqual(200, switched.status_code)
+
+            self.assertEqual(200, bound_context.status_code)
+            self.assertEqual("demo", bound_context.json()["session_name"])
+            self.assertEqual("stage-host", bound_context.json()["role_name"])
+            self.assertEqual("b", bound_context.json()["model_profile_id"])
+            self.assertEqual("Stage Voice", bound_context.json()["model_profile_label"])
+            self.assertEqual("role_binding", bound_context.json()["model_profile_source"])
+            self.assertNotIn("stage-profile-secret", json.dumps(bound_context.json()))
+
+            self.assertEqual(200, beta_context.status_code)
+            self.assertEqual("default", beta_context.json()["role_name"])
+            self.assertEqual("a", beta_context.json()["model_profile_id"])
+            self.assertEqual("active", beta_context.json()["model_profile_source"])
+
     def test_character_profiles_combine_role_prompt_and_model_binding(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             workspace = Path(temp_dir)

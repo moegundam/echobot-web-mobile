@@ -343,6 +343,14 @@ class ModelProfilesResponse(StrictSchemaModel):
     profiles: list[ModelProfileModel] = Field(default_factory=list)
 
 
+class StageContextResponse(StrictSchemaModel):
+    session_name: str = "default"
+    role_name: str = "default"
+    model_profile_id: str = ""
+    model_profile_label: str = ""
+    model_profile_source: str = ""
+
+
 class CreateModelProfileRequest(StrictSchemaModel):
     label: str
     source_profile_id: str | None = None
