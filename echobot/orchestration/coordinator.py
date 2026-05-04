@@ -29,6 +29,7 @@ from .jobs import (
     OrchestratedTurnResult,
     job_can_retry,
 )
+from .response_language import response_language_instruction
 from .roleplay import RoleplayEngine, ScheduledCronJobInfo, StreamCallback
 from .route_modes import (
     RouteMode,
@@ -107,6 +108,7 @@ class ConversationCoordinator:
         file_attachments: list[FileInput] | None = None,
         role_name: str | None = None,
         route_mode: RouteMode | None = None,
+        response_language: str | None = None,
         completion_callback: CompletionCallback | None = None,
         retry_of_job_id: str | None = None,
         attempt: int = 1,
@@ -118,6 +120,7 @@ class ConversationCoordinator:
             file_attachments=file_attachments,
             role_name=role_name,
             route_mode=route_mode,
+            response_language=response_language,
             completion_callback=completion_callback,
             retry_of_job_id=retry_of_job_id,
             attempt=attempt,
@@ -132,6 +135,7 @@ class ConversationCoordinator:
         file_attachments: list[FileInput] | None = None,
         role_name: str | None = None,
         route_mode: RouteMode | None = None,
+        response_language: str | None = None,
         completion_callback: CompletionCallback | None = None,
         on_chunk: StreamCallback | None = None,
         retry_of_job_id: str | None = None,
@@ -165,6 +169,7 @@ class ConversationCoordinator:
                     file_attachments=file_attachments,
                     role_card=role_card,
                     on_chunk=chunk_handler,
+                    response_language=response_language,
                 )
                 session.history.extend(
                     [
@@ -199,6 +204,7 @@ class ConversationCoordinator:
                     image_urls=image_urls,
                     file_attachments=file_attachments,
                     role_card=role_card,
+                    response_language=response_language,
                 )
             handoff_text = _build_agent_handoff_text(
                 session=session,
@@ -237,6 +243,7 @@ class ConversationCoordinator:
                 route_mode=resolved_route_mode,
                 image_urls=image_urls or [],
                 file_attachments=file_attachments or [],
+                response_language=response_language or "",
                 trace_run_id=trace_run_id,
                 attempt=attempt,
                 retry_of_job_id=retry_of_job_id,
@@ -251,6 +258,7 @@ class ConversationCoordinator:
                     file_attachments=file_attachments,
                     handoff_text=handoff_text,
                     continuation_text=continuation_text,
+                    response_language=response_language,
                     trace_run_id=trace_run_id,
                     completion_callback=completion_callback,
                 ),
@@ -376,6 +384,7 @@ class ConversationCoordinator:
             file_attachments=job.file_attachments,
             role_name=job.role_name,
             route_mode=route_mode,
+            response_language=job.response_language,
             completion_callback=completion_callback,
             retry_of_job_id=job.job_id,
             attempt=job.attempt + 1,
@@ -494,6 +503,7 @@ class ConversationCoordinator:
         file_attachments: list[FileInput] | None,
         handoff_text: str | None,
         continuation_text: str | None,
+        response_language: str | None,
         trace_run_id: str | None,
         completion_callback: CompletionCallback | None,
     ) -> None:
@@ -504,7 +514,11 @@ class ConversationCoordinator:
                 "transient_system_messages": (
                     [
                         message
-                        for message in [continuation_text, handoff_text]
+                        for message in [
+                            response_language_instruction(response_language),
+                            continuation_text,
+                            handoff_text,
+                        ]
                         if message and message.strip()
                     ]
                     or None
@@ -545,6 +559,7 @@ class ConversationCoordinator:
                     else ""
                 ),
                 pending_user_input=execution.agent_result.pending_user_input,
+                response_language=response_language,
             )
             if awaiting_user_input:
                 job = await self._jobs.set_waiting_for_input(
@@ -572,6 +587,7 @@ class ConversationCoordinator:
                 file_attachments=file_attachments,
                 raw_content=error_text,
                 is_error=True,
+                response_language=response_language,
             )
             job = await self._jobs.set_failed(
                 job_id,
@@ -610,6 +626,7 @@ class ConversationCoordinator:
                 error=job.error,
                 steps=job.steps,
                 pending_user_input=job.pending_user_input,
+                response_language=job.response_language,
             )
         )
 
@@ -627,6 +644,7 @@ class ConversationCoordinator:
         bypass_roleplay: bool = False,
         direct_response_content: MessageContent = "",
         pending_user_input: dict[str, Any] | None = None,
+        response_language: str | None = None,
     ) -> tuple[str, MessageContent, str]:
         lock = await self._session_lock(session_name)
         async with lock:
@@ -659,6 +677,7 @@ class ConversationCoordinator:
                             normalized_pending_user_input.get("why_needed", "")
                         ),
                         role_card=role_card,
+                        response_language=response_language,
                     )
                 final_content = _build_visible_response_content(
                     text=lead_in_text,
@@ -674,6 +693,7 @@ class ConversationCoordinator:
                         image_urls=image_urls,
                         file_attachments=file_attachments,
                         role_card=role_card,
+                        response_language=response_language,
                     )
                 elif scheduled_job is not None:
                     final_text = (
@@ -685,6 +705,7 @@ class ConversationCoordinator:
                             file_attachments=file_attachments,
                             scheduled_job=scheduled_job,
                             role_card=role_card,
+                            response_language=response_language,
                         )
                     )
                 else:
@@ -695,6 +716,7 @@ class ConversationCoordinator:
                         image_urls=image_urls,
                         file_attachments=file_attachments,
                         role_card=role_card,
+                        response_language=response_language,
                     )
             else:
                 final_text = ""

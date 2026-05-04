@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from ..agent import AgentCore
 from ..models import FileInput, ImageInput
 from ..runtime.sessions import ChatSession
+from .response_language import response_language_instruction
 from .roles import RoleCard, RoleCardRegistry
 
 
@@ -144,6 +145,7 @@ class RoleplayEngine:
         image_urls: list[ImageInput] | None = None,
         file_attachments: list[FileInput] | None = None,
         role_card: RoleCard,
+        response_language: str | None = None,
     ) -> str:
         return await self._generate(
             session=session,
@@ -155,6 +157,7 @@ class RoleplayEngine:
                 _DIRECT_CHAT_INSTRUCTION,
             ],
             fallback_text="I am here.",
+            response_language=response_language,
         )
 
     async def stream_chat_reply(
@@ -166,6 +169,7 @@ class RoleplayEngine:
         file_attachments: list[FileInput] | None = None,
         role_card: RoleCard,
         on_chunk: StreamCallback,
+        response_language: str | None = None,
     ) -> str:
         return await self._stream_generate(
             session=session,
@@ -178,6 +182,7 @@ class RoleplayEngine:
             ],
             fallback_text="I am here.",
             on_chunk=on_chunk,
+            response_language=response_language,
         )
 
     async def delegated_ack(
@@ -188,6 +193,7 @@ class RoleplayEngine:
         image_urls: list[ImageInput] | None = None,
         file_attachments: list[FileInput] | None = None,
         role_card: RoleCard,
+        response_language: str | None = None,
     ) -> str:
         return await self._generate(
             session=session,
@@ -201,6 +207,7 @@ class RoleplayEngine:
             fallback_text="I started working on that and will share the result shortly.",
             include_history=False,
             max_tokens=self._lightweight_max_tokens,
+            response_language=response_language,
         )
 
     async def stream_delegated_ack(
@@ -212,6 +219,7 @@ class RoleplayEngine:
         file_attachments: list[FileInput] | None = None,
         role_card: RoleCard,
         on_chunk: StreamCallback,
+        response_language: str | None = None,
     ) -> str:
         return await self._stream_generate(
             session=session,
@@ -226,6 +234,7 @@ class RoleplayEngine:
             include_history=False,
             max_tokens=self._lightweight_max_tokens,
             on_chunk=on_chunk,
+            response_language=response_language,
         )
 
     async def present_scheduled_setup_result(
@@ -238,6 +247,7 @@ class RoleplayEngine:
         file_attachments: list[FileInput] | None = None,
         scheduled_job: ScheduledCronJobInfo,
         role_card: RoleCard,
+        response_language: str | None = None,
     ) -> str:
         request_text = (
             "A cron reminder or task was scheduled for later.\n\n"
@@ -255,6 +265,7 @@ class RoleplayEngine:
                 _SCHEDULED_SETUP_PRESENTATION_INSTRUCTION,
             ],
             fallback_text=agent_output.strip(),
+            response_language=response_language,
         )
 
     async def present_scheduled_notification(
@@ -263,6 +274,7 @@ class RoleplayEngine:
         session: ChatSession,
         reminder_text: str,
         role_card: RoleCard,
+        response_language: str | None = None,
     ) -> str:
         request_text = (
             "A scheduled reminder or task is due now.\n\n"
@@ -277,6 +289,7 @@ class RoleplayEngine:
                 _SCHEDULED_NOTIFICATION_PRESENTATION_INSTRUCTION,
             ],
             fallback_text=reminder_text.strip(),
+            response_language=response_language,
         )
 
     async def present_agent_result(
@@ -288,6 +301,7 @@ class RoleplayEngine:
         image_urls: list[ImageInput] | None = None,
         file_attachments: list[FileInput] | None = None,
         role_card: RoleCard,
+        response_language: str | None = None,
     ) -> str:
         request_text = (
             "The full agent finished the task.\n\n"
@@ -304,6 +318,7 @@ class RoleplayEngine:
                 _AGENT_RESULT_PRESENTATION_INSTRUCTION,
             ],
             fallback_text=agent_output.strip(),
+            response_language=response_language,
         )
 
     async def present_agent_failure(
@@ -315,6 +330,7 @@ class RoleplayEngine:
         image_urls: list[ImageInput] | None = None,
         file_attachments: list[FileInput] | None = None,
         role_card: RoleCard,
+        response_language: str | None = None,
     ) -> str:
         request_text = (
             "The full agent failed while handling the task.\n\n"
@@ -332,6 +348,7 @@ class RoleplayEngine:
             ],
             fallback_text=f"The task failed: {error_text}",
             max_tokens=self._lightweight_max_tokens,
+            response_language=response_language,
         )
 
     async def present_user_input_request(
@@ -342,6 +359,7 @@ class RoleplayEngine:
         choices: list[str] | None = None,
         why_needed: str = "",
         role_card: RoleCard,
+        response_language: str | None = None,
     ) -> str:
         choice_lines = "\n".join(f"- {choice}" for choice in choices or [] if choice.strip())
         request_text = (
@@ -364,6 +382,7 @@ class RoleplayEngine:
             ],
             fallback_text="",
             max_tokens=self._lightweight_max_tokens,
+            response_language=response_language,
         )
 
     async def _generate(
@@ -378,12 +397,13 @@ class RoleplayEngine:
         fallback_text: str,
         include_history: bool = True,
         max_tokens: int | None = None,
+        response_language: str | None = None,
     ) -> str:
         history = list(session.history[-12:]) if include_history else []
         system_messages = [
             ROLEPLAY_SYSTEM_PROMPT,
             f"Role card ({role_card.name}):\n{role_card.prompt}",
-            *extra_system_messages,
+            *_with_response_language(extra_system_messages, response_language),
         ]
         try:
             response = await self._role_agent.ask(
@@ -454,12 +474,13 @@ class RoleplayEngine:
         on_chunk: StreamCallback,
         include_history: bool = True,
         max_tokens: int | None = None,
+        response_language: str | None = None,
     ) -> str:
         history = list(session.history[-12:]) if include_history else []
         system_messages = [
             ROLEPLAY_SYSTEM_PROMPT,
             f"Role card ({role_card.name}):\n{role_card.prompt}",
-            *extra_system_messages,
+            *_with_response_language(extra_system_messages, response_language),
         ]
         chunks: list[str] = []
 
@@ -496,6 +517,7 @@ class RoleplayEngine:
                 fallback_text=fallback_text,
                 include_history=include_history,
                 max_tokens=max_tokens,
+                response_language=response_language,
             )
 
         content = "".join(chunks).strip()
@@ -511,6 +533,7 @@ class RoleplayEngine:
             fallback_text=fallback_text,
             include_history=include_history,
             max_tokens=max_tokens,
+            response_language=response_language,
         )
         if recovered_text:
             await on_chunk(recovered_text)
@@ -530,6 +553,19 @@ class RoleplayEngine:
         if content:
             await on_chunk(content)
         return content
+
+
+def _with_response_language(
+    messages: list[str],
+    response_language: str | None,
+) -> list[str]:
+    instruction = response_language_instruction(response_language)
+    if not instruction:
+        return messages
+    return [
+        *messages,
+        instruction,
+    ]
 
 
 def _scheduled_job_details_text(job: ScheduledCronJobInfo) -> str:

@@ -38,6 +38,7 @@ class ChatService:
         file_attachments: list[FileInput] | None = None,
         role_name: str | None = None,
         route_mode: RouteMode | None = None,
+        response_language: str | None = None,
     ) -> OrchestratedTurnResult:
         result = await self._coordinator.handle_user_turn(
             session_name,
@@ -46,6 +47,7 @@ class ChatService:
             file_attachments=file_attachments,
             role_name=role_name,
             route_mode=route_mode,
+            response_language=response_language,
         )
         await self._session_service.set_current_session(result.session.name)
         return result
@@ -60,6 +62,7 @@ class ChatService:
         role_name: str | None = None,
         route_mode: RouteMode | None = None,
         on_chunk: StreamCallback | None = None,
+        response_language: str | None = None,
     ) -> OrchestratedTurnResult:
         result = await self._coordinator.handle_user_turn_stream(
             session_name,
@@ -69,6 +72,7 @@ class ChatService:
             role_name=role_name,
             route_mode=route_mode,
             on_chunk=on_chunk,
+            response_language=response_language,
         )
         await self._session_service.set_current_session(result.session.name)
         return result

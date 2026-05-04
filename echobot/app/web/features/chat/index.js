@@ -1,5 +1,5 @@
 import { createComposerAttachmentsController } from "./composer-attachments.js?v=site-public-6";
-import { createChatRunner } from "./job-runner.js?v=site-public-6";
+import { createChatRunner } from "./job-runner.js?v=response-language-1";
 
 export function createChatModule(deps) {
     const composer = createComposerAttachmentsController(deps);

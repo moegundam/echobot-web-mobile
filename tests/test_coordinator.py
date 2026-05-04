@@ -92,6 +92,27 @@ class SlowAgentProvider(LLMProvider):
         )
 
 
+class CapturingAgentProvider(LLMProvider):
+    def __init__(self) -> None:
+        self.messages = []
+
+    async def generate(
+        self,
+        messages,
+        *,
+        tools=None,
+        tool_choice=None,
+        temperature=None,
+        max_tokens=None,
+    ) -> LLMResponse:
+        del tools, tool_choice, temperature, max_tokens
+        self.messages = list(messages)
+        return LLMResponse(
+            message=LLMMessage(role="assistant", content="done"),
+            model="capturing-agent-model",
+        )
+
+
 class AskUserInputProvider(LLMProvider):
     async def generate(
         self,
@@ -194,6 +215,43 @@ class ConversationCoordinatorTests(unittest.IsolatedAsyncioTestCase):
                 ["Please set a cron reminder", "done"],
                 [message.content for message in session.history],
             )
+
+    async def test_response_language_reaches_agent_without_persisting_instruction(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            agent_provider = CapturingAgentProvider()
+            coordinator, session_store = self._build_coordinator(
+                Path(temp_dir),
+                agent_provider=agent_provider,
+                delegated_ack_enabled=False,
+            )
+
+            result = await coordinator.handle_user_turn(
+                "demo",
+                "Please set a cron reminder",
+                response_language="zh-Hant",
+            )
+
+            job = None
+            for _ in range(20):
+                job = await coordinator.get_job(result.job_id or "")
+                if job is not None and job.status != "running":
+                    break
+                await asyncio.sleep(0.01)
+
+            session = session_store.load_session("demo")
+            await coordinator.close()
+
+            assert job is not None
+            self.assertEqual("zh-Hant", job.response_language)
+            system_text = "\n".join(
+                message.content_text
+                for message in agent_provider.messages
+                if getattr(message, "role", "") == "system"
+            )
+            self.assertIn("Default response language: Traditional Chinese", system_text)
+            self.assertIn("If the user's latest prompt explicitly requests another response language", system_text)
+            history_text = "\n".join(str(message.content) for message in session.history)
+            self.assertNotIn("Default response language", history_text)
 
     async def test_close_cancels_pending_job_without_runtime_warning(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

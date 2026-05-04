@@ -51,6 +51,7 @@ class ConversationJob:
     finished_at: str
     trace_run_id: str | None = None
     route_mode: str = ""
+    response_language: str = ""
     attempt: int = 1
     retry_of_job_id: str | None = None
     image_urls: list[dict[str, str]] = field(default_factory=list)
@@ -79,6 +80,7 @@ class ConversationJobStore:
         immediate_response: str,
         role_name: str,
         route_mode: str = "",
+        response_language: str = "",
         image_urls: list[dict[str, str]] | None = None,
         file_attachments: list[dict[str, object]] | None = None,
         trace_run_id: str | None = None,
@@ -100,6 +102,7 @@ class ConversationJobStore:
                 finished_at="",
                 trace_run_id=trace_run_id,
                 route_mode=route_mode,
+                response_language=str(response_language or "").strip(),
                 attempt=max(int(attempt), 1),
                 retry_of_job_id=retry_of_job_id,
                 image_urls=_copy_string_mapping_list(image_urls or []),
@@ -347,6 +350,7 @@ def _copy_job(job: ConversationJob) -> ConversationJob:
         finished_at=job.finished_at,
         trace_run_id=job.trace_run_id,
         route_mode=job.route_mode,
+        response_language=job.response_language,
         attempt=job.attempt,
         retry_of_job_id=job.retry_of_job_id,
         image_urls=_copy_string_mapping_list(job.image_urls),
@@ -381,6 +385,7 @@ def _job_to_dict(job: ConversationJob) -> dict[str, object]:
         "finished_at": job.finished_at,
         "trace_run_id": job.trace_run_id,
         "route_mode": job.route_mode,
+        "response_language": job.response_language,
         "attempt": job.attempt,
         "retry_of_job_id": job.retry_of_job_id,
         "image_urls": _copy_string_mapping_list(job.image_urls),
@@ -413,6 +418,7 @@ def _job_from_dict(data: dict[str, Any]) -> ConversationJob:
         finished_at=_optional_text(data.get("finished_at")) or "",
         trace_run_id=_optional_text(data.get("trace_run_id")),
         route_mode=str(data.get("route_mode", "")).strip(),
+        response_language=str(data.get("response_language", "")).strip(),
         attempt=max(_optional_int(data.get("attempt")) or 1, 1),
         retry_of_job_id=_optional_text(data.get("retry_of_job_id")),
         image_urls=_copy_string_mapping_list(data.get("image_urls") or []),

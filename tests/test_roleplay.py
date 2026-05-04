@@ -194,6 +194,46 @@ class EmptyThenSuccessProvider(LLMProvider):
         return
 
 
+class CapturingProvider(LLMProvider):
+    def __init__(self, content: str = "ok") -> None:
+        self.content = content
+        self.messages = []
+
+    async def generate(
+        self,
+        messages,
+        *,
+        tools=None,
+        tool_choice=None,
+        temperature=None,
+        max_tokens=None,
+    ) -> LLMResponse:
+        del tools, tool_choice, temperature, max_tokens
+        self.messages = list(messages)
+        return LLMResponse(
+            message=LLMMessage(role="assistant", content=self.content),
+            model="capturing-provider",
+        )
+
+    async def stream_generate(
+        self,
+        messages,
+        *,
+        tools=None,
+        tool_choice=None,
+        temperature=None,
+        max_tokens=None,
+    ):
+        response = await self.generate(
+            messages,
+            tools=tools,
+            tool_choice=tool_choice,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        yield response.message.content
+
+
 class RoleplayEngineTests(unittest.IsolatedAsyncioTestCase):
     async def test_stream_delegated_ack_does_not_include_history(self) -> None:
         engine, role_card = self._build_engine()
@@ -224,6 +264,28 @@ class RoleplayEngineTests(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertEqual("history-present", result)
+
+    async def test_chat_reply_includes_response_language_instruction(self) -> None:
+        provider = CapturingProvider()
+        engine, role_card = self._build_engine(provider)
+        session = self._session_with_history()
+
+        result = await engine.chat_reply(
+            session=session,
+            user_input="請介紹你自己",
+            role_card=role_card,
+            response_language="zh-Hant",
+        )
+
+        self.assertEqual("ok", result)
+        system_text = "\n".join(
+            message.content_text
+            for message in provider.messages
+            if getattr(message, "role", "") == "system"
+        )
+        self.assertIn("Default response language: Traditional Chinese", system_text)
+        self.assertIn("do not reply in Simplified Chinese by default", system_text)
+        self.assertIn("If the user's latest prompt explicitly requests another response language", system_text)
 
     async def test_chat_reply_logs_failure_before_returning_fallback(self) -> None:
         engine, role_card = self._build_engine(FailingProvider())

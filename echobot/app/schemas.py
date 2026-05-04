@@ -72,6 +72,7 @@ class ChatRequest(BaseModel):
     session_name: str = "default"
     role_name: str | None = None
     route_mode: RouteMode | None = None
+    response_language: str | None = Field(default=None, max_length=32)
     temperature: float | None = None
     max_tokens: int | None = None
     images: list["ChatImageInput"] = Field(

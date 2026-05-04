@@ -187,6 +187,7 @@ async function submitMessage() {
                 prompt: prompt,
                 session_name: sessionName,
                 route_mode: DEFAULT_ROUTE_MODE,
+                response_language: i18n.language,
             },
             {
                 onChunk: async (delta) => {

@@ -52,6 +52,7 @@ class WebStaticAssetTests(unittest.TestCase):
     def test_console_exposes_role_model_profile_and_control_groups(self) -> None:
         html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
         app_js = (WEB_ROOT / "app.js").read_text(encoding="utf-8")
+        chat_runner_js = (WEB_ROOT / "features" / "chat" / "job-runner.js").read_text(encoding="utf-8")
         roles_js = (WEB_ROOT / "features" / "roles.js").read_text(encoding="utf-8")
         i18n_js = (WEB_ROOT / "shell-i18n.js").read_text(encoding="utf-8")
 
@@ -68,6 +69,8 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn("activateConsoleModelProfile", app_js)
         self.assertIn("/api/model-profiles/${encodeURIComponent(nextProfileId)}/activate", app_js)
         self.assertIn("notifyModelProfileChanged", app_js)
+        self.assertIn("getUiLanguage: () => i18n.language", app_js)
+        self.assertIn("response_language: getUiLanguage()", chat_runner_js)
         self.assertIn("renderRoleModelProfileCard", roles_js)
 
         for key in (
@@ -100,6 +103,7 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn("loadStageTargets", messenger_js)
         self.assertIn("loadStageTargets", stage_js)
         self.assertIn('route_mode: DEFAULT_ROUTE_MODE', messenger_js)
+        self.assertIn("response_language: i18n.language", messenger_js)
         self.assertIn('const DEFAULT_ROUTE_MODE = "chat_only";', messenger_js)
         self.assertIn("extractStageDirectives", messenger_js)
         self.assertIn("stageDirectivePattern", messenger_js)

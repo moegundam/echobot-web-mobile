@@ -54,6 +54,7 @@ async def run_chat(
                 runtime,
                 has_file_attachments=bool(file_attachments),
             ),
+            response_language=request.response_language,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -116,6 +117,7 @@ async def run_chat_stream(
                     has_file_attachments=bool(file_attachments),
                 ),
                 on_chunk=on_chunk,
+                response_language=request.response_language,
             )
         except ValueError as exc:
             await queue.put(

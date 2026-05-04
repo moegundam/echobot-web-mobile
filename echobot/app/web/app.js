@@ -13,7 +13,7 @@ import { wireAppEvents } from "./bootstrap/wire-events.js?v=site-public-6";
 import { createUiStatusController } from "./bootstrap/ui-status.js?v=site-public-6";
 import { appState } from "./core/store.js";
 import { createAsrModule } from "./features/asr.js?v=site-public-6";
-import { createChatModule } from "./features/chat/index.js?v=site-public-6";
+import { createChatModule } from "./features/chat/index.js?v=response-language-1";
 import { createLayoutModule } from "./features/layout/index.js?v=site-public-6";
 import { createLive2DModule } from "./features/live2d/index.js?v=site-public-6";
 import { createRolesModule } from "./features/roles.js?v=site-public-6";
@@ -157,6 +157,7 @@ const chat = createChatModule({
     deleteAttachment,
     ensureAudioContextReady: tts.ensureAudioContextReady,
     finalizeSpeechSession: tts.finalizeSpeechSession,
+    getUiLanguage: () => i18n.language,
     normalizeSessionName,
     queueSpeechSessionText: tts.queueSpeechSessionText,
     removeMessage,

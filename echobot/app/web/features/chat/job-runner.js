@@ -16,6 +16,7 @@ export function createChatRunner(deps) {
         drainVoicePromptQueue,
         ensureAudioContextReady,
         finalizeSpeechSession,
+        getUiLanguage = () => "",
         normalizeSessionName,
         queueSpeechSessionText,
         removeMessage,
@@ -101,6 +102,7 @@ export function createChatRunner(deps) {
                     session_name: sessionName,
                     role_name: roleState.currentRoleName || "default",
                     route_mode: sessionState.currentRouteMode || "auto",
+                    response_language: getUiLanguage(),
                     images: composerImages.map((image) => ({
                         attachment_id: image.attachmentId,
                     })),
