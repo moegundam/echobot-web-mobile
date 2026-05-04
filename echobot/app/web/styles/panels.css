@@ -158,6 +158,60 @@
     margin-top: 0;
 }
 
+.session-settings-summary-block {
+    display: grid;
+    gap: 14px;
+    padding-bottom: 18px;
+    border-bottom: 1px solid rgba(87, 57, 34, 0.12);
+}
+
+.session-settings-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.session-settings-header > div:first-child {
+    display: grid;
+    gap: 5px;
+    min-width: 0;
+}
+
+.session-settings-actions {
+    display: flex;
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
+.session-settings-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px 18px;
+    margin: 0;
+}
+
+.session-settings-grid div {
+    min-width: 0;
+}
+
+.session-settings-grid dt {
+    color: var(--muted);
+    font-size: 0.76rem;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.session-settings-grid dd {
+    margin: 4px 0 0;
+    color: var(--text);
+    font-size: 0.95rem;
+    font-weight: 700;
+    overflow-wrap: anywhere;
+}
+
 .settings-panel-body > .cron-panel,
 .settings-panel-body > .heartbeat-panel {
     margin-top: 18px;

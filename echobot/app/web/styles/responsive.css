@@ -118,6 +118,18 @@
         display: grid;
     }
 
+    .session-settings-header {
+        display: grid;
+    }
+
+    .session-settings-actions {
+        justify-content: flex-start;
+    }
+
+    .session-settings-grid {
+        grid-template-columns: 1fr;
+    }
+
     .console-control-link {
         justify-self: start;
         white-space: normal;
@@ -446,8 +458,18 @@ html[data-device-class="desktop"][data-layout-mode="desktop"] .page-shell {
 }
 
 @media (max-width: 1120px) {
+    html[data-device-class="desktop"][data-layout-mode="desktop"] body {
+        overflow: auto;
+    }
+
     html[data-device-class="desktop"][data-layout-mode="desktop"] .page-shell {
-        grid-template-columns: minmax(584px, 1fr) minmax(340px, var(--chat-panel-width));
+        grid-template-columns: 1fr;
+        width: 100vw;
+        min-width: 0;
+        height: auto;
+        min-height: 100vh;
+        min-height: 100dvh;
+        overflow: visible;
         gap: 16px;
     }
 

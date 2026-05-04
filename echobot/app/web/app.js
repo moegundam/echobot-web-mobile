@@ -17,7 +17,7 @@ import { createChatModule } from "./features/chat/index.js?v=response-language-1
 import { createLayoutModule } from "./features/layout/index.js?v=site-public-6";
 import { createLive2DModule } from "./features/live2d/index.js?v=site-public-6";
 import { createRolesModule } from "./features/roles.js?v=site-public-6";
-import { createSessionsModule } from "./features/sessions.js?v=site-public-6";
+import { createSessionsModule } from "./features/sessions.js?v=console-session-settings-2";
 import { createTtsModule } from "./features/tts.js?v=site-public-6";
 import { initShellDisplayMode } from "./shell-display-mode.js?v=site-public-6";
 import { initShellI18n } from "./shell-i18n.js?v=console-model-profile-1";
@@ -271,10 +271,11 @@ async function syncModelProfileFromServer() {
         ...(appState.config || {}),
         ...config,
     };
-    applyModelProfileToLocalPreferences(activeModelProfile);
-    renderActiveModelProfile(activeModelProfile);
-    await refreshConsoleControlsFromConfig(config);
-    return activeModelProfile;
+        applyModelProfileToLocalPreferences(activeModelProfile);
+        renderActiveModelProfile(activeModelProfile);
+        sessions.refreshSessionSettings?.();
+        await refreshConsoleControlsFromConfig(config);
+        return activeModelProfile;
 }
 
 async function refreshConsoleControlsFromConfig(config) {
@@ -397,6 +398,7 @@ function renderActiveModelProfile(profile) {
         link.textContent = i18n.t("console.modelProfileManage");
     }
     badge.hidden = false;
+    sessions.refreshSessionSettings?.();
 }
 
 function renderModelProfileSelectOptions(select, profiles, activeProfileId) {

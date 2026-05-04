@@ -27,6 +27,7 @@ export const sessionState = {
     currentSessionUpdatedAt: "",
     currentSessionHistory: [],
     currentRouteMode: "auto",
+    stageTargets: [],
     sessions: [],
     sessionLoading: false,
     sessionSyncPollTimerId: 0,

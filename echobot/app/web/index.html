@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>EchoBot Live2D</title>
     <link rel="icon" href="/favicon.ico" type="image/svg+xml">
-    <link rel="stylesheet" href="/web/assets/styles/index.css?v=console-model-profile-1">
+    <link rel="stylesheet" href="/web/assets/styles/index.css?v=console-session-settings-3">
 </head>
 <body data-page-title-key="console.pageTitle">
     <div class="page-shell">
@@ -297,6 +297,49 @@
                     </div>
                 </summary>
                 <div class="settings-panel-body">
+                    <section
+                        id="session-settings-summary"
+                        class="session-settings-summary-block"
+                        aria-label="Session settings"
+                        data-i18n-aria-label-key="console.sessionSettings"
+                    >
+                        <div class="session-settings-header">
+                            <div>
+                                <p class="section-title" data-i18n-key="console.sessionSettings">Session Settings</p>
+                                <span class="muted-text" data-i18n-key="console.sessionSettingsHelp">Current session routing and display context.</span>
+                            </div>
+                            <div class="session-settings-actions">
+                                <a id="session-settings-stage-link" class="console-control-link" href="/stage?session_name=default" data-i18n-key="console.openStage">Stage</a>
+                                <a id="session-settings-messenger-link" class="console-control-link" href="/messenger?session_name=default" data-i18n-key="console.openMessenger">Messenger</a>
+                            </div>
+                        </div>
+                        <dl class="session-settings-grid">
+                            <div>
+                                <dt data-i18n-key="console.sessionSettingCurrent">Session</dt>
+                                <dd id="session-settings-current">default</dd>
+                            </div>
+                            <div>
+                                <dt data-i18n-key="console.sessionSettingSource">Channel</dt>
+                                <dd id="session-settings-source">Manual</dd>
+                            </div>
+                            <div>
+                                <dt data-i18n-key="console.sessionSettingRole">Role</dt>
+                                <dd id="session-settings-role">default</dd>
+                            </div>
+                            <div>
+                                <dt data-i18n-key="console.sessionSettingModel">Effective model</dt>
+                                <dd id="session-settings-model">-</dd>
+                            </div>
+                            <div>
+                                <dt data-i18n-key="console.sessionSettingRoute">Route</dt>
+                                <dd id="session-settings-route">Auto decision</dd>
+                            </div>
+                            <div>
+                                <dt data-i18n-key="console.sessionSettingUpdated">Updated</dt>
+                                <dd id="session-settings-updated">-</dd>
+                            </div>
+                        </dl>
+                    </section>
                     <div class="console-control-section-heading">
                         <div>
                             <p class="section-title" data-i18n-key="console.groupModelRouting">Model / Voice / Routing</p>
@@ -990,6 +1033,6 @@
     <script src="/web/assets/vendor/pixi.min.js"></script>
     <script src="/web/assets/vendor/live2dcubismcore.min.js"></script>
     <script src="/web/assets/vendor/cubism4.min.js"></script>
-    <script type="module" src="/web/assets/app.js?v=response-language-1"></script>
+    <script type="module" src="/web/assets/app.js?v=console-session-settings-2"></script>
 </body>
 </html>

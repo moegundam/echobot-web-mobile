@@ -52,10 +52,22 @@ class WebStaticAssetTests(unittest.TestCase):
     def test_console_exposes_role_model_profile_and_control_groups(self) -> None:
         html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
         app_js = (WEB_ROOT / "app.js").read_text(encoding="utf-8")
+        sessions_js = (WEB_ROOT / "features" / "sessions.js").read_text(encoding="utf-8")
         chat_runner_js = (WEB_ROOT / "features" / "chat" / "job-runner.js").read_text(encoding="utf-8")
         roles_js = (WEB_ROOT / "features" / "roles.js").read_text(encoding="utf-8")
+        panels_css = (WEB_ROOT / "styles" / "panels.css").read_text(encoding="utf-8")
+        responsive_css = (WEB_ROOT / "styles" / "responsive.css").read_text(encoding="utf-8")
         i18n_js = (WEB_ROOT / "shell-i18n.js").read_text(encoding="utf-8")
 
+        self.assertIn('id="session-settings-summary"', html)
+        self.assertIn('id="session-settings-current"', html)
+        self.assertIn('id="session-settings-source"', html)
+        self.assertIn('id="session-settings-role"', html)
+        self.assertIn('id="session-settings-model"', html)
+        self.assertIn('id="session-settings-route"', html)
+        self.assertIn('id="session-settings-updated"', html)
+        self.assertIn('id="session-settings-stage-link"', html)
+        self.assertIn('id="session-settings-messenger-link"', html)
         self.assertIn('id="role-model-profile-card"', html)
         self.assertIn('id="role-model-profile-link"', html)
         self.assertIn('id="role-model-profile-detail"', html)
@@ -70,10 +82,28 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn("/api/model-profiles/${encodeURIComponent(nextProfileId)}/activate", app_js)
         self.assertIn("notifyModelProfileChanged", app_js)
         self.assertIn("getUiLanguage: () => i18n.language", app_js)
+        self.assertIn('"/api/channels/stage-targets"', sessions_js)
+        self.assertIn("renderSessionSettings", sessions_js)
+        self.assertIn("sessionModelProfileLabel", sessions_js)
+        self.assertIn("sessionSourceLabel", sessions_js)
+        self.assertIn(".session-settings-summary-block", panels_css)
+        self.assertIn(".session-settings-grid", panels_css)
+        self.assertIn(".session-settings-grid", responsive_css)
         self.assertIn("response_language: getUiLanguage()", chat_runner_js)
         self.assertIn("renderRoleModelProfileCard", roles_js)
 
         for key in (
+            "console.sessionSettings",
+            "console.sessionSettingsHelp",
+            "console.sessionSettingCurrent",
+            "console.sessionSettingSource",
+            "console.sessionSettingRole",
+            "console.sessionSettingModel",
+            "console.sessionSettingRoute",
+            "console.sessionSettingUpdated",
+            "console.sessionSourceManual",
+            "console.openStage",
+            "console.openMessenger",
             "console.modelProfileManage",
             "console.modelProfileSwitching",
             "console.modelProfileSwitched",

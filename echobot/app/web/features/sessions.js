@@ -1,5 +1,6 @@
 import {
     DEFAULT_SESSION_NAME,
+    appState,
     SESSION_SYNC_POLL_INTERVAL_MS,
     audioState,
     chatState,
@@ -58,6 +59,7 @@ export function createSessionsModule(deps) {
         sidebar.setSessionControlsBusy(true, t("console.loadingSessions"));
 
         try {
+            await loadStageTargets();
             const sessionSummaries = await api.requestSessionSummaries();
             sidebar.applySessionSummaries(sessionSummaries);
 
@@ -67,11 +69,25 @@ export function createSessionsModule(deps) {
                 : await api.switchCurrentSession(initialSessionName);
 
             applySessionDetail(sessionDetail);
+            renderSessionSettings();
             sidebar.setSessionSidebarStatus("");
             startSessionSyncPolling();
         } finally {
             sidebar.setSessionControlsBusy(false);
         }
+    }
+
+    async function loadStageTargets() {
+        try {
+            const payload = await requestJson("/api/channels/stage-targets");
+            sessionState.stageTargets = Array.isArray(payload.targets)
+                ? payload.targets
+                : [];
+        } catch (error) {
+            console.warn("Unable to load stage targets for session settings", error);
+            sessionState.stageTargets = [];
+        }
+        renderSessionSettings();
     }
 
     function resolveInitialSessionName(defaultSessionName, sessionSummaries) {
@@ -361,6 +377,7 @@ export function createSessionsModule(deps) {
         DOM.sessionLabel.textContent = t("console.sessionLabel", { session: sessionName });
         window.localStorage.setItem("echobot.web.session", sessionName);
         sidebar.syncRouteModeSelect();
+        renderSessionSettings();
 
         renderSessionHistory(nextHistory, {
             addMessage: addMessage,
@@ -373,6 +390,85 @@ export function createSessionsModule(deps) {
         void roleHooks.syncRolePanelForCurrentSession();
         if (appendedMessages.length > 0) {
             void handleAppendedMessages(appendedMessages);
+        }
+    }
+
+    function renderSessionSettings() {
+        const sessionName = sessionState.currentSessionName || DEFAULT_SESSION_NAME;
+        const roleName = roleState.currentRoleName || "default";
+        const routeMode = normalizeRouteMode(sessionState.currentRouteMode);
+        const sourceLabel = sessionSourceLabel(sessionName);
+        const modelLabel = sessionModelProfileLabel(roleName);
+        const updatedLabel = formatTimestamp(sessionState.currentSessionUpdatedAt)
+            || t("console.noUpdatedTime");
+
+        setText(sessionSettingsElement("current"), sessionName);
+        setText(sessionSettingsElement("source"), sourceLabel);
+        setText(sessionSettingsElement("role"), roleName);
+        setText(sessionSettingsElement("model"), modelLabel);
+        setText(sessionSettingsElement("route"), routeModeLabel(routeMode, t));
+        setText(sessionSettingsElement("updated"), updatedLabel);
+        updateSessionLink(sessionSettingsElement("stage-link"), "/stage", sessionName);
+        updateSessionLink(sessionSettingsElement("messenger-link"), "/messenger", sessionName);
+    }
+
+    function sessionSettingsElement(key) {
+        return document.getElementById(`session-settings-${key}`);
+    }
+
+    function sessionSourceLabel(sessionName) {
+        const target = findStageTarget(sessionName);
+        if (!target) {
+            return t("console.sessionSourceManual");
+        }
+        const label = String(
+            target.display_name || target.label || target.channel || "",
+        ).trim();
+        return label || t("console.sessionSourceManual");
+    }
+
+    function findStageTarget(sessionName) {
+        const normalizedSessionName = String(sessionName || "").trim();
+        return (sessionState.stageTargets || []).find((target) => (
+            target
+            && String(target.session_name || "").trim() === normalizedSessionName
+        )) || null;
+    }
+
+    function sessionModelProfileLabel(roleName) {
+        const modelProfiles = appState.config && appState.config.model_profiles
+            ? appState.config.model_profiles
+            : {};
+        const roleBindings = modelProfiles && typeof modelProfiles.role_bindings === "object"
+            ? modelProfiles.role_bindings
+            : {};
+        const profileId = String(
+            roleBindings[roleName] || modelProfiles.active_profile_id || "",
+        ).trim();
+        if (!profileId) {
+            return "-";
+        }
+        const profiles = Array.isArray(modelProfiles.profiles)
+            ? modelProfiles.profiles
+            : [];
+        const profile = profiles.find((item) => (
+            item && String(item.profile_id || "") === profileId
+        ));
+        return String((profile && profile.label) || profileId);
+    }
+
+    function updateSessionLink(linkElement, pathname, sessionName) {
+        if (!linkElement) {
+            return;
+        }
+        const url = new URL(pathname, window.location.origin);
+        url.searchParams.set("session_name", sessionName || DEFAULT_SESSION_NAME);
+        linkElement.href = `${url.pathname}${url.search}`;
+    }
+
+    function setText(element, text) {
+        if (element) {
+            element.textContent = String(text || "").trim() || "-";
         }
     }
 
@@ -451,11 +547,13 @@ export function createSessionsModule(deps) {
         initializeSessionPanel: initializeSessionPanel,
         refreshSessionList: refreshSessionList,
         renderSessionList: sidebar.renderSessionList,
+        refreshSessionSettings: renderSessionSettings,
         refreshLocalizedText() {
             const sessionName = sessionState.currentSessionName || DEFAULT_SESSION_NAME;
             if (DOM.sessionLabel) {
                 DOM.sessionLabel.textContent = t("console.sessionLabel", { session: sessionName });
             }
+            renderSessionSettings();
             sidebar.refreshLocalizedText();
         },
         requestSessionDetail: api.requestSessionDetail,
