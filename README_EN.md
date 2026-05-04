@@ -40,7 +40,7 @@ Original EchoBot mainly used `/web` as the operation page. This edition adds and
 | Admin | `/admin` | Admin index, health, API docs, jobs, and management pages |
 | Operation Guide | `/admin/guide` | Operation, setup, expected outcomes, failure signs, and troubleshooting |
 | Site Structure | `/admin/structure` | Route map, Console sections, and API namespace boundaries |
-| Characters | `/admin/characters` | Manage role prompts, model profile binding, voice, Live2D summary, and emotion maps |
+| Characters | `/admin/characters` | Manage role prompts, model profile binding, voice, Live2D summary, emotion maps, and character package import/export |
 | Model Profiles | `/admin/models` | Create, rename, and activate role/model profiles |
 | Channels | `/admin/channels` | Planning entry for Telegram, QQ, LINE, Discord, WhatsApp, and gateway adapters |
 | Open WebUI Bridge | `/admin/openwebui` | Narrow OpenAPI bridge instructions for Open WebUI |
@@ -133,7 +133,16 @@ A model profile management page was added:
 - Each profile can configure chat, TTS, ASR, Live2D provider/model/base URL/API key values.
 - Activating a profile updates the model settings used by Console.
 
-### 9. Deployment And Architecture Documentation
+### 9. Character Packages
+
+`/admin/characters` can export and import one character package:
+
+- Exports include the role prompt, model profile binding, emotion map, and a non-sensitive model settings snapshot.
+- Exports do not include API keys, bot tokens, Cloudflare/Open WebUI tokens, or `.echobot/` secrets.
+- Imports can use a new character name or overwrite an existing character.
+- v1 uses JSON packages and does not bundle Live2D asset files; model API keys are still filled from `/admin/models`.
+
+### 10. Deployment And Architecture Documentation
 
 This edition adds planning, site structure, and reference documents:
 
@@ -222,7 +231,7 @@ This branch has been verified with:
 - 10 routes × mobile/desktop × 3 languages browser checks.
 - i18n key coverage.
 - API route/auth tests.
-- Full pytest: `312 passed`.
+- Full pytest: `313 passed`.
 
 ## Project Rules
 

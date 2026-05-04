@@ -25,6 +25,29 @@
             <a href="/admin/channels" data-i18n-key="admin.channels">Channels</a>
             <a href="/admin/guide" data-i18n-key="admin.guide">Operation Guide</a>
         </nav>
+        <section id="character-package-import" class="model-profile-section character-package-import">
+            <div class="character-emotion-map-header">
+                <div>
+                    <h2 data-i18n-key="characters.importPackageTitle">Import character package</h2>
+                    <p data-i18n-key="characters.importPackageDescription">Paste a character package JSON to create or replace one character.</p>
+                </div>
+                <button id="character-package-import-submit" type="button" data-i18n-key="characters.importPackage">Import JSON</button>
+            </div>
+            <label>
+                <span data-i18n-key="characters.packageJson">Package JSON</span>
+                <textarea id="character-package-json" rows="7" data-i18n-placeholder-key="characters.packageJsonPlaceholder"></textarea>
+            </label>
+            <div class="character-package-controls">
+                <label>
+                    <span data-i18n-key="characters.packageImportName">Import as name</span>
+                    <input id="character-package-import-name" type="text" maxlength="80" autocomplete="off" data-i18n-placeholder-key="characters.packageImportNamePlaceholder">
+                </label>
+                <label class="character-package-checkbox">
+                    <input id="character-package-overwrite" type="checkbox">
+                    <span data-i18n-key="characters.packageOverwrite">Overwrite existing character</span>
+                </label>
+            </div>
+        </section>
         <section class="models-layout" aria-label="Character profile editor" data-i18n-aria-label-key="characters.editorAria">
             <aside class="model-profile-sidebar">
                 <button id="character-profile-create" class="model-profile-create" type="button" data-i18n-key="characters.create">Add character</button>
@@ -38,6 +61,7 @@
                     </div>
                     <div class="model-profile-actions">
                         <button id="character-profile-save" type="submit" data-i18n-key="characters.save">Save</button>
+                        <button id="character-profile-export" type="button" data-i18n-key="characters.exportPackage">Export JSON</button>
                         <button id="character-profile-delete" class="model-profile-delete" type="button" data-i18n-key="characters.delete">Delete</button>
                     </div>
                 </div>
@@ -74,6 +98,6 @@
             </form>
         </section>
     </main>
-    <script type="module" src="/web/assets/characters-app.js?v=character-profile-1"></script>
+    <script type="module" src="/web/assets/characters-app.js?v=character-package-1"></script>
 </body>
 </html>

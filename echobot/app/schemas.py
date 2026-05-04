@@ -277,6 +277,19 @@ class UpdateCharacterProfileRequest(BaseModel):
     emotion_maps: list[CharacterEmotionMapModel] | None = None
 
 
+class CharacterPackageCharacterModel(BaseModel):
+    name: str
+    prompt: str
+    model_profile_id: str = ""
+    emotion_maps: list[CharacterEmotionMapModel] = Field(default_factory=list)
+
+
+class CharacterProfilePackageModel(BaseModel):
+    package_version: int = 1
+    character: CharacterPackageCharacterModel
+    model_profile_snapshot: dict[str, Any] = Field(default_factory=dict)
+
+
 class StrictSchemaModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

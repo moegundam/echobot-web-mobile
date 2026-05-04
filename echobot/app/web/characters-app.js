@@ -19,6 +19,7 @@ const DOM = {
     title: document.getElementById("character-profile-title"),
     status: document.getElementById("character-profile-status"),
     save: document.getElementById("character-profile-save"),
+    exportPackage: document.getElementById("character-profile-export"),
     remove: document.getElementById("character-profile-delete"),
     name: document.getElementById("character-name"),
     modelProfile: document.getElementById("character-model-profile"),
@@ -28,6 +29,10 @@ const DOM = {
     expressionOptions: document.getElementById("character-expression-options"),
     motionOptions: document.getElementById("character-motion-options"),
     summary: document.getElementById("character-effective-summary"),
+    importPackage: document.getElementById("character-package-import-submit"),
+    packageJson: document.getElementById("character-package-json"),
+    packageImportName: document.getElementById("character-package-import-name"),
+    packageOverwrite: document.getElementById("character-package-overwrite"),
 };
 
 const i18n = initShellI18n({
@@ -52,8 +57,14 @@ DOM.create.addEventListener("click", () => {
 DOM.remove.addEventListener("click", () => {
     void deleteSelectedCharacter();
 });
+DOM.exportPackage.addEventListener("click", () => {
+    void exportSelectedCharacter();
+});
 DOM.emotionMapAdd.addEventListener("click", () => {
     appendEmotionMapRow();
+});
+DOM.importPackage.addEventListener("click", () => {
+    void importCharacterPackage();
 });
 
 void load();
@@ -148,8 +159,13 @@ function renderSelectedCharacter() {
     DOM.modelProfile.value = creating ? "" : character ? character.model_profile_id || "" : "";
     DOM.modelProfile.disabled = state.busy || (!creating && !character);
     DOM.save.disabled = state.busy || (!creating && !character);
+    DOM.exportPackage.disabled = state.busy || creating || !character;
     DOM.remove.disabled = state.busy || !deletable || creating;
     DOM.emotionMapAdd.disabled = state.busy || (!creating && !character);
+    DOM.importPackage.disabled = state.busy;
+    DOM.packageJson.disabled = state.busy;
+    DOM.packageImportName.disabled = state.busy;
+    DOM.packageOverwrite.disabled = state.busy;
 
     renderLive2DActionOptions(character);
     renderEmotionMapEditor(character);
@@ -231,6 +247,72 @@ async function saveSelectedCharacter() {
     } catch (error) {
         console.error(error);
         setRawStatus(error.message || i18n.t("characters.saveFailed"));
+    } finally {
+        setBusy(false);
+    }
+}
+
+async function exportSelectedCharacter() {
+    const character = selectedCharacter();
+    if (!character) {
+        return;
+    }
+
+    setBusy(true);
+    setStatusKey("characters.exporting");
+    try {
+        const packagePayload = await requestJson(
+            `/api/character-profiles/${encodeURIComponent(character.name)}/package`,
+        );
+        const packageJson = JSON.stringify(packagePayload, null, 2);
+        DOM.packageJson.value = packageJson;
+        downloadCharacterPackage(character.name, packageJson);
+        setStatusKey("characters.exported");
+    } catch (error) {
+        console.error(error);
+        setRawStatus(error.message || i18n.t("characters.exportFailed"));
+    } finally {
+        setBusy(false);
+    }
+}
+
+async function importCharacterPackage() {
+    const rawJson = DOM.packageJson.value.trim();
+    if (!rawJson) {
+        setStatusKey("characters.packageJsonRequired");
+        return;
+    }
+
+    let packagePayload;
+    try {
+        packagePayload = JSON.parse(rawJson);
+    } catch (_error) {
+        setStatusKey("characters.packageJsonInvalid");
+        return;
+    }
+
+    const importName = DOM.packageImportName.value.trim();
+    if (importName) {
+        packagePayload.import_name = importName;
+    }
+    packagePayload.overwrite = DOM.packageOverwrite.checked;
+
+    setBusy(true);
+    setStatusKey("characters.importing");
+    try {
+        const imported = await requestJson("/api/character-profiles/package", {
+            method: "POST",
+            body: JSON.stringify(packagePayload),
+        });
+        state.selectedName = imported.name;
+        state.isCreating = false;
+        DOM.packageImportName.value = "";
+        DOM.packageOverwrite.checked = false;
+        await load();
+        setStatusKey("characters.imported");
+    } catch (error) {
+        console.error(error);
+        setRawStatus(error.message || i18n.t("characters.importFailed"));
     } finally {
         setBusy(false);
     }
@@ -357,6 +439,26 @@ function collectEmotionMaps() {
 function fieldValue(row, fieldName) {
     const input = row.querySelector(`[data-emotion-map-field="${fieldName}"]`);
     return String((input && input.value) || "").trim();
+}
+
+function downloadCharacterPackage(characterName, packageJson) {
+    const blob = new Blob([packageJson, "\n"], { type: "application/json" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `${safeFileName(characterName)}.echobot-character.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(link.href), 0);
+}
+
+function safeFileName(value) {
+    return String(value || "character")
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        || "character";
 }
 
 async function deleteSelectedCharacter() {

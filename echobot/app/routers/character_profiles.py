@@ -3,15 +3,22 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from ...orchestration import RoleCard
 from ..schemas import (
+    CharacterPackageCharacterModel,
     CharacterProfileModel,
+    CharacterProfilePackageModel,
     CharacterProfilesResponse,
     CreateCharacterProfileRequest,
     ModelProfileModel,
     UpdateCharacterProfileRequest,
+)
+from ..services.character_packages import (
+    CHARACTER_PACKAGE_VERSION,
+    normalize_character_package_import,
+    safe_model_profile_snapshot,
 )
 from ..services.character_profiles import normalize_emotion_maps
 from ..state import get_app_runtime, require_admin_user
@@ -68,6 +75,64 @@ async def get_character_profile(
     except ValueError as exc:
         raise _character_profile_http_exception(exc) from exc
     profile_payload = await asyncio.to_thread(runtime.model_profile_service.list_profiles)
+    return _character_model_from_role_card(
+        card,
+        profile_payload,
+        await _emotion_maps_for_role(runtime, card.name),
+    )
+
+
+@router.get("/character-profiles/{role_name}/package", response_model=CharacterProfilePackageModel)
+async def export_character_profile_package(
+    role_name: str,
+    runtime=Depends(get_app_runtime),
+) -> CharacterProfilePackageModel:
+    _ensure_character_services_ready(runtime)
+    try:
+        card = await runtime.role_service.get_role(role_name)
+    except ValueError as exc:
+        raise _character_profile_http_exception(exc) from exc
+    profile_payload = await asyncio.to_thread(runtime.model_profile_service.list_profiles)
+    emotion_maps = await _emotion_maps_for_role(runtime, card.name)
+    character = _character_model_from_role_card(card, profile_payload, emotion_maps)
+    model_profile_snapshot = safe_model_profile_snapshot(
+        _profile_lookup(profile_payload).get(character.effective_model_profile_id),
+    )
+    return CharacterProfilePackageModel(
+        package_version=CHARACTER_PACKAGE_VERSION,
+        character=CharacterPackageCharacterModel(
+            name=character.name,
+            prompt=character.prompt,
+            model_profile_id=character.model_profile_id,
+            emotion_maps=character.emotion_maps,
+        ),
+        model_profile_snapshot=model_profile_snapshot,
+    )
+
+
+@router.post("/character-profiles/package", response_model=CharacterProfileModel)
+async def import_character_profile_package(
+    request: Request,
+    runtime=Depends(get_app_runtime),
+    _admin_user: str = Depends(require_admin_user),
+) -> CharacterProfileModel:
+    _ensure_character_services_ready(runtime)
+    try:
+        request_payload = await request.json()
+        package = normalize_character_package_import(request_payload)
+        card = await _create_or_update_package_role(runtime, package)
+        await asyncio.to_thread(
+            runtime.character_profile_settings_service.set_emotion_maps,
+            card.name,
+            package["emotion_maps"],
+        )
+        profile_payload = await _set_or_clear_binding(
+            runtime,
+            card.name,
+            await _existing_model_profile_id(runtime, package["model_profile_id"]),
+        )
+    except ValueError as exc:
+        raise _character_profile_http_exception(exc) from exc
     return _character_model_from_role_card(
         card,
         profile_payload,
@@ -185,6 +250,37 @@ async def _set_or_clear_binding(
         normalized_profile_id,
         payload,
     )
+
+
+async def _create_or_update_package_role(runtime, package: dict[str, Any]) -> RoleCard:
+    try:
+        existing_card = await runtime.role_service.get_role(package["name"])
+    except ValueError:
+        existing_card = None
+
+    if existing_card is not None:
+        if not package["overwrite"]:
+            raise ValueError(f"Role already exists: {existing_card.name}")
+        return await runtime.role_service.update_role(
+            existing_card.name,
+            package["prompt"],
+        )
+
+    return await runtime.role_service.create_role(
+        package["name"],
+        package["prompt"],
+    )
+
+
+async def _existing_model_profile_id(runtime, profile_id: str) -> str:
+    normalized_id = str(profile_id or "").strip()
+    if not normalized_id:
+        return ""
+    try:
+        await asyncio.to_thread(runtime.model_profile_service.get_profile, normalized_id)
+    except ValueError:
+        return ""
+    return normalized_id
 
 
 async def _activate_binding_for_current_role(

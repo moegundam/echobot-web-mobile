@@ -2005,6 +2005,166 @@ class AppApiTests(unittest.TestCase):
                 [item["name"] for item in listed_after_delete.json()["characters"]],
             )
 
+    def test_character_profile_package_export_import_and_redacts_secrets(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            app = create_app(
+                runtime_options=RuntimeOptions(
+                    workspace=workspace,
+                    no_tools=True,
+                    no_skills=True,
+                    no_memory=True,
+                    no_heartbeat=True,
+                ),
+                channel_config_path=workspace / ".echobot" / "channels.json",
+                context_builder=build_test_context,
+            )
+
+            with TestClient(app) as client:
+                profile = client.patch(
+                    "/api/model-profiles/b",
+                    json={
+                        "label": "Package Voice",
+                        "chat": {
+                            "provider": "private-litellm",
+                            "model": "package-chat",
+                            "base_url": "http://package.test/v1",
+                            "api_key": "package-secret-key",
+                        },
+                        "tts": {
+                            "provider": "openai-compatible",
+                            "model": "tts-package",
+                            "base_url": "http://tts-package.test/v1",
+                            "voice": "alloy-package",
+                            "api_key": "tts-package-secret",
+                        },
+                        "live2d": {
+                            "selection_key": "builtin:hiyori_pro_en",
+                        },
+                    },
+                )
+                created = client.post(
+                    "/api/character-profiles",
+                    json={
+                        "name": "Package Host",
+                        "prompt": "# Package Host\n\nSpeak from a package.",
+                        "model_profile_id": "b",
+                        "emotion_maps": [
+                            {
+                                "emotion": "joy",
+                                "expression": "smile.exp3.json",
+                                "motion": "wave.motion3.json",
+                            },
+                        ],
+                    },
+                )
+                exported = client.get("/api/character-profiles/package-host/package")
+                package_payload = exported.json()
+                package_text = json.dumps(package_payload)
+                imported = client.post(
+                    "/api/character-profiles/package",
+                    json={
+                        **package_payload,
+                        "import_name": "Imported Host",
+                    },
+                )
+                duplicate = client.post(
+                    "/api/character-profiles/package",
+                    json={
+                        **package_payload,
+                        "import_name": "Imported Host",
+                    },
+                )
+                overwritten = client.post(
+                    "/api/character-profiles/package",
+                    json={
+                        **package_payload,
+                        "import_name": "Imported Host",
+                        "overwrite": True,
+                        "character": {
+                            **package_payload["character"],
+                            "prompt": "# Imported Host\n\nOverwritten.",
+                            "emotion_maps": [
+                                {
+                                    "emotion": "focused",
+                                    "expression": "serious.exp3.json",
+                                    "motion": "nod.motion3.json",
+                                },
+                            ],
+                        },
+                    },
+                )
+                listed = client.get("/api/character-profiles")
+                bad_version = client.post(
+                    "/api/character-profiles/package",
+                    json={
+                        **package_payload,
+                        "package_version": 999,
+                        "import_name": "Bad Version",
+                    },
+                )
+                malformed = client.post(
+                    "/api/character-profiles/package",
+                    json={
+                        "package_version": 1,
+                        "character": "not-object",
+                    },
+                )
+                too_long = client.post(
+                    "/api/character-profiles/package",
+                    json={
+                        **package_payload,
+                        "import_name": "Too Long",
+                        "character": {
+                            **package_payload["character"],
+                            "prompt": "x" * 60001,
+                        },
+                    },
+                )
+
+            self.assertEqual(200, profile.status_code)
+            self.assertEqual(200, created.status_code)
+
+            self.assertEqual(200, exported.status_code)
+            self.assertEqual(1, package_payload["package_version"])
+            self.assertEqual("package-host", package_payload["character"]["name"])
+            self.assertEqual("# Package Host\n\nSpeak from a package.", package_payload["character"]["prompt"])
+            self.assertEqual("b", package_payload["character"]["model_profile_id"])
+            self.assertEqual(
+                [
+                    {
+                        "emotion": "joy",
+                        "expression": "smile.exp3.json",
+                        "motion": "wave.motion3.json",
+                    },
+                ],
+                package_payload["character"]["emotion_maps"],
+            )
+            self.assertEqual("b", package_payload["model_profile_snapshot"]["profile_id"])
+            self.assertEqual("package-chat", package_payload["model_profile_snapshot"]["chat"]["model"])
+            self.assertTrue(package_payload["model_profile_snapshot"]["chat"]["api_key_configured"])
+            self.assertNotIn("package-secret-key", package_text)
+            self.assertNotIn("tts-package-secret", package_text)
+            self.assertNotIn('"api_key":', package_text)
+
+            self.assertEqual(200, imported.status_code)
+            self.assertEqual("imported-host", imported.json()["name"])
+            self.assertEqual("b", imported.json()["model_profile_id"])
+            self.assertEqual("joy", imported.json()["emotion_maps"][0]["emotion"])
+
+            self.assertEqual(409, duplicate.status_code)
+
+            self.assertEqual(200, overwritten.status_code)
+            self.assertEqual("# Imported Host\n\nOverwritten.", overwritten.json()["prompt"])
+            self.assertEqual("focused", overwritten.json()["emotion_maps"][0]["emotion"])
+
+            self.assertEqual(200, listed.status_code)
+            self.assertIn("imported-host", [item["name"] for item in listed.json()["characters"]])
+
+            self.assertEqual(400, bad_version.status_code)
+            self.assertEqual(400, malformed.status_code)
+            self.assertEqual(400, too_long.status_code)
+
     def test_openwebui_bridge_targets_user_scoped_stage_and_chat(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             workspace = Path(temp_dir)

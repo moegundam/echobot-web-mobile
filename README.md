@@ -40,7 +40,7 @@
 | 後台 Admin | `/admin` | 後台索引、health、API docs、jobs 與管理頁入口 |
 | 操作說明 | `/admin/guide` | 操作、設定、預期成果、故障判斷與排除流程 |
 | 網站結構 | `/admin/structure` | Route map、Console 分區、API namespace 邊界 |
-| 角色設定 | `/admin/characters` | 管理角色 prompt、模型 profile 綁定、語音、Live2D 摘要與 emotion map |
+| 角色設定 | `/admin/characters` | 管理角色 prompt、模型 profile 綁定、語音、Live2D 摘要、emotion map 與角色 package 匯入/匯出 |
 | 模型設定 | `/admin/models` | 可新增、自定義名稱、啟用角色模型 profile |
 | 通訊平台 | `/admin/channels` | Telegram、QQ、LINE、Discord、WhatsApp 等 gateway 規劃入口 |
 | Open WebUI Bridge | `/admin/openwebui` | Open WebUI narrow OpenAPI bridge 接線說明 |
@@ -133,7 +133,16 @@ python -m echobot app --host 127.0.0.1 --port 8001
 - 可設定 chat、TTS、ASR、Live2D 相關 provider/model/base URL/API key。
 - 啟用 profile 後，Console 會讀取並更新目前使用的模型設定。
 
-### 9. 部署與架構文件
+### 9. Character Packages
+
+`/admin/characters` 可匯出與匯入單一角色 package：
+
+- 匯出內容包含角色 prompt、model profile 綁定、emotion map 與非敏感模型設定快照。
+- 匯出內容不包含 API key、bot token、Cloudflare/Open WebUI token 或 `.echobot/` secret。
+- 匯入時可指定新角色名稱，也可選擇覆蓋既有角色。
+- v1 使用 JSON package，不打包 Live2D asset 檔案；模型 API key 仍需在 `/admin/models` 補填。
+
+### 10. 部署與架構文件
 
 新增專案規劃、網站結構與參考文件：
 
@@ -222,7 +231,7 @@ python -m pytest
 - 全站 10 個 route × 手機/桌面 × 3 語言瀏覽器檢查。
 - i18n key coverage。
 - API route/auth tests。
-- full pytest：`312 passed`。
+- full pytest：`313 passed`。
 
 ## 專案規矩
 

@@ -146,8 +146,15 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn('id="character-emotion-map-add"', characters_html)
         self.assertIn('id="character-expression-options"', characters_html)
         self.assertIn('id="character-motion-options"', characters_html)
+        self.assertIn('id="character-profile-export"', characters_html)
+        self.assertIn('id="character-package-import"', characters_html)
+        self.assertIn('id="character-package-json"', characters_html)
+        self.assertIn('id="character-package-import-name"', characters_html)
+        self.assertIn('id="character-package-overwrite"', characters_html)
         self.assertIn('"/api/character-profiles"', characters_js)
         self.assertIn('"/api/web/config"', characters_js)
+        self.assertIn("exportSelectedCharacter", characters_js)
+        self.assertIn("importCharacterPackage", characters_js)
         self.assertIn("collectEmotionMaps", characters_js)
         self.assertIn("live2dModelForCharacter", characters_js)
         self.assertIn('"characters.heading"', i18n_js)
@@ -155,6 +162,8 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn('"characters.effectiveProfile"', i18n_js)
         self.assertIn('"characters.emotionMapTitle"', i18n_js)
         self.assertIn('"characters.emotionMapCount"', i18n_js)
+        self.assertIn('"characters.exportPackage"', i18n_js)
+        self.assertIn('"characters.importPackageTitle"', i18n_js)
 
 
 if __name__ == "__main__":

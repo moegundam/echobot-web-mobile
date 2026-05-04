@@ -694,6 +694,39 @@ textarea {
     border: 1px solid rgba(185, 28, 28, 0.28);
 }
 
+.character-package-import {
+    display: grid;
+    gap: 14px;
+}
+
+.character-package-import textarea {
+    min-height: 150px;
+    resize: vertical;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 13px;
+}
+
+.character-package-controls {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 12px;
+    align-items: end;
+}
+
+.character-package-checkbox {
+    display: flex;
+    min-height: 44px;
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+    color: var(--shell-muted);
+}
+
+.character-package-checkbox input {
+    width: 18px;
+    height: 18px;
+}
+
 .model-profile-field-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1029,6 +1062,7 @@ html[data-layout-mode="mobile"] .openwebui-status-grid,
 html[data-layout-mode="mobile"] .model-role-binding-list,
 html[data-layout-mode="mobile"] .models-layout,
 html[data-layout-mode="mobile"] .model-profile-field-grid,
+html[data-layout-mode="mobile"] .character-package-controls,
 html[data-layout-mode="mobile"] .character-emotion-map-row {
     grid-template-columns: minmax(0, 1fr);
 }
