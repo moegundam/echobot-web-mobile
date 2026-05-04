@@ -77,6 +77,7 @@ function renderDisplayModeSwitchers(controller, t) {
 
         const select = document.createElement("select");
         select.className = "shell-display-mode-select";
+        select.name = "echobot-display-mode";
         select.setAttribute("aria-label", translate(t, "displayMode.label"));
 
         DISPLAY_MODES.forEach((mode) => {

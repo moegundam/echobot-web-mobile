@@ -2146,6 +2146,7 @@ function ensureLanguageSwitcher(controller, onChange) {
 
     const select = document.createElement("select");
     select.className = "shell-language-select";
+    select.name = "echobot-language";
     select.setAttribute("aria-label", "Language");
 
     LANGUAGES.forEach((language) => {
