@@ -125,6 +125,8 @@ async def export_character_profile_package(
             llm_model_id=character.llm_model_id,
             voice_profile_id=character.voice_profile_id,
             live2d_model_id=character.live2d_model_id,
+            default_channel_type=character.default_channel_type,
+            default_channel_integration_id=character.default_channel_integration_id,
             emotion_maps=character.emotion_maps,
         ),
         model_profile_snapshot=model_profile_snapshot,
@@ -163,6 +165,10 @@ async def import_character_profile_package(
                     runtime,
                     package["live2d_model_id"],
                 ),
+                "default_channel_type": package["default_channel_type"],
+                "default_channel_integration_id": package[
+                    "default_channel_integration_id"
+                ],
             },
         )
         profile_payload = await _set_or_clear_binding(

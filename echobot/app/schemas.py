@@ -300,6 +300,8 @@ class CharacterPackageCharacterModel(BaseModel):
     llm_model_id: str = ""
     voice_profile_id: str = ""
     live2d_model_id: str = ""
+    default_channel_type: str = ""
+    default_channel_integration_id: str = ""
     emotion_maps: list[CharacterEmotionMapModel] = Field(default_factory=list)
 
 

@@ -2715,6 +2715,8 @@ class AppApiTests(unittest.TestCase):
                         "name": "Package Host",
                         "prompt": "# Package Host\n\nSpeak from a package.",
                         "model_profile_id": "b",
+                        "default_channel_type": "telegram",
+                        "default_channel_integration_id": "telegram",
                         "emotion_maps": [
                             {
                                 "emotion": "joy",
@@ -2796,6 +2798,11 @@ class AppApiTests(unittest.TestCase):
             self.assertEqual("package-host", package_payload["character"]["name"])
             self.assertEqual("# Package Host\n\nSpeak from a package.", package_payload["character"]["prompt"])
             self.assertEqual("b", package_payload["character"]["model_profile_id"])
+            self.assertEqual("telegram", package_payload["character"]["default_channel_type"])
+            self.assertEqual(
+                "telegram",
+                package_payload["character"]["default_channel_integration_id"],
+            )
             self.assertEqual(
                 [
                     {
@@ -2816,6 +2823,8 @@ class AppApiTests(unittest.TestCase):
             self.assertEqual(200, imported.status_code)
             self.assertEqual("imported-host", imported.json()["name"])
             self.assertEqual("b", imported.json()["model_profile_id"])
+            self.assertEqual("telegram", imported.json()["default_channel_type"])
+            self.assertEqual("telegram", imported.json()["default_channel_integration_id"])
             self.assertEqual("joy", imported.json()["emotion_maps"][0]["emotion"])
 
             self.assertEqual(409, duplicate.status_code)
