@@ -4,10 +4,10 @@ import argparse
 import sys
 from collections.abc import Sequence
 
-from . import app, chat, gateway
+from . import app, chat, db, gateway
 
 
-COMMAND_NAMES = {"chat", "gateway", "app"}
+COMMAND_NAMES = {"chat", "gateway", "app", "db"}
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -32,6 +32,12 @@ def build_parser() -> argparse.ArgumentParser:
         subparsers.add_parser(
             "app",
             help="Run the API daemon for the web console.",
+        ),
+    )
+    db.configure_parser(
+        subparsers.add_parser(
+            "db",
+            help="PostgreSQL schema and migration helper commands.",
         ),
     )
     return parser

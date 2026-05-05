@@ -77,6 +77,11 @@ class SetSessionRouteModeRequest(BaseModel):
     route_mode: RouteMode
 
 
+class SetSessionChannelBindingRequest(BaseModel):
+    channel_type: str = ""
+    channel_integration_id: str = ""
+
+
 class ChatRequest(BaseModel):
     prompt: str
     session_name: str = "default"

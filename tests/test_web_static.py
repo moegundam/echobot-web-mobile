@@ -149,14 +149,25 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn('id="sessions-create-route-mode"', sessions_html)
         self.assertIn('id="sessions-create-channel-type"', sessions_html)
         self.assertIn('id="sessions-create-channel-integration"', sessions_html)
+        self.assertIn('id="sessions-edit-form"', sessions_html)
+        self.assertIn('id="sessions-edit-character"', sessions_html)
+        self.assertIn('id="sessions-edit-route-mode"', sessions_html)
+        self.assertIn('id="sessions-edit-channel-type"', sessions_html)
+        self.assertIn('id="sessions-edit-channel-integration"', sessions_html)
+        self.assertIn('id="sessions-edit-save"', sessions_html)
         self.assertIn('id="sessions-refresh"', sessions_html)
         self.assertIn('"/api/sessions"', sessions_js)
         self.assertIn('"/api/character-profiles"', sessions_js)
         self.assertIn('"/api/channel-integrations"', sessions_js)
         self.assertIn('"/api/sessions/current"', sessions_js)
+        self.assertIn('/role`', sessions_js)
+        self.assertIn('/route-mode`', sessions_js)
+        self.assertIn('/channel-binding`', sessions_js)
+        self.assertIn("editSession", sessions_js)
+        self.assertIn("saveSessionBinding", sessions_js)
         self.assertIn("renameSession", sessions_js)
         self.assertIn("deleteSession", sessions_js)
-        self.assertIn("syncCreateChannelTypeFromIntegration", sessions_js)
+        self.assertIn("syncChannelTypeFromIntegration", sessions_js)
         self.assertIn("/admin/sessions", structure_js)
 
         for key in (
@@ -177,6 +188,9 @@ class WebStaticAssetTests(unittest.TestCase):
             "sessions.create",
             "sessions.refresh",
             "sessions.useInConsole",
+            "sessions.edit",
+            "sessions.saveBinding",
+            "sessions.bindingSaved",
             "sessions.rename",
             "sessions.delete",
             "sessions.deleteConfirm",

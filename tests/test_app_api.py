@@ -73,6 +73,22 @@ def make_chat_text_bytes() -> bytes:
     return "hello from uploaded file\n".encode("utf-8")
 
 
+def _wait_for_session_messages(
+    client: TestClient,
+    session_name: str,
+    message_count: int,
+    *,
+    attempts: int = 50,
+) -> dict[str, object]:
+    detail = client.get(f"/api/sessions/{quote(session_name)}")
+    for _ in range(attempts):
+        detail = client.get(f"/api/sessions/{quote(session_name)}")
+        if detail.status_code == 200 and len(detail.json().get("history", [])) >= message_count:
+            return detail.json()
+        time.sleep(0.02)
+    return detail.json()
+
+
 class FakeProvider(LLMProvider):
     async def generate(
         self,
@@ -1246,6 +1262,67 @@ class AppApiTests(unittest.TestCase):
             self.assertNotIn("discord-secret-token", json.dumps(payload))
             self.assertNotIn("discord-webhook-secret", json.dumps(payload))
 
+    def test_discord_webhook_routes_to_bound_session_and_stage(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            app = create_app(
+                runtime_options=RuntimeOptions(
+                    workspace=workspace,
+                    no_tools=True,
+                    no_skills=True,
+                    no_memory=True,
+                    no_heartbeat=True,
+                ),
+                channel_config_path=workspace / ".echobot" / "channels.json",
+                context_builder=build_test_context,
+            )
+
+            with patch(
+                "echobot.channels.platforms.discord._post_webhook_message",
+                return_value=None,
+            ):
+                with TestClient(app) as client:
+                    client.put(
+                        "/api/channels/config",
+                        json={
+                            "discord": {
+                                "enabled": True,
+                                "allow_from": ["discord-user"],
+                                "mirror_to_stage": True,
+                                "stage_session_name": "legacy-discord-stage",
+                                "webhook_url": "https://discord.example/webhook",
+                                "webhook_secret": "discord-secret",
+                            },
+                        },
+                    )
+                    client.post(
+                        "/api/sessions",
+                        json={
+                            "name": "ops-room",
+                            "channel_type": "discord",
+                            "channel_integration_id": "discord",
+                        },
+                    )
+                    accepted = client.post(
+                        "/api/channels/discord/webhook",
+                        headers={"X-EchoBot-Discord-Secret": "discord-secret"},
+                        json={
+                            "channel_id": "channel-1",
+                            "user_id": "discord-user",
+                            "text": "ping",
+                        },
+                    )
+                    detail = _wait_for_session_messages(client, "ops-room", 2)
+                    runtime = app.state.runtime
+                    history = runtime.stage_event_broker.history("default", "ops-room")
+
+            self.assertEqual(200, accepted.status_code)
+            self.assertTrue(accepted.json()["accepted"])
+            self.assertEqual(2, len(detail["history"]))
+            self.assertEqual("ping", detail["history"][0]["content"])
+            self.assertEqual("pong", detail["history"][1]["content"])
+            self.assertEqual(["pong"], [item.text for item in history])
+
     def test_channel_smoke_requires_admin_allowlist(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             workspace = Path(temp_dir)
@@ -1337,7 +1414,10 @@ class AppApiTests(unittest.TestCase):
                     ),
                 )
                 asyncio.run(awaitable)
-                events = runtime.stage_event_broker.history("default", "front")
+                events = runtime.stage_event_broker.history(
+                    "default",
+                    "telegram__12345__session",
+                )
 
             self.assertEqual(1, len(events))
             self.assertEqual("assistant_final", events[0].kind)
@@ -2404,6 +2484,57 @@ class AppApiTests(unittest.TestCase):
             self.assertNotIn("session-tts-secret", context_text)
             self.assertNotIn("session-stt-secret", context_text)
 
+    def test_llm_model_smoke_uses_openai_compatible_profile_without_returning_secret(
+        self,
+    ) -> None:
+        async def fake_generate(self, messages, **kwargs):
+            del self, messages, kwargs
+            return LLMResponse(
+                message=LLMMessage(role="assistant", content="pong"),
+                model="local-litellm-alias",
+            )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            app = create_app(
+                runtime_options=RuntimeOptions(
+                    workspace=workspace,
+                    no_tools=True,
+                    no_skills=True,
+                    no_memory=True,
+                    no_heartbeat=True,
+                ),
+                channel_config_path=workspace / ".echobot" / "channels.json",
+                context_builder=build_test_context,
+            )
+
+            with patch(
+                "echobot.app.routers.model_profiles.OpenAICompatibleProvider.generate",
+                fake_generate,
+            ):
+                with TestClient(app) as client:
+                    client.patch(
+                        "/api/model-profiles/b",
+                        json={
+                            "label": "Local LiteLLM",
+                            "chat": {
+                                "provider": "litellm",
+                                "model": "local/echo",
+                                "base_url": "http://127.0.0.1:4000/v1",
+                                "api_key": "local-litellm-secret",
+                            },
+                        },
+                    )
+                    smoke = client.post("/api/llm-models/b/smoke")
+
+            self.assertEqual(200, smoke.status_code)
+            self.assertTrue(smoke.json()["ok"])
+            self.assertEqual("ready", smoke.json()["status"])
+            self.assertEqual("litellm", smoke.json()["provider"])
+            self.assertEqual("local-litellm-alias", smoke.json()["model"])
+            smoke_text = json.dumps(smoke.json())
+            self.assertNotIn("local-litellm-secret", smoke_text)
+
     def test_character_profiles_bind_llm_voice_and_live2d_for_session_runtime(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             workspace = Path(temp_dir)
@@ -2934,7 +3065,12 @@ class AppApiTests(unittest.TestCase):
             self.assertEqual("joy", stage_event.json()["emotion"])
             self.assertEqual("smile.exp3.json", stage_event.json()["expression"])
             self.assertEqual("wave.motion3.json", stage_event.json()["motion"])
-            self.assertEqual(["hello from Open WebUI"], [item.text for item in alpha_history])
+            self.assertEqual(
+                ["hello from Open WebUI", "pong"],
+                [item.text for item in alpha_history],
+            )
+            self.assertEqual("openwebui", alpha_history[1].source)
+            self.assertEqual("chat", alpha_history[1].metadata["openwebui_operation"])
             self.assertEqual([], beta_history)
             self.assertEqual(200, chat.status_code)
             self.assertEqual("demo", chat.json()["session_name"])
@@ -3010,7 +3146,7 @@ class AppApiTests(unittest.TestCase):
             self.assertEqual("demo", default_user_chat.json()["session_name"])
             self.assertEqual(403, disallowed_stage.status_code)
             self.assertEqual("target_user_id is not allowed", disallowed_stage.json()["detail"])
-            self.assertEqual([], alpha_history)
+            self.assertEqual(["pong"], [item.text for item in alpha_history])
             self.assertEqual([], beta_history)
 
     def test_trusted_user_header_isolates_sessions_jobs_and_attachments(self) -> None:
@@ -3494,6 +3630,68 @@ class AppApiTests(unittest.TestCase):
             self.assertEqual("telegram", context.json()["channel"]["id"])
             context_text = json.dumps(context.json())
             self.assertNotIn("session-channel-secret", context_text)
+
+    def test_session_channel_binding_can_be_updated_after_creation(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            app = create_app(
+                runtime_options=RuntimeOptions(
+                    workspace=workspace,
+                    no_tools=True,
+                    no_skills=True,
+                    no_memory=True,
+                    no_heartbeat=True,
+                ),
+                channel_config_path=workspace / ".echobot" / "channels.json",
+                context_builder=build_test_context,
+            )
+
+            with TestClient(app) as client:
+                client.put(
+                    "/api/channels/config",
+                    json={
+                        "telegram": {
+                            "enabled": True,
+                            "allow_from": ["12345"],
+                            "mirror_to_stage": True,
+                            "stage_session_name": "legacy-stage",
+                            "bot_token": "session-channel-secret",
+                        },
+                        "discord": {
+                            "enabled": True,
+                            "allow_from": ["discord-user"],
+                            "mirror_to_stage": True,
+                            "stage_session_name": "discord-stage",
+                            "webhook_url": "https://discord.example/webhook",
+                            "webhook_secret": "discord-secret",
+                        },
+                    },
+                )
+                client.post("/api/sessions", json={"name": "ops-room"})
+                updated = client.put(
+                    "/api/sessions/ops-room/channel-binding",
+                    json={
+                        "channel_type": "discord",
+                        "channel_integration_id": "discord",
+                    },
+                )
+                context = client.get("/api/sessions/ops-room/runtime-context")
+                cleared = client.put(
+                    "/api/sessions/ops-room/channel-binding",
+                    json={
+                        "channel_type": "",
+                        "channel_integration_id": "",
+                    },
+                )
+
+            self.assertEqual(200, updated.status_code)
+            self.assertEqual("discord", updated.json()["channel_type"])
+            self.assertEqual("discord", updated.json()["channel_integration_id"])
+            self.assertEqual(200, context.status_code)
+            self.assertEqual("discord", context.json()["channel"]["id"])
+            self.assertEqual(200, cleared.status_code)
+            self.assertEqual("", cleared.json()["channel_type"])
+            self.assertEqual("", cleared.json()["channel_integration_id"])
 
     def test_chat_endpoint_accepts_image_only_requests(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

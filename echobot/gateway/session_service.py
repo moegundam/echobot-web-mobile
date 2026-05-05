@@ -5,6 +5,7 @@ import asyncio
 from ..channels.types import ChannelAddress, DeliveryTarget
 from ..runtime.session_service import SessionLifecycleService
 from ..runtime.sessions import normalize_session_name
+from ..session_metadata import matches_channel_binding
 from .delivery import DeliveryStore
 from .route_sessions import (
     DeleteRouteSessionResult,
@@ -80,6 +81,26 @@ class GatewaySessionService:
             self._route_session_store.get_current_session,
             route_key,
         )
+
+    async def bound_session_for_channel(
+        self,
+        *,
+        channel_type: str,
+        channel_integration_id: str = "",
+    ):
+        sessions = await self.list_sessions()
+        for item in sessions:
+            try:
+                session = await self.load_session(item.name)
+            except ValueError:
+                continue
+            if matches_channel_binding(
+                session.metadata,
+                channel_type=channel_type,
+                channel_integration_id=channel_integration_id,
+            ):
+                return session
+        return None
 
     async def list_route_sessions(self, route_key: str) -> list[RouteSessionSummary]:
         return await asyncio.to_thread(

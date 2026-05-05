@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from ..schemas import (
     CreateSessionRequest,
     RenameSessionRequest,
+    SetSessionChannelBindingRequest,
     SessionDetailModel,
     SessionSummaryModel,
     SetSessionRouteModeRequest,
@@ -140,6 +141,27 @@ async def set_session_route_mode(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return session_detail_model_from_session(session)
+
+
+@router.put("/sessions/{session_name}/channel-binding", response_model=SessionDetailModel)
+async def set_session_channel_binding(
+    session_name: str,
+    request: SetSessionChannelBindingRequest,
+    runtime=Depends(get_app_runtime),
+) -> SessionDetailModel:
+    try:
+        session = await runtime.session_service.update_session_metadata(
+            session_name,
+            lambda metadata: set_channel_binding(
+                metadata,
+                channel_type=request.channel_type,
+                channel_integration_id=request.channel_integration_id,
+            ),
+        )
+    except ValueError as exc:
+        status_code = 404 if "not found" in str(exc).lower() else 400
+        raise HTTPException(status_code=status_code, detail=str(exc)) from exc
     return session_detail_model_from_session(session)
 
 

@@ -68,6 +68,40 @@
                 </div>
                 <button id="sessions-create" type="submit" data-i18n-key="sessions.create">Create session</button>
             </form>
+            <form id="sessions-edit-form" class="session-create-form session-edit-form" hidden>
+                <div class="session-admin-header compact">
+                    <div>
+                        <h3 id="sessions-edit-title" data-i18n-key="sessions.editBinding">Edit session binding</h3>
+                        <p id="sessions-edit-description" data-i18n-key="sessions.editBindingHelp">Change the character, route mode, and channel for the selected session.</p>
+                    </div>
+                </div>
+                <div class="model-profile-field-grid">
+                    <label>
+                        <span data-i18n-key="sessions.character">Character</span>
+                        <select id="sessions-edit-character"></select>
+                    </label>
+                    <label>
+                        <span data-i18n-key="sessions.routeMode">Route mode</span>
+                        <select id="sessions-edit-route-mode">
+                            <option value="chat_only">chat_only</option>
+                            <option value="auto">auto</option>
+                            <option value="agent">agent</option>
+                        </select>
+                    </label>
+                    <label>
+                        <span data-i18n-key="sessions.channelType">Channel type</span>
+                        <select id="sessions-edit-channel-type"></select>
+                    </label>
+                    <label>
+                        <span data-i18n-key="sessions.channelIntegration">Channel integration</span>
+                        <select id="sessions-edit-channel-integration"></select>
+                    </label>
+                </div>
+                <div class="session-admin-card-actions">
+                    <button id="sessions-edit-save" type="submit" data-i18n-key="sessions.saveBinding">Save binding</button>
+                    <button id="sessions-edit-cancel" type="button" data-i18n-key="console.cancel">Cancel</button>
+                </div>
+            </form>
             <div id="sessions-list" class="session-admin-list"></div>
         </section>
     </main>

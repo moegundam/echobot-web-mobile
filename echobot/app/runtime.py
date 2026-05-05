@@ -258,33 +258,12 @@ class AppRuntime:
         session_name: str,
         outbound: OutboundMessage,
     ) -> None:
-        if self.channels_config is None:
-            return
-        channel_config = self.channels_config.get(outbound.address.channel)
-        if not bool(getattr(channel_config, "mirror_to_stage", False)):
-            return
-
-        stage_session_name = (
-            str(getattr(channel_config, "stage_session_name", "") or "").strip()
-            or session_name
-        )
-        text = message_content_to_text(outbound.content or outbound.text).strip()
-        if not text:
-            return
-
-        await self.stage_event_broker.publish(
+        await _publish_gateway_stage_event(
+            channels_config=self.channels_config,
+            stage_event_broker=self.stage_event_broker,
             scope_key="default",
-            request=StageEventPublishRequest(
-                kind="assistant_final",
-                session_name=stage_session_name,
-                text=text,
-                speaker="Echo",
-                source=outbound.address.channel,
-                metadata={
-                    "gateway_channel": outbound.address.channel,
-                    "gateway_session_name": session_name,
-                },
-            ),
+            session_name=session_name,
+            outbound=outbound,
         )
 
     async def health_snapshot(self) -> dict[str, object]:
@@ -368,6 +347,51 @@ def _resolve_runtime_path(
 
 def _context_storage_root(context: RuntimeContext) -> Path:
     return context.storage_root or context.workspace / ".echobot"
+
+
+def _user_stage_scope_key(user_id: str) -> str:
+    from .auth import user_storage_key
+
+    return user_storage_key(user_id) if user_id else "default"
+
+
+async def _publish_gateway_stage_event(
+    *,
+    channels_config: ChannelsConfig | None,
+    stage_event_broker: StageEventBroker,
+    scope_key: str,
+    session_name: str,
+    outbound: OutboundMessage,
+) -> None:
+    if channels_config is None:
+        return
+    channel_config = channels_config.get(outbound.address.channel)
+    if not bool(getattr(channel_config, "mirror_to_stage", False)):
+        return
+
+    # Formal activity is session-centered. Legacy channel stage_session_name is
+    # kept only as a fallback when no runtime session was supplied.
+    stage_session_name = session_name or (
+        str(getattr(channel_config, "stage_session_name", "") or "").strip()
+    )
+    text = message_content_to_text(outbound.content or outbound.text).strip()
+    if not text:
+        return
+
+    await stage_event_broker.publish(
+        scope_key=scope_key,
+        request=StageEventPublishRequest(
+            kind="assistant_final",
+            session_name=stage_session_name,
+            text=text,
+            speaker="Echo",
+            source=outbound.address.channel,
+            metadata={
+                "gateway_channel": outbound.address.channel,
+                "gateway_session_name": session_name,
+            },
+        ),
+    )
 
 
 def _float_env(name: str, default: float) -> float:
@@ -658,7 +682,13 @@ class UserScopedRuntime:
         session_name: str,
         outbound: OutboundMessage,
     ) -> None:
-        await self.parent.publish_gateway_stage_event(session_name, outbound)
+        await _publish_gateway_stage_event(
+            channels_config=self.parent.channels_config,
+            stage_event_broker=self.stage_event_broker,
+            scope_key=_user_stage_scope_key(self.user_id),
+            session_name=session_name,
+            outbound=outbound,
+        )
 
     async def reload_channels(
         self,

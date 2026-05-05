@@ -4,6 +4,11 @@ import asyncio
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from ...models import LLMMessage, message_content_to_text
+from ...providers.openai_compatible import (
+    OpenAICompatibleProvider,
+    OpenAICompatibleSettings,
+)
 from ..schemas import (
     CreateModelProfileRequest,
     ModelProfileModel,
@@ -163,6 +168,63 @@ async def activate_model_profile(
     except ValueError as exc:
         raise _model_profile_http_exception(exc) from exc
     return ModelProfilesResponse(**payload)
+
+
+@router.post("/llm-models/{model_id}/smoke")
+async def smoke_llm_model(
+    model_id: str,
+    runtime=Depends(get_app_runtime),
+    _admin_user: str = Depends(require_admin_user),
+) -> dict[str, object]:
+    _ensure_model_profiles_ready(runtime)
+    if runtime.context is None:
+        raise HTTPException(status_code=503, detail="EchoBot runtime is not ready")
+    try:
+        profile = await asyncio.to_thread(
+            runtime.model_profile_service.get_profile_for_runtime,
+            model_id,
+        )
+        chat = profile.get("chat") if isinstance(profile, dict) else None
+        if not isinstance(chat, dict):
+            raise ValueError("LLM model profile is missing chat settings")
+        provider_name = str(chat.get("provider") or "openai-compatible").strip()
+        model = str(chat.get("model") or "").strip()
+        if not model:
+            raise ValueError("LLM model is required before smoke testing")
+        base_url = str(chat.get("base_url") or "https://api.openai.com/v1").strip()
+        provider = OpenAICompatibleProvider(
+            OpenAICompatibleSettings(
+                api_key=str(chat.get("api_key") or "EMPTY").strip() or "EMPTY",
+                model=model,
+                base_url=base_url,
+                timeout=10.0,
+            ),
+            attachment_store=runtime.context.attachment_store,
+        )
+        result = await provider.generate(
+            [LLMMessage(role="user", content="Reply with exactly: pong")],
+            temperature=0,
+            max_tokens=32,
+        )
+    except ValueError as exc:
+        raise _model_profile_http_exception(exc) from exc
+    except RuntimeError as exc:
+        return {
+            "ok": False,
+            "model_id": model_id,
+            "status": "failed",
+            "error": str(exc),
+        }
+
+    text = message_content_to_text(result.message.content).strip()
+    return {
+        "ok": True,
+        "model_id": model_id,
+        "status": "ready",
+        "provider": provider_name,
+        "model": result.model,
+        "response": text,
+    }
 
 
 @router.delete("/model-profiles/{profile_id}", response_model=ModelProfilesResponse)

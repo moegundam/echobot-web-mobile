@@ -230,7 +230,7 @@ def _discord_smoke_result(config: dict[str, Any]) -> dict[str, Any]:
         _check(
             "runtime_adapter",
             True,
-            "configuration-only v1; runtime adapter is still planned",
+            "webhook ingress and outbound webhook delivery available; bot gateway still planned",
         ),
         _check(
             "enabled",
@@ -245,7 +245,8 @@ def _discord_smoke_result(config: dict[str, Any]) -> dict[str, Any]:
         "status": status,
         "checks": checks,
         "next_steps": [
-            "Add the Discord runtime adapter before enabling live inbound messages.",
+            "Use /api/channels/discord/webhook for controlled inbound webhook tests.",
+            "Add the Discord bot runtime adapter before enabling direct bot events.",
             "Verify Discord intents and interaction/webhook mode in the Discord Developer Portal.",
         ],
     }

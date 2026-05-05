@@ -9,6 +9,7 @@ const state = {
     sessions: [],
     characters: [],
     channelIntegrations: [],
+    editingSessionName: "",
     busy: false,
     loaded: false,
     statusKey: "sessions.loading",
@@ -24,6 +25,14 @@ const DOM = {
     createRouteMode: document.getElementById("sessions-create-route-mode"),
     createChannelType: document.getElementById("sessions-create-channel-type"),
     createChannelIntegration: document.getElementById("sessions-create-channel-integration"),
+    editForm: document.getElementById("sessions-edit-form"),
+    editTitle: document.getElementById("sessions-edit-title"),
+    editCharacter: document.getElementById("sessions-edit-character"),
+    editRouteMode: document.getElementById("sessions-edit-route-mode"),
+    editChannelType: document.getElementById("sessions-edit-channel-type"),
+    editChannelIntegration: document.getElementById("sessions-edit-channel-integration"),
+    editSave: document.getElementById("sessions-edit-save"),
+    editCancel: document.getElementById("sessions-edit-cancel"),
     list: document.getElementById("sessions-list"),
     refresh: document.getElementById("sessions-refresh"),
     status: document.getElementById("sessions-status"),
@@ -44,7 +53,17 @@ DOM.createForm?.addEventListener("submit", (event) => {
     void createSession();
 });
 DOM.createChannelIntegration?.addEventListener("change", () => {
-    syncCreateChannelTypeFromIntegration();
+    syncChannelTypeFromIntegration(DOM.createChannelIntegration, DOM.createChannelType);
+});
+DOM.editForm?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    void saveSessionBinding();
+});
+DOM.editChannelIntegration?.addEventListener("change", () => {
+    syncChannelTypeFromIntegration(DOM.editChannelIntegration, DOM.editChannelType);
+});
+DOM.editCancel?.addEventListener("click", () => {
+    clearEditForm();
 });
 DOM.refresh?.addEventListener("click", () => {
     void loadSessions();
@@ -58,6 +77,8 @@ DOM.list?.addEventListener("click", (event) => {
     const sessionName = String(button.dataset.sessionName || "");
     if (action === "console") {
         void useInConsole(sessionName);
+    } else if (action === "edit") {
+        void editSession(sessionName);
     } else if (action === "rename") {
         void renameSession(sessionName);
     } else if (action === "delete") {
@@ -125,27 +146,39 @@ function render() {
 }
 
 function renderCreateOptions() {
-    renderCharacterOptions();
-    renderChannelTypeOptions();
-    renderChannelIntegrationOptions();
+    renderCharacterOptions(DOM.createCharacter);
+    renderCharacterOptions(DOM.editCharacter);
+    renderChannelTypeOptions(DOM.createChannelType);
+    renderChannelTypeOptions(DOM.editChannelType);
+    renderChannelIntegrationOptions(DOM.createChannelIntegration);
+    renderChannelIntegrationOptions(DOM.editChannelIntegration);
 }
 
-function renderCharacterOptions() {
-    DOM.createCharacter.replaceChildren();
+function renderCharacterOptions(select) {
+    if (!select) {
+        return;
+    }
+    const selectedValue = select.value;
+    select.replaceChildren();
     const emptyOption = document.createElement("option");
     emptyOption.value = "";
     emptyOption.textContent = i18n.t("sessions.useDefaultCharacter");
-    DOM.createCharacter.appendChild(emptyOption);
+    select.appendChild(emptyOption);
     state.characters.forEach((character) => {
         const option = document.createElement("option");
         option.value = String(character.name || "");
         option.textContent = String(character.name || "");
-        DOM.createCharacter.appendChild(option);
+        select.appendChild(option);
     });
+    select.value = selectedValue;
 }
 
-function renderChannelTypeOptions() {
-    DOM.createChannelType.replaceChildren();
+function renderChannelTypeOptions(select) {
+    if (!select) {
+        return;
+    }
+    const selectedValue = select.value;
+    select.replaceChildren();
     const options = [
         ["", i18n.t("sessions.noChannelBinding")],
         ["web", "Web"],
@@ -168,22 +201,28 @@ function renderChannelTypeOptions() {
         const option = document.createElement("option");
         option.value = value;
         option.textContent = label;
-        DOM.createChannelType.appendChild(option);
+        select.appendChild(option);
     });
+    select.value = selectedValue;
 }
 
-function renderChannelIntegrationOptions() {
-    DOM.createChannelIntegration.replaceChildren();
+function renderChannelIntegrationOptions(select) {
+    if (!select) {
+        return;
+    }
+    const selectedValue = select.value;
+    select.replaceChildren();
     const emptyOption = document.createElement("option");
     emptyOption.value = "";
     emptyOption.textContent = i18n.t("sessions.noChannelIntegration");
-    DOM.createChannelIntegration.appendChild(emptyOption);
+    select.appendChild(emptyOption);
     state.channelIntegrations.forEach((integration) => {
         const option = document.createElement("option");
         option.value = String(integration.id || "");
         option.textContent = channelLabel(integration);
-        DOM.createChannelIntegration.appendChild(option);
+        select.appendChild(option);
     });
+    select.value = selectedValue;
 }
 
 function buildSessionCard(session) {
@@ -217,6 +256,7 @@ function buildSessionCard(session) {
     actions.appendChild(buildActionButton("sessions.useInConsole", "console", sessionName));
     actions.appendChild(buildSessionLink("sessions.openStage", `/stage?session_name=${encodeURIComponent(sessionName)}`));
     actions.appendChild(buildSessionLink("sessions.openMessenger", `/messenger?session_name=${encodeURIComponent(sessionName)}`));
+    actions.appendChild(buildActionButton("sessions.edit", "edit", sessionName));
     actions.appendChild(buildActionButton("sessions.rename", "rename", sessionName));
     actions.appendChild(buildActionButton("sessions.delete", "delete", sessionName, { danger: true }));
     card.appendChild(actions);
@@ -289,9 +329,9 @@ async function createSession() {
     }
 }
 
-function syncCreateChannelTypeFromIntegration() {
+function syncChannelTypeFromIntegration(integrationSelect, channelTypeSelect) {
     const integrationId = String(
-        (DOM.createChannelIntegration && DOM.createChannelIntegration.value) || "",
+        (integrationSelect && integrationSelect.value) || "",
     ).trim();
     const integration = state.channelIntegrations
         .find((item) => String(item.id || "") === integrationId);
@@ -299,8 +339,8 @@ function syncCreateChannelTypeFromIntegration() {
         return;
     }
     const type = String(integration.type || integration.id || "").trim();
-    if (type && DOM.createChannelType) {
-        DOM.createChannelType.value = type;
+    if (type && channelTypeSelect) {
+        channelTypeSelect.value = type;
     }
 }
 
@@ -370,6 +410,105 @@ async function renameSession(sessionName) {
     }
 }
 
+async function editSession(sessionName) {
+    const normalizedName = String(sessionName || "").trim();
+    if (!normalizedName || state.busy) {
+        return;
+    }
+    setBusy(true);
+    setStatusKey("sessions.loadingBinding", { session: normalizedName });
+    try {
+        const detail = await requestJson(`/api/sessions/${encodeURIComponent(normalizedName)}`);
+        state.editingSessionName = normalizedName;
+        if (DOM.editTitle) {
+            DOM.editTitle.textContent = i18n.t("sessions.editBindingFor", {
+                session: normalizedName,
+            });
+        }
+        renderCreateOptions();
+        if (DOM.editCharacter) {
+            DOM.editCharacter.value = String(detail.role_name || "");
+        }
+        if (DOM.editRouteMode) {
+            DOM.editRouteMode.value = String(detail.route_mode || "chat_only");
+        }
+        if (DOM.editChannelType) {
+            DOM.editChannelType.value = String(detail.channel_type || "");
+        }
+        if (DOM.editChannelIntegration) {
+            DOM.editChannelIntegration.value = String(detail.channel_integration_id || "");
+        }
+        if (DOM.editForm) {
+            DOM.editForm.hidden = false;
+            DOM.editForm.scrollIntoView({ block: "nearest" });
+        }
+        setStatusKey("sessions.bindingReady", { session: normalizedName });
+    } catch (error) {
+        console.error(error);
+        setRawStatus(i18n.t("sessions.bindingLoadFailed", {
+            message: error.message || String(error),
+        }));
+    } finally {
+        setBusy(false);
+    }
+}
+
+async function saveSessionBinding() {
+    const sessionName = state.editingSessionName;
+    if (!sessionName || state.busy) {
+        return;
+    }
+    const roleName = String((DOM.editCharacter && DOM.editCharacter.value) || "").trim();
+    const routeMode = String((DOM.editRouteMode && DOM.editRouteMode.value) || "").trim();
+    const channelType = String((DOM.editChannelType && DOM.editChannelType.value) || "").trim();
+    const channelIntegrationId = String(
+        (DOM.editChannelIntegration && DOM.editChannelIntegration.value) || "",
+    ).trim();
+    setBusy(true);
+    setStatusKey("sessions.savingBinding", { session: sessionName });
+    try {
+        if (roleName) {
+            await requestJson(`/api/sessions/${encodeURIComponent(sessionName)}/role`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ role_name: roleName }),
+            });
+        }
+        if (routeMode) {
+            await requestJson(`/api/sessions/${encodeURIComponent(sessionName)}/route-mode`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ route_mode: routeMode }),
+            });
+        }
+        await requestJson(`/api/sessions/${encodeURIComponent(sessionName)}/channel-binding`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                channel_type: channelType,
+                channel_integration_id: channelIntegrationId,
+            }),
+        });
+        clearEditForm();
+        await loadSessions();
+        setStatusKey("sessions.bindingSaved", { session: sessionName });
+    } catch (error) {
+        console.error(error);
+        setRawStatus(i18n.t("sessions.bindingSaveFailed", {
+            message: error.message || String(error),
+        }));
+    } finally {
+        setBusy(false);
+    }
+}
+
+function clearEditForm() {
+    state.editingSessionName = "";
+    if (DOM.editForm) {
+        DOM.editForm.hidden = true;
+    }
+}
+
 async function deleteSession(sessionName) {
     const normalizedName = String(sessionName || "").trim();
     if (!normalizedName || state.busy) {
@@ -398,7 +537,7 @@ async function deleteSession(sessionName) {
 
 function setBusy(isBusy) {
     state.busy = isBusy;
-    [DOM.create, DOM.refresh].forEach((button) => {
+    [DOM.create, DOM.refresh, DOM.editSave, DOM.editCancel].forEach((button) => {
         if (button) {
             button.disabled = isBusy;
         }
@@ -409,6 +548,10 @@ function setBusy(isBusy) {
         DOM.createRouteMode,
         DOM.createChannelType,
         DOM.createChannelIntegration,
+        DOM.editCharacter,
+        DOM.editRouteMode,
+        DOM.editChannelType,
+        DOM.editChannelIntegration,
     ].forEach((field) => {
         if (field) {
             field.disabled = isBusy;

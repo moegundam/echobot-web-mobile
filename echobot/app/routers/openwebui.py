@@ -116,6 +116,25 @@ async def run_openwebui_chat(
         request.prompt,
         route_mode=route_mode,
     )
+    if result.response_text.strip():
+        payload = await apply_character_emotion_map(
+            target_runtime,
+            StageEventPublishRequest(
+                kind="assistant_final",
+                session_name=result.session.name,
+                text=result.response_text,
+                speaker="Echo",
+                source="openwebui",
+                metadata={
+                    "target_user_id": user_id,
+                    "openwebui_operation": "chat",
+                },
+            ),
+        )
+        await runtime.stage_event_broker.publish(
+            scope_key=bridge_scope_key(user_id),
+            request=payload,
+        )
     return ChatResponse(
         session_name=result.session.name,
         response=result.response_text,

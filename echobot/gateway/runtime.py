@@ -144,11 +144,31 @@ class GatewayRuntime:
             )
             return
 
-        route_session = await self._session_service.current_route_session(
-            route_key,
-        )
+        requested_session_name = str(message.metadata.get("session_name") or "").strip()
+        bound_session = None
+        if requested_session_name:
+            try:
+                bound_session = await self._session_service.load_session(
+                    requested_session_name,
+                )
+            except ValueError:
+                bound_session = None
+        if bound_session is None:
+            bound_session = await self._session_service.bound_session_for_channel(
+                channel_type=message.address.channel,
+                channel_integration_id=message.address.channel,
+            )
+        route_session = None
+        session_name = ""
+        if bound_session is not None:
+            session_name = bound_session.name
+        else:
+            route_session = await self._session_service.current_route_session(
+                route_key,
+            )
+            session_name = route_session.session_name
         await self._session_service.remember_delivery_target(
-            route_session.session_name,
+            session_name,
             message.address,
             message.metadata,
         )
@@ -165,16 +185,16 @@ class GatewayRuntime:
                 self._context.workspace,
             )
             execution = await self._context.coordinator.handle_user_turn(
-                route_session.session_name,
+                session_name,
                 message.text,
                 image_urls=image_urls,
                 file_attachments=file_attachments,
                 route_mode=await self._resolve_effective_route_mode(
-                    route_session.session_name,
+                    session_name,
                     has_file_attachments=bool(file_attachments),
                 ),
                 completion_callback=self._completion_callback_for_session(
-                    route_session.session_name,
+                    session_name,
                     immediate_response_sent=immediate_response_sent,
                 ),
             )
@@ -183,7 +203,7 @@ class GatewayRuntime:
                 try:
                     if not is_message_content_empty(content):
                         await self._publish_assistant_outbound(
-                            route_session.session_name,
+                            session_name,
                             OutboundMessage(
                                 address=message.address,
                                 content=content,
@@ -192,18 +212,20 @@ class GatewayRuntime:
                         )
                 finally:
                     immediate_response_sent.set()
+                if route_session is not None:
+                    await self._session_service.touch_route_session(
+                        route_key,
+                        route_session.session_name,
+                        updated_at=execution.session.updated_at,
+                    )
+                return
+            immediate_response_sent.set()
+            if route_session is not None:
                 await self._session_service.touch_route_session(
                     route_key,
                     route_session.session_name,
                     updated_at=execution.session.updated_at,
                 )
-                return
-            immediate_response_sent.set()
-            await self._session_service.touch_route_session(
-                route_key,
-                route_session.session_name,
-                updated_at=execution.session.updated_at,
-            )
             if is_message_content_empty(content):
                 content = "Model returned no text content."
         except ValueError as exc:
@@ -213,7 +235,7 @@ class GatewayRuntime:
             immediate_response_sent.set()
             content = f"Request failed: {exc}"
         await self._publish_assistant_outbound(
-            route_session.session_name,
+            session_name,
             OutboundMessage(
                 address=message.address,
                 content=content,
@@ -458,7 +480,11 @@ class GatewayRuntime:
                 self._bus,
                 session_service=session_service,
                 max_inflight_messages=1,
-                stage_event_publisher=self._stage_event_publisher,
+                stage_event_publisher=getattr(
+                    runtime,
+                    "publish_gateway_stage_event",
+                    self._stage_event_publisher,
+                ),
             )
             self._scoped_gateways[user_id] = gateway
             return gateway
