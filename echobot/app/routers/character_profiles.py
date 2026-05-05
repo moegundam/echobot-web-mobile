@@ -21,6 +21,10 @@ from ..services.character_packages import (
     safe_model_profile_snapshot,
 )
 from ..services.character_profiles import normalize_emotion_maps
+from ..services.runtime_profile_composer import (
+    SPLIT_RUNTIME_PROFILE_FIELDS,
+    apply_runtime_profile_for_role,
+)
 from ..state import get_app_runtime, require_admin_user
 
 
@@ -353,7 +357,7 @@ async def _set_runtime_bindings_from_request(
             continue
         updates[field_name] = str(request_payload.get(field_name) or "").strip()
 
-    for field_name in ("llm_model_id", "voice_profile_id", "live2d_model_id"):
+    for field_name in SPLIT_RUNTIME_PROFILE_FIELDS:
         if updates.get(field_name):
             await _require_model_profile(runtime, updates[field_name])
 
@@ -389,67 +393,12 @@ async def _activate_binding_for_current_role(
     if current_role_name != role_name:
         return payload
 
-    runtime_bindings = await _runtime_bindings_for_role(runtime, role_name)
-    has_split_bindings = any(
-        runtime_bindings.get(field_name)
-        for field_name in ("llm_model_id", "voice_profile_id", "live2d_model_id")
+    applied_payload = await apply_runtime_profile_for_role(
+        runtime,
+        role_name,
+        preferred_profile_id=profile_id,
     )
-    if not has_split_bindings:
-        normalized_profile_id = str(profile_id or "").strip()
-        if not normalized_profile_id:
-            return payload
-        activated = await asyncio.to_thread(
-            runtime.model_profile_service.activate_profile,
-            normalized_profile_id,
-        )
-        active_profile = await asyncio.to_thread(
-            runtime.model_profile_service.get_profile_for_runtime,
-            activated["active_profile_id"],
-        )
-        await runtime.apply_model_profile(active_profile)
-        return activated
-
-    bindings = payload.get("role_bindings")
-    if not isinstance(bindings, dict):
-        bindings = {}
-    base_profile_id = str(
-        profile_id
-        or bindings.get(role_name)
-        or payload.get("active_profile_id")
-        or "a",
-    )
-    llm_profile_id = str(runtime_bindings.get("llm_model_id") or base_profile_id)
-    voice_profile_id = str(runtime_bindings.get("voice_profile_id") or base_profile_id)
-    live2d_profile_id = str(runtime_bindings.get("live2d_model_id") or base_profile_id)
-    await asyncio.to_thread(
-        runtime.model_profile_service.activate_profile,
-        llm_profile_id,
-    )
-    base_profile = await asyncio.to_thread(
-        runtime.model_profile_service.get_profile_for_runtime,
-        base_profile_id,
-    )
-    llm_profile = await asyncio.to_thread(
-        runtime.model_profile_service.get_profile_for_runtime,
-        llm_profile_id,
-    )
-    voice_profile = await asyncio.to_thread(
-        runtime.model_profile_service.get_profile_for_runtime,
-        voice_profile_id,
-    )
-    live2d_profile = await asyncio.to_thread(
-        runtime.model_profile_service.get_profile_for_runtime,
-        live2d_profile_id,
-    )
-    composed_profile = dict(base_profile)
-    composed_profile["profile_id"] = llm_profile_id
-    composed_profile["label"] = str(base_profile.get("label") or role_name)
-    composed_profile["chat"] = llm_profile.get("chat", {})
-    composed_profile["tts"] = voice_profile.get("tts", {})
-    composed_profile["asr"] = voice_profile.get("asr", {})
-    composed_profile["live2d"] = live2d_profile.get("live2d", {})
-    await runtime.apply_model_profile(composed_profile)
-    return await asyncio.to_thread(runtime.model_profile_service.list_profiles)
+    return applied_payload or payload
 
 
 def _character_profiles_response(

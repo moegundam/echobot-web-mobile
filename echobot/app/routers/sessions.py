@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import asyncio
-
 from fastapi import APIRouter, Depends, HTTPException
 
 from ..schemas import (
@@ -16,6 +14,7 @@ from ..schemas import (
     session_summary_model_from_info,
 )
 from ..state import get_app_runtime
+from ..services.runtime_profile_composer import apply_runtime_profile_for_role
 from ...orchestration import role_name_from_metadata
 
 
@@ -132,67 +131,7 @@ async def delete_session(
 
 
 async def _apply_bound_model_profile_for_role(runtime, role_name: str) -> None:
-    if runtime.model_profile_service is None:
-        return
-    profile_id = await asyncio.to_thread(
-        runtime.model_profile_service.profile_id_for_role,
+    await apply_runtime_profile_for_role(
+        runtime,
         role_name,
     )
-    runtime_bindings = {}
-    if runtime.character_profile_settings_service is not None:
-        runtime_bindings = await asyncio.to_thread(
-            runtime.character_profile_settings_service.runtime_bindings_for_role,
-            role_name,
-        )
-    has_split_bindings = any(
-        runtime_bindings.get(field_name)
-        for field_name in ("llm_model_id", "voice_profile_id", "live2d_model_id")
-    )
-    if not profile_id and not has_split_bindings:
-        return
-
-    if not has_split_bindings:
-        payload = await asyncio.to_thread(
-            runtime.model_profile_service.activate_profile,
-            profile_id,
-        )
-        active_profile = await asyncio.to_thread(
-            runtime.model_profile_service.get_profile_for_runtime,
-            payload["active_profile_id"],
-        )
-        await runtime.apply_model_profile(active_profile)
-        return
-
-    state = await asyncio.to_thread(runtime.model_profile_service.list_profiles)
-    base_profile_id = profile_id or str(state.get("active_profile_id") or "a")
-    llm_profile_id = str(runtime_bindings.get("llm_model_id") or base_profile_id)
-    voice_profile_id = str(runtime_bindings.get("voice_profile_id") or base_profile_id)
-    live2d_profile_id = str(runtime_bindings.get("live2d_model_id") or base_profile_id)
-    await asyncio.to_thread(
-        runtime.model_profile_service.activate_profile,
-        llm_profile_id,
-    )
-    base_profile = await asyncio.to_thread(
-        runtime.model_profile_service.get_profile_for_runtime,
-        base_profile_id,
-    )
-    llm_profile = await asyncio.to_thread(
-        runtime.model_profile_service.get_profile_for_runtime,
-        llm_profile_id,
-    )
-    voice_profile = await asyncio.to_thread(
-        runtime.model_profile_service.get_profile_for_runtime,
-        voice_profile_id,
-    )
-    live2d_profile = await asyncio.to_thread(
-        runtime.model_profile_service.get_profile_for_runtime,
-        live2d_profile_id,
-    )
-    composed_profile = dict(base_profile)
-    composed_profile["profile_id"] = llm_profile_id
-    composed_profile["label"] = str(base_profile.get("label") or role_name)
-    composed_profile["chat"] = llm_profile.get("chat", {})
-    composed_profile["tts"] = voice_profile.get("tts", {})
-    composed_profile["asr"] = voice_profile.get("asr", {})
-    composed_profile["live2d"] = live2d_profile.get("live2d", {})
-    await runtime.apply_model_profile(composed_profile)
