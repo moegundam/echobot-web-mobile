@@ -53,6 +53,7 @@ class WebStaticAssetTests(unittest.TestCase):
         html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
         app_js = (WEB_ROOT / "app.js").read_text(encoding="utf-8")
         sessions_js = (WEB_ROOT / "features" / "sessions.js").read_text(encoding="utf-8")
+        session_sidebar_js = (WEB_ROOT / "features" / "sessions" / "sidebar.js").read_text(encoding="utf-8")
         chat_runner_js = (WEB_ROOT / "features" / "chat" / "job-runner.js").read_text(encoding="utf-8")
         roles_js = (WEB_ROOT / "features" / "roles.js").read_text(encoding="utf-8")
         panels_css = (WEB_ROOT / "styles" / "panels.css").read_text(encoding="utf-8")
@@ -71,6 +72,11 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn('id="role-model-profile-card"', html)
         self.assertIn('id="role-model-profile-link"', html)
         self.assertIn('id="role-model-profile-detail"', html)
+        self.assertIn('href="/admin/sessions"', html)
+        self.assertIn('href="/admin/characters"', html)
+        self.assertNotIn('id="role-new-button"', html)
+        self.assertNotIn('id="role-edit-button"', html)
+        self.assertNotIn('id="role-delete-button"', html)
         self.assertIn('id="model-profile-select"', html)
         self.assertIn('id="model-profile-link"', html)
         self.assertIn('data-i18n-key="console.groupModelRouting"', html)
@@ -86,6 +92,10 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn("renderSessionSettings", sessions_js)
         self.assertIn("sessionModelProfileLabel", sessions_js)
         self.assertIn("sessionSourceLabel", sessions_js)
+        self.assertNotIn('action === "rename"', sessions_js)
+        self.assertNotIn('action === "delete"', sessions_js)
+        self.assertNotIn('t("console.rename")', session_sidebar_js)
+        self.assertNotIn('t("console.delete")', session_sidebar_js)
         self.assertIn(".session-settings-summary-block", panels_css)
         self.assertIn(".session-settings-grid", panels_css)
         self.assertIn(".session-settings-grid", responsive_css)
@@ -104,6 +114,7 @@ class WebStaticAssetTests(unittest.TestCase):
             "console.sessionSourceManual",
             "console.openStage",
             "console.openMessenger",
+            "admin.sessions",
             "console.modelProfileManage",
             "console.modelProfileSwitching",
             "console.modelProfileSwitched",
@@ -118,6 +129,40 @@ class WebStaticAssetTests(unittest.TestCase):
             "console.groupRuntimeJobs",
         ):
             self.assertIn(f'"{key}"', i18n_js)
+
+    def test_admin_sessions_page_owns_session_maintenance(self) -> None:
+        app_routes = (WEB_ROOT.parents[0] / "web_pages.py").read_text(encoding="utf-8")
+        admin_html = (WEB_ROOT / "admin.html").read_text(encoding="utf-8")
+        sessions_html = (WEB_ROOT / "sessions.html").read_text(encoding="utf-8")
+        sessions_js = (WEB_ROOT / "sessions-app.js").read_text(encoding="utf-8")
+        structure_js = (WEB_ROOT / "structure-app.js").read_text(encoding="utf-8")
+        i18n_js = (WEB_ROOT / "shell-i18n.js").read_text(encoding="utf-8")
+
+        self.assertIn('WebPageRoute("/admin/sessions"', app_routes)
+        self.assertIn('href="/admin/sessions"', admin_html)
+        self.assertIn('data-i18n-key="admin.sessions"', admin_html)
+        self.assertIn('id="sessions-list"', sessions_html)
+        self.assertIn('id="sessions-create"', sessions_html)
+        self.assertIn('id="sessions-refresh"', sessions_html)
+        self.assertIn('"/api/sessions"', sessions_js)
+        self.assertIn('"/api/sessions/current"', sessions_js)
+        self.assertIn("renameSession", sessions_js)
+        self.assertIn("deleteSession", sessions_js)
+        self.assertIn("/admin/sessions", structure_js)
+
+        for key in (
+            "sessions.pageTitle",
+            "sessions.heading",
+            "sessions.description",
+            "sessions.management",
+            "sessions.create",
+            "sessions.refresh",
+            "sessions.useInConsole",
+            "sessions.rename",
+            "sessions.delete",
+            "sessions.deleteConfirm",
+        ):
+            self.assertGreaterEqual(i18n_js.count(f'"{key}"'), 3)
 
     def test_messenger_stage_stream_contract_is_explicit(self) -> None:
         messenger_html = (WEB_ROOT / "messenger.html").read_text(encoding="utf-8")

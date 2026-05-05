@@ -56,26 +56,8 @@ export function createSessionsApi(deps) {
         );
     }
 
-    async function renameSession(sessionName, nextSessionName) {
-        return await requestJson(`/api/sessions/${encodeURIComponent(sessionName)}`, {
-            method: "PATCH",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ name: nextSessionName }),
-        });
-    }
-
-    async function deleteSession(sessionName) {
-        return await requestJson(`/api/sessions/${encodeURIComponent(sessionName)}`, {
-            method: "DELETE",
-        });
-    }
-
     return {
         createSession: createSession,
-        deleteSession: deleteSession,
-        renameSession: renameSession,
         requestSessionDetail: requestSessionDetail,
         requestSessionSummaries: requestSessionSummaries,
         switchCurrentSession: switchCurrentSession,

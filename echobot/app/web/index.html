@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>EchoBot Live2D</title>
     <link rel="icon" href="/favicon.ico" type="image/svg+xml">
-    <link rel="stylesheet" href="/web/assets/styles/index.css?v=console-session-settings-3">
+    <link rel="stylesheet" href="/web/assets/styles/index.css?v=admin-boundary-2">
 </head>
 <body data-page-title-key="console.pageTitle">
     <div class="page-shell">
@@ -180,6 +180,7 @@
                     <button id="session-create-button" class="primary-button" type="button">
                         <span data-i18n-key="console.createSession">New session</span>
                     </button>
+                    <a class="console-control-link" href="/admin/sessions" data-i18n-key="admin.sessions">Sessions</a>
                     <button
                         id="session-refresh-button"
                         class="ghost-button ghost-button-compact"
@@ -232,15 +233,7 @@
                         <button id="role-refresh-button" class="ghost-button ghost-button-compact" type="button">
                             <span data-i18n-key="console.refresh">Refresh</span>
                         </button>
-                        <button id="role-new-button" class="ghost-button ghost-button-compact" type="button">
-                            <span data-i18n-key="console.new">New</span>
-                        </button>
-                        <button id="role-edit-button" class="ghost-button ghost-button-compact" type="button">
-                            <span data-i18n-key="console.edit">Edit</span>
-                        </button>
-                        <button id="role-delete-button" class="ghost-button ghost-button-compact ghost-button-danger" type="button">
-                            <span data-i18n-key="console.delete">Delete</span>
-                        </button>
+                        <a class="console-control-link" href="/admin/characters" data-i18n-key="admin.characters">Characters</a>
                     </div>
                     <div id="role-preview" class="role-preview">
                         <p class="section-title" data-i18n-key="console.roleContent">Role content</p>
@@ -1033,6 +1026,6 @@
     <script src="/web/assets/vendor/pixi.min.js"></script>
     <script src="/web/assets/vendor/live2dcubismcore.min.js"></script>
     <script src="/web/assets/vendor/cubism4.min.js"></script>
-    <script type="module" src="/web/assets/app.js?v=console-session-settings-2"></script>
+    <script type="module" src="/web/assets/app.js?v=admin-boundary-1"></script>
 </body>
 </html>

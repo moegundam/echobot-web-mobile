@@ -130,6 +130,7 @@ textarea {
 .openwebui-root,
 .models-root,
 .characters-root,
+.sessions-root,
 .channels-root {
     width: 100%;
     max-width: 100%;
@@ -297,6 +298,7 @@ textarea {
 .admin-header,
 .admin-grid,
 .admin-health,
+.session-admin-panel,
 .openwebui-status-panel {
     border: 1px solid var(--shell-line);
     border-radius: 8px;
@@ -927,6 +929,87 @@ textarea {
 .admin-health h2 {
     margin: 0 0 10px;
     font-size: 1rem;
+}
+
+.session-admin-panel {
+    display: grid;
+    gap: 14px;
+    min-width: 0;
+    padding: 14px;
+}
+
+.session-admin-header,
+.session-admin-card-header,
+.session-admin-card-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    min-width: 0;
+}
+
+.session-admin-header h2,
+.session-admin-card h3,
+.session-admin-header p,
+.session-admin-card p {
+    margin: 0;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.session-admin-header p,
+.session-admin-meta,
+.session-admin-card-header span,
+.session-admin-empty {
+    color: var(--shell-muted);
+}
+
+.session-admin-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.session-admin-list {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+    min-width: 0;
+}
+
+.session-admin-card {
+    display: grid;
+    gap: 10px;
+    min-width: 0;
+    padding: 12px;
+    border: 1px solid var(--shell-line);
+    border-radius: 8px;
+    background: var(--shell-surface-strong);
+}
+
+.session-admin-card-actions {
+    justify-content: flex-start;
+}
+
+.session-admin-card-actions a,
+.session-admin-card-actions button {
+    min-height: 40px;
+    padding: 8px 11px;
+    border-radius: 8px;
+    text-decoration: none;
+}
+
+.session-admin-card-actions a {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid var(--shell-line);
+    color: var(--shell-accent-strong);
+    background: var(--shell-surface);
+}
+
+.session-admin-danger {
+    background: var(--shell-danger);
 }
 
 #admin-health-output {

@@ -126,31 +126,8 @@ export function createSessionSidebarController(deps) {
         meta.textContent = formatTimestamp(sessionSummary.updated_at) || t("console.noUpdatedTime");
         mainButton.appendChild(meta);
 
-        const actions = document.createElement("div");
-        actions.className = "session-card-actions";
-        actions.appendChild(buildSessionActionButton(t("console.rename"), "rename", sessionSummary.name));
-        actions.appendChild(
-            buildSessionActionButton(t("console.delete"), "delete", sessionSummary.name, {
-                danger: true,
-            }),
-        );
-
         container.appendChild(mainButton);
-        container.appendChild(actions);
         return container;
-    }
-
-    function buildSessionActionButton(label, action, sessionName, options = {}) {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = options.danger
-            ? "session-card-action session-card-action-danger"
-            : "session-card-action";
-        button.textContent = label;
-        button.dataset.sessionAction = action;
-        button.dataset.sessionName = sessionName;
-        button.disabled = chatState.chatBusy || sessionState.sessionLoading;
-        return button;
     }
 
     return {

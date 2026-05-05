@@ -84,7 +84,7 @@
         padding: 14px;
         border-radius: 20px;
         z-index: 49;
-        transform: translateY(calc(100% + 24px));
+        transform: translateY(0);
     }
 
     .live2d-drawer[aria-hidden="false"] {

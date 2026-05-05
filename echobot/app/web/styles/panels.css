@@ -228,33 +228,36 @@
     gap: 14px;
     background: rgba(255, 248, 239, 0.98);
     backdrop-filter: blur(18px);
+    visibility: hidden;
     opacity: 0;
     pointer-events: none;
-    transition: transform 0.22s ease, opacity 0.22s ease;
+    transition: opacity 0.22s ease, visibility 0.22s ease;
 }
 
 .session-sidebar {
     inset: 0 auto 0 0;
     border-right: 1px solid rgba(87, 57, 34, 0.12);
     box-shadow: 24px 0 40px rgba(70, 37, 18, 0.14);
-    transform: translateX(calc(-100% - 18px));
+    transform: translateX(0);
 }
 
 .role-sidebar {
     inset: 0 0 0 auto;
     border-left: 1px solid rgba(87, 57, 34, 0.12);
     box-shadow: -24px 0 40px rgba(70, 37, 18, 0.14);
-    transform: translateX(calc(100% + 18px));
+    transform: translateX(0);
 }
 
 .chat-panel.sessions-open .session-sidebar {
     transform: translateX(0);
+    visibility: visible;
     opacity: 1;
     pointer-events: auto;
 }
 
 .chat-panel.roles-open .role-sidebar {
     transform: translateX(0);
+    visibility: visible;
     opacity: 1;
     pointer-events: auto;
 }

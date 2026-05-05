@@ -1540,6 +1540,7 @@ class AppApiTests(unittest.TestCase):
                 "/admin": 'id="admin-root"',
                 "/admin/guide": 'id="guide-root"',
                 "/admin/structure": 'id="structure-root"',
+                "/admin/sessions": 'id="sessions-root"',
                 "/admin/channels": 'id="channels-root"',
                 "/admin/characters": 'id="characters-root"',
                 "/admin/openwebui": 'id="openwebui-root"',

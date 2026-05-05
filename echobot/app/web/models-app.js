@@ -1,4 +1,4 @@
-import { initShellI18n } from "./shell-i18n.js?v=site-public-6";
+import { initShellI18n } from "./shell-i18n.js?v=admin-boundary-1";
 import { initShellDisplayMode } from "./shell-display-mode.js?v=site-public-6";
 import {
     activeModelProfileFromConfig,

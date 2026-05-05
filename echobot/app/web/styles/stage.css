@@ -213,14 +213,16 @@
     background: rgba(255, 248, 239, 0.97);
     backdrop-filter: blur(18px);
     box-shadow: 0 24px 44px rgba(70, 37, 18, 0.16);
-    transform: translateX(calc(100% + 24px));
+    transform: translateX(0);
+    visibility: hidden;
     opacity: 0;
     pointer-events: none;
-    transition: transform 0.24s ease, opacity 0.24s ease;
+    transition: opacity 0.24s ease, visibility 0.24s ease;
 }
 
 .live2d-drawer[aria-hidden="false"] {
     transform: translateX(0);
+    visibility: visible;
     opacity: 1;
     pointer-events: auto;
 }
@@ -299,4 +301,3 @@
         background-position: -28px -12px, 20px -24px;
     }
 }
-

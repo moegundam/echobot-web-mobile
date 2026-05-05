@@ -1,4 +1,4 @@
-import { initShellI18n } from "./shell-i18n.js?v=site-public-6";
+import { initShellI18n } from "./shell-i18n.js?v=admin-boundary-1";
 import { initShellDisplayMode } from "./shell-display-mode.js?v=site-public-6";
 import { initShellSessionLinks } from "./shell-session-links.js?v=site-public-6";
 
@@ -25,7 +25,7 @@ const structureContent = {
                         label: "Console",
                         route: "/console",
                         owner: "Operator workbench",
-                        purpose: "Full runtime control for sessions, role cards, ASR, TTS, Live2D, jobs, CRON, and HEARTBEAT.",
+                        purpose: "Live operation workbench for session switching, role selection, model selection, ASR/TTS, Live2D, jobs, CRON, and HEARTBEAT status.",
                     },
                     {
                         label: "Admin",
@@ -48,8 +48,8 @@ const structureContent = {
                     {
                         label: "Control drawers",
                         route: "Console side panels",
-                        owner: "Operator setup",
-                        purpose: "Session list and role card selection/editing. These should stay scoped to the current trusted user.",
+                        owner: "Operator runtime",
+                        purpose: "Session list and role card selection only. Rename/delete and prompt editing belong in Admin pages.",
                     },
                     {
                         label: "Settings groups",
@@ -80,6 +80,12 @@ const structureContent = {
                         route: "/admin/guide",
                         owner: "Runbook",
                         purpose: "How to operate, expected healthy results, failure signs, and troubleshooting flow.",
+                    },
+                    {
+                        label: "Sessions",
+                        route: "/admin/sessions",
+                        owner: "Session maintenance",
+                        purpose: "Session create, rename, delete, and open-in-Console handoff. Console keeps only live session switching.",
                     },
                     {
                         label: "Model Profiles",
@@ -172,7 +178,7 @@ const structureContent = {
                         label: "中台 Console",
                         route: "/console",
                         owner: "操作員工作台",
-                        purpose: "sessions、角色卡、ASR、TTS、Live2D、jobs、CRON、HEARTBEAT 的完整 runtime 控制面。",
+                        purpose: "正式操作工作台，保留 session 切換、角色選擇、模型選擇、ASR/TTS、Live2D、jobs、CRON 與 HEARTBEAT 狀態。",
                     },
                     {
                         label: "後台 Admin",
@@ -195,8 +201,8 @@ const structureContent = {
                     {
                         label: "控制抽屜",
                         route: "Console side panels",
-                        owner: "操作設定",
-                        purpose: "Session 清單與角色卡選擇/編輯；資料必須維持 trusted user scope。",
+                        owner: "即時操作",
+                        purpose: "Session 清單與角色卡選擇。重新命名、刪除與 prompt 編輯放在 Admin 子頁。",
                     },
                     {
                         label: "設定群組",
@@ -227,6 +233,12 @@ const structureContent = {
                         route: "/admin/guide",
                         owner: "Runbook",
                         purpose: "如何操作、正常預期、故障跡象與排除流程。",
+                    },
+                    {
+                        label: "會話管理",
+                        route: "/admin/sessions",
+                        owner: "Session maintenance",
+                        purpose: "會話建立、重新命名、刪除與套用到中台。Console 只保留正式操作時的會話切換。",
                     },
                     {
                         label: "模型設定",
@@ -319,7 +331,7 @@ const structureContent = {
                         label: "中台 Console",
                         route: "/console",
                         owner: "操作员工作台",
-                        purpose: "sessions、角色卡、ASR、TTS、Live2D、jobs、CRON、HEARTBEAT 的完整 runtime 控制面。",
+                        purpose: "正式操作工作台，保留 session 切换、角色选择、模型选择、ASR/TTS、Live2D、jobs、CRON 与 HEARTBEAT 状态。",
                     },
                     {
                         label: "后台 Admin",
@@ -342,8 +354,8 @@ const structureContent = {
                     {
                         label: "控制抽屉",
                         route: "Console side panels",
-                        owner: "操作设置",
-                        purpose: "Session 清单与角色卡选择/编辑；数据必须维持 trusted user scope。",
+                        owner: "即时操作",
+                        purpose: "Session 清单与角色卡选择。重命名、删除与 prompt 编辑放在 Admin 子页。",
                     },
                     {
                         label: "设置群组",
@@ -374,6 +386,12 @@ const structureContent = {
                         route: "/admin/guide",
                         owner: "Runbook",
                         purpose: "如何操作、正常预期、故障迹象与排除流程。",
+                    },
+                    {
+                        label: "会话管理",
+                        route: "/admin/sessions",
+                        owner: "Session maintenance",
+                        purpose: "会话创建、重命名、删除与应用到中台。Console 只保留正式操作时的会话切换。",
                     },
                     {
                         label: "模型设置",

@@ -8,16 +8,16 @@ import {
     sessionState,
 } from "../core/store.js";
 import { DOM } from "../core/dom.js";
-import { createSessionsApi } from "./sessions/api.js";
+import { createSessionsApi } from "./sessions/api.js?v=admin-boundary-1";
 import {
     buildSpokenText,
     findAppendedMessages,
     normalizeHistory,
     renderSessionHistory,
     shouldAnnounceNewMessages,
-} from "./sessions/history.js?v=site-public-6";
-import { normalizeRouteMode, routeModeLabel } from "./sessions/route-mode.js?v=site-public-6";
-import { createSessionSidebarController } from "./sessions/sidebar.js?v=site-public-6";
+} from "./sessions/history.js?v=admin-boundary-1";
+import { normalizeRouteMode, routeModeLabel } from "./sessions/route-mode.js?v=admin-boundary-1";
+import { createSessionSidebarController } from "./sessions/sidebar.js?v=admin-boundary-1";
 
 export function createSessionsModule(deps) {
     const {
@@ -189,14 +189,6 @@ export function createSessionsModule(deps) {
 
         if (action === "switch") {
             await switchSession(sessionName);
-            return;
-        }
-        if (action === "rename") {
-            await handleRenameSession(sessionName);
-            return;
-        }
-        if (action === "delete") {
-            await handleDeleteSession(sessionName);
         }
     }
 
@@ -276,80 +268,6 @@ export function createSessionsModule(deps) {
             console.error(error);
             sidebar.setSessionSidebarStatus(error.message || t("console.createSessionFailed"));
             addMessage("system", `${t("console.createSessionFailed")}: ${error.message || error}`, t("console.systemLabel"));
-        } finally {
-            sidebar.setSessionControlsBusy(false);
-        }
-    }
-
-    async function handleRenameSession(sessionName) {
-        if (chatState.chatBusy || sessionState.sessionLoading || !sessionName) {
-            return;
-        }
-
-        const rawName = window.prompt(t("console.renameSessionPrompt"), sessionName);
-        if (rawName === null) {
-            return;
-        }
-
-        let nextSessionName = "";
-        try {
-            nextSessionName = normalizeSessionName(rawName);
-        } catch (error) {
-            sidebar.setSessionSidebarStatus(error.message || t("console.invalidSessionName"));
-            addMessage("system", `${t("console.renameSessionFailed")}: ${error.message || error}`, t("console.systemLabel"));
-            return;
-        }
-
-        if (nextSessionName === sessionName) {
-            return;
-        }
-
-        sidebar.setSessionControlsBusy(true, t("console.renamingSession"));
-
-        try {
-            const sessionDetail = await api.renameSession(sessionName, nextSessionName);
-            sidebar.applySessionSummaries(await api.requestSessionSummaries());
-            applySessionDetail(sessionDetail);
-            sidebar.setSessionSidebarStatus("");
-            setRunStatus(t("console.sessionRenamed", { session: sessionDetail.name }));
-        } catch (error) {
-            console.error(error);
-            sidebar.setSessionSidebarStatus(error.message || t("console.renameSessionFailed"));
-            addMessage("system", `${t("console.renameSessionFailed")}: ${error.message || error}`, t("console.systemLabel"));
-        } finally {
-            sidebar.setSessionControlsBusy(false);
-        }
-    }
-
-    async function handleDeleteSession(sessionName) {
-        if (chatState.chatBusy || sessionState.sessionLoading || !sessionName) {
-            return;
-        }
-        if (!window.confirm(t("console.deleteSessionConfirm", { session: sessionName }))) {
-            return;
-        }
-
-        stopSpeechPlayback();
-        sidebar.setSessionControlsBusy(true, t("console.deletingSession"));
-
-        try {
-            await api.deleteSession(sessionName);
-            sidebar.applySessionSummaries(await api.requestSessionSummaries());
-
-            if (sessionName === sessionState.currentSessionName) {
-                const sessionDetail = await requestJson("/api/sessions/current");
-                applySessionDetail(sessionDetail);
-            } else {
-                sidebar.renderSessionList(sessionState.sessions);
-                sidebar.updateSessionSidebarSummary();
-            }
-
-            setRunStatus(t("console.sessionDeleted", { session: sessionName }));
-            sidebar.setSessionSidebarStatus("");
-        } catch (error) {
-            console.error(error);
-            sidebar.setSessionSidebarStatus(error.message || t("console.deleteSessionFailed"));
-            addMessage("system", `${t("console.deleteSessionFailed")}: ${error.message || error}`, t("console.systemLabel"));
         } finally {
             sidebar.setSessionControlsBusy(false);
         }

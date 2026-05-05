@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>EchoBot Sessions</title>
+    <link rel="stylesheet" href="/web/assets/styles/shell-pages.css?v=admin-sessions-1">
+</head>
+<body class="admin-page sessions-page" data-page-title-key="sessions.pageTitle">
+    <main id="sessions-root" class="admin-root sessions-root">
+        <header class="admin-header">
+            <div>
+                <h1 data-i18n-key="sessions.heading">Sessions</h1>
+                <p data-i18n-key="sessions.description">Session maintenance for Console, Stage, and Messenger.</p>
+            </div>
+            <div class="shell-header-controls">
+                <div class="language-switcher" data-language-switcher></div>
+                <div class="display-mode-switcher" data-display-mode-switcher></div>
+            </div>
+        </header>
+        <nav class="admin-grid guide-nav" aria-label="Session quick links" data-i18n-aria-label-key="sessions.linksAria">
+            <a href="/admin" data-i18n-key="guide.backToAdmin">Back to Admin</a>
+            <a href="/console" data-i18n-key="admin.console">Console</a>
+            <a href="/stage?session_name=default" data-session-link data-i18n-key="guide.openStage">Open Stage</a>
+            <a href="/messenger?session_name=default" data-session-link data-i18n-key="guide.openMessenger">Open Messenger</a>
+            <a href="/admin/characters" data-i18n-key="admin.characters">Characters</a>
+            <a href="/admin/models" data-i18n-key="admin.modelProfiles">Model Profiles</a>
+            <a href="/admin/channels" data-i18n-key="admin.channels">Channels</a>
+        </nav>
+        <section class="session-admin-panel" aria-label="Session maintenance" data-i18n-aria-label-key="sessions.contentAria">
+            <div class="session-admin-header">
+                <div>
+                    <h2 data-i18n-key="sessions.management">Session Management</h2>
+                    <p id="sessions-status" data-i18n-key="sessions.loading">Loading sessions...</p>
+                </div>
+                <div class="session-admin-actions">
+                    <button id="sessions-create" type="button" data-i18n-key="sessions.create">Create session</button>
+                    <button id="sessions-refresh" type="button" data-i18n-key="sessions.refresh">Refresh</button>
+                </div>
+            </div>
+            <div id="sessions-list" class="session-admin-list"></div>
+        </section>
+    </main>
+    <script type="module" src="/web/assets/sessions-app.js?v=admin-sessions-1"></script>
+</body>
+</html>
