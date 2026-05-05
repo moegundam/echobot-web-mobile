@@ -70,6 +70,9 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn('id="session-settings-updated"', html)
         self.assertIn('id="session-settings-stage-link"', html)
         self.assertIn('id="session-settings-messenger-link"', html)
+        self.assertIn('class="console-admin-handoff"', html)
+        self.assertIn('href="/admin/voice-models"', html)
+        self.assertIn('href="/admin/live2d"', html)
         self.assertIn('id="role-model-profile-card"', html)
         self.assertIn('id="role-model-profile-link"', html)
         self.assertIn('id="role-model-profile-detail"', html)
@@ -108,14 +111,22 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertNotIn('t("console.rename")', session_sidebar_js)
         self.assertNotIn('t("console.delete")', session_sidebar_js)
         self.assertIn(".session-settings-summary-block", panels_css)
+        self.assertIn(".console-admin-handoff", panels_css)
         self.assertIn(".session-settings-grid", panels_css)
         self.assertIn(".session-settings-grid", responsive_css)
+        self.assertIn("@media (max-width: 899px)", responsive_css)
+        self.assertIn('html[data-layout-mode="tablet"][data-viewport-orientation="landscape"] .page-shell', responsive_css)
+        self.assertIn("grid-template-columns: minmax(0, 1fr) minmax(320px, min(44vw, 420px));", responsive_css)
+        self.assertIn("html[data-layout-mode=\"tablet\"] .page-resizer", responsive_css)
+        self.assertIn("max-height: min(46vh, 500px)", panels_css)
         self.assertIn("response_language: getUiLanguage()", chat_runner_js)
         self.assertIn("renderRoleModelProfileCard", roles_js)
 
         for key in (
             "console.sessionSettings",
             "console.sessionSettingsHelp",
+            "console.adminHandoff",
+            "console.adminHandoffHelp",
             "console.sessionSettingCurrent",
             "console.sessionSettingSource",
             "console.sessionSettingRole",

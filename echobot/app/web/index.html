@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>EchoBot Live2D</title>
     <link rel="icon" href="/favicon.ico" type="image/svg+xml">
-    <link rel="stylesheet" href="/web/assets/styles/index.css?v=admin-boundary-2">
+    <link rel="stylesheet" href="/web/assets/styles/index.css?v=console-layout-1">
 </head>
 <body data-page-title-key="console.pageTitle">
     <div class="page-shell">
@@ -314,6 +314,21 @@
                                 <dd id="session-settings-updated">-</dd>
                             </div>
                         </dl>
+                    </section>
+                    <section class="console-admin-handoff" aria-label="Admin setup" data-i18n-aria-label-key="console.adminHandoff">
+                        <div>
+                            <p class="section-title" data-i18n-key="console.adminHandoff">Detailed setup</p>
+                            <span class="muted-text" data-i18n-key="console.adminHandoffHelp">
+                                Console is for operation and testing. Use Admin pages for persistent setup.
+                            </span>
+                        </div>
+                        <div class="console-admin-handoff-links">
+                            <a class="console-control-link" href="/admin/sessions" data-i18n-key="admin.sessions">Sessions</a>
+                            <a class="console-control-link" href="/admin/characters" data-i18n-key="admin.characters">Characters</a>
+                            <a class="console-control-link" href="/admin/models" data-i18n-key="admin.modelProfiles">Models</a>
+                            <a class="console-control-link" href="/admin/voice-models" data-i18n-key="admin.voiceModels">Voice</a>
+                            <a class="console-control-link" href="/admin/live2d" data-i18n-key="admin.live2d">Live2D</a>
+                        </div>
                     </section>
                     <div class="console-control-section-heading">
                         <div>
@@ -1008,6 +1023,6 @@
     <script src="/web/assets/vendor/pixi.min.js"></script>
     <script src="/web/assets/vendor/live2dcubismcore.min.js"></script>
     <script src="/web/assets/vendor/cubism4.min.js"></script>
-    <script type="module" src="/web/assets/app.js?v=admin-boundary-1"></script>
+    <script type="module" src="/web/assets/app.js?v=console-layout-1"></script>
 </body>
 </html>

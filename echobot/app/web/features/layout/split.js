@@ -6,7 +6,7 @@ const DEFAULT_CHAT_WIDTH_RATIO = 0.34;
 const MIN_CHAT_PANEL_WIDTH = 320;
 const MIN_STAGE_PANEL_WIDTH = 360;
 const MAX_CHAT_PANEL_WIDTH = 960;
-const DESKTOP_LAYOUT_QUERY = "(min-width: 1121px)";
+const DESKTOP_LAYOUT_QUERY = "(min-width: 900px)";
 const KEYBOARD_STEP_WIDTH = 40;
 
 export function createSplitController() {

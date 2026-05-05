@@ -1,5 +1,5 @@
 import { DOM } from "../../core/dom.js";
-import { readBoolean, writeBoolean } from "../../core/storage.js";
+import { readBoolean, readString, writeBoolean } from "../../core/storage.js";
 
 const SETTINGS_PANEL_STORAGE_KEY = "echobot.web.settings_panel_open";
 const CRON_PANEL_STORAGE_KEY = "echobot.web.cron_panel_open";
@@ -21,7 +21,10 @@ export function createPanelController(deps) {
             return;
         }
 
-        DOM.settingsPanel.open = readBoolean(SETTINGS_PANEL_STORAGE_KEY, false);
+        const storedState = readString(SETTINGS_PANEL_STORAGE_KEY, "");
+        DOM.settingsPanel.open = storedState === ""
+            ? shouldDefaultSettingsPanelOpen()
+            : storedState === "true";
     }
 
     function handleSettingsPanelToggle() {
@@ -102,6 +105,12 @@ export function createPanelController(deps) {
         if (DOM.live2dPanel) {
             writeBoolean(LIVE2D_PANEL_STORAGE_KEY, DOM.live2dPanel.open);
         }
+    }
+
+    function shouldDefaultSettingsPanelOpen() {
+        return window.matchMedia
+            ? window.matchMedia("(min-width: 900px) and (orientation: landscape)").matches
+            : true;
     }
 
     return {

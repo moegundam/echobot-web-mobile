@@ -14,7 +14,7 @@ import { createUiStatusController } from "./bootstrap/ui-status.js?v=site-public
 import { appState } from "./core/store.js";
 import { createAsrModule } from "./features/asr.js?v=site-public-6";
 import { createChatModule } from "./features/chat/index.js?v=response-language-1";
-import { createLayoutModule } from "./features/layout/index.js?v=site-public-6";
+import { createLayoutModule } from "./features/layout/index.js?v=console-layout-1";
 import { createLive2DModule } from "./features/live2d/index.js?v=site-public-6";
 import { createRolesModule } from "./features/roles.js?v=site-public-6";
 import { createSessionsModule } from "./features/sessions.js?v=admin-boundary-1";

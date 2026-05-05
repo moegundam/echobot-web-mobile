@@ -1,9 +1,9 @@
 import { createCronController } from "./cron.js?v=site-public-6";
 import { createHeartbeatController } from "./heartbeat.js?v=site-public-6";
-import { createPanelController } from "./panels.js";
+import { createPanelController } from "./panels.js?v=console-layout-1";
 import { createRuntimeController } from "./runtime.js";
 import { createSidebarController } from "./sidebars.js?v=site-public-6";
-import { createSplitController } from "./split.js";
+import { createSplitController } from "./split.js?v=console-layout-1";
 
 export function createLayoutModule(deps) {
     let cron;

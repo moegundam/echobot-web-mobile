@@ -48,7 +48,7 @@
 }
 
 .settings-panel[open] {
-    max-height: min(56vh, 620px);
+    max-height: min(48vh, 540px);
     overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior: contain;
@@ -165,6 +165,28 @@
     border-bottom: 1px solid rgba(87, 57, 34, 0.12);
 }
 
+.console-admin-handoff {
+    display: grid;
+    gap: 12px;
+    margin-top: 16px;
+    padding: 14px;
+    border: 1px solid rgba(87, 57, 34, 0.1);
+    border-radius: 16px;
+    background: rgba(255, 251, 246, 0.72);
+}
+
+.console-admin-handoff > div:first-child {
+    display: grid;
+    gap: 5px;
+    min-width: 0;
+}
+
+.console-admin-handoff-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
 .session-settings-header {
     display: flex;
     align-items: flex-start;
@@ -215,6 +237,11 @@
 .settings-panel-body > .cron-panel,
 .settings-panel-body > .heartbeat-panel {
     margin-top: 18px;
+}
+
+html[data-layout-mode="desktop"] .settings-panel[open],
+html[data-layout-mode="tablet"][data-viewport-orientation="landscape"] .settings-panel[open] {
+    max-height: min(46vh, 500px);
 }
 
 .session-sidebar,
