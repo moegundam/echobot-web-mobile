@@ -19,6 +19,7 @@ const audioButton = document.getElementById("stage-audio-enable");
 const canvasHost = document.getElementById("stage-canvas-host");
 
 const DEFAULT_LIP_SYNC_IDS = ["ParamMouthOpenY", "PARAM_MOUTH_OPEN_Y", "MouthOpenY"];
+const STAGE_CONTEXT_REFRESH_INTERVAL_MS = 5000;
 let sessionName = resolveSessionName();
 rememberShellSessionName(sessionName);
 let subtitleText = "";
@@ -39,6 +40,8 @@ let currentMouthValue = 0;
 let live2dApp = null;
 let live2dModel = null;
 let live2dConfig = null;
+let live2dLoadPromise = null;
+let stageContextRefreshTimerId = 0;
 let activeStageExpressionDefinition = null;
 let stageExpressionHook = null;
 const expressionDataCache = new Map();
@@ -65,7 +68,7 @@ if (audioButton) {
 
 if (sessionSelect) {
     sessionSelect.addEventListener("change", () => {
-        setActiveSessionName(sessionSelect.value, { reconnect: true });
+        void setActiveSessionName(sessionSelect.value, { reconnect: true });
     });
 }
 
@@ -75,8 +78,9 @@ async function init() {
     setStatus("stage.status.connecting");
     await loadStageTargets();
     await loadStageContext();
+    startStageContextRefresh();
     initStageEvents();
-    await initLive2D();
+    await reloadLive2DFromContext();
 }
 
 function resolveSessionName() {
@@ -91,7 +95,7 @@ function setStatus(key) {
     }
 }
 
-function setActiveSessionName(value, options = {}) {
+async function setActiveSessionName(value, options = {}) {
     sessionName = rememberShellSessionName(
         String(value || "").trim() || "default",
     );
@@ -100,7 +104,10 @@ function setActiveSessionName(value, options = {}) {
         sessionSelect.value = sessionName;
     }
     updateSessionUrl(sessionName);
-    void loadStageContext();
+    const live2dChanged = await loadStageContext();
+    if (live2dChanged) {
+        await reloadLive2DFromContext();
+    }
     if (options.reconnect) {
         setSubtitle("");
         setStatus("stage.status.connecting");
@@ -129,13 +136,47 @@ async function loadStageTargets() {
 }
 
 async function loadStageContext() {
+    const previousLive2DKey = stageContextLive2DKey();
     try {
         stageContext = await fetchSessionRuntimeContext(sessionName);
     } catch (error) {
         console.warn("Unable to load stage context", error);
         stageContext = null;
+        renderStageContext();
+        return false;
     }
     renderStageContext();
+    return previousLive2DKey !== stageContextLive2DKey();
+}
+
+async function refreshStageContext(options = {}) {
+    const live2dChanged = await loadStageContext();
+    if (live2dChanged && options.reloadLive2D) {
+        await reloadLive2DFromContext();
+    }
+}
+
+function startStageContextRefresh() {
+    if (stageContextRefreshTimerId) {
+        window.clearInterval(stageContextRefreshTimerId);
+    }
+    stageContextRefreshTimerId = window.setInterval(() => {
+        void refreshStageContext({ reloadLive2D: true });
+    }, STAGE_CONTEXT_REFRESH_INTERVAL_MS);
+    window.addEventListener("pagehide", () => {
+        if (stageContextRefreshTimerId) {
+            window.clearInterval(stageContextRefreshTimerId);
+            stageContextRefreshTimerId = 0;
+        }
+    });
+    document.addEventListener("visibilitychange", () => {
+        if (!document.hidden) {
+            void refreshStageContext({ reloadLive2D: true });
+        }
+    });
+    window.addEventListener("focus", () => {
+        void refreshStageContext({ reloadLive2D: true });
+    });
 }
 
 function renderStageContext() {
@@ -296,7 +337,7 @@ function initStageEvents() {
         const payload = parseStageEvent(event);
         applyStageVisualState(payload);
         setSubtitle(payload.text);
-        void loadStageContext();
+        void refreshStageContext({ reloadLive2D: true });
         await playTts(payload.text);
     });
     source.addEventListener("character_state", (event) => {
@@ -712,21 +753,26 @@ async function initLive2D() {
         return;
     }
 
-    let config;
+    const contextConfig = stageContextLive2DConfig();
+    let config = null;
     try {
-        const response = await fetch("/api/web/config");
-        if (!response.ok) {
-            throw await responseToError(response);
-        }
-        config = await response.json();
+        config = await fetchWebConfig();
     } catch (error) {
         console.warn("Unable to load web config", error);
-        markLive2DUnavailable("stage.fallback.configUnavailable");
-        return;
+        if (!contextConfig) {
+            markLive2DUnavailable("stage.fallback.configUnavailable");
+            return;
+        }
     }
 
-    live2dConfig = normalizeLive2DConfig(config && config.live2d);
+    live2dConfig = normalizeLive2DConfig(
+        resolveStageLive2DConfig(contextConfig, config && config.live2d),
+        contextConfig ? "session" : "web-config",
+    );
     const modelUrl = live2dConfig.model_url;
+    canvasHost.dataset.live2dSource = live2dConfig.source;
+    canvasHost.dataset.live2dSelectionKey = live2dConfig.selection_key;
+    canvasHost.dataset.live2dModelUrl = modelUrl;
     if (!modelUrl) {
         markLive2DUnavailable("stage.fallback.subtitleMode");
         return;
@@ -749,6 +795,9 @@ async function initLive2D() {
             fitLive2DModel();
             window.addEventListener("resize", fitLive2DModel);
             canvasHost.dataset.live2d = "ready";
+            canvasHost.dataset.live2dSource = live2dConfig.source;
+            canvasHost.dataset.live2dSelectionKey = live2dConfig.selection_key;
+            canvasHost.dataset.live2dModelUrl = modelUrl;
         });
     } catch (error) {
         console.warn("Live2D initialization failed", error);
@@ -757,6 +806,33 @@ async function initLive2D() {
                 ? "stage.fallback.webglUnavailable"
                 : "stage.fallback.subtitleMode",
         );
+    }
+}
+
+async function fetchWebConfig() {
+    const response = await fetch("/api/web/config");
+    if (!response.ok) {
+        throw await responseToError(response);
+    }
+    return response.json();
+}
+
+async function reloadLive2DFromContext() {
+    if (live2dLoadPromise) {
+        return live2dLoadPromise;
+    }
+    live2dLoadPromise = (async () => {
+        destroyLive2DApp();
+        if (canvasHost) {
+            canvasHost.textContent = "";
+            delete canvasHost.dataset.i18nFallbackKey;
+        }
+        await initLive2D();
+    })();
+    try {
+        await live2dLoadPromise;
+    } finally {
+        live2dLoadPromise = null;
     }
 }
 
@@ -884,9 +960,61 @@ function deleteWebGLShader(gl, shader) {
     gl.deleteShader(shader);
 }
 
-function normalizeLive2DConfig(sourceConfig) {
-    if (!sourceConfig || !sourceConfig.available) {
+function resolveStageLive2DConfig(contextConfig, webLive2DConfig) {
+    if (!contextConfig) {
+        return webLive2DConfig;
+    }
+    return {
+        ...live2DWebCatalogMatch(webLive2DConfig, contextConfig),
+        ...contextConfig,
+        available: contextConfig.available !== false,
+    };
+}
+
+function live2DWebCatalogMatch(webLive2DConfig, contextConfig) {
+    const models = webLive2DConfig && Array.isArray(webLive2DConfig.models)
+        ? webLive2DConfig.models
+        : [];
+    const selectionKey = String(contextConfig.selection_key || "");
+    const modelUrl = String(contextConfig.model_url || "");
+    return models.find((model) => {
+        if (!model || typeof model !== "object") {
+            return false;
+        }
+        return (
+            (selectionKey && model.selection_key === selectionKey)
+            || (modelUrl && model.model_url === modelUrl)
+        );
+    }) || {};
+}
+
+function stageContextLive2DConfig() {
+    const contextLive2D = stageContext && typeof stageContext.live2d_model === "object"
+        ? stageContext.live2d_model
+        : null;
+    if (
+        !contextLive2D
+        || contextLive2D.available === false
+        || !contextLive2D.model_url
+    ) {
+        return null;
+    }
+    return contextLive2D;
+}
+
+function stageContextLive2DKey() {
+    const contextConfig = stageContextLive2DConfig();
+    if (!contextConfig) {
+        return "";
+    }
+    return String(contextConfig.selection_key || contextConfig.model_url || "");
+}
+
+function normalizeLive2DConfig(sourceConfig, source = "web-config") {
+    if (!sourceConfig || sourceConfig.available === false) {
         return {
+            selection_key: "",
+            source,
             model_url: "",
             lip_sync_parameter_ids: DEFAULT_LIP_SYNC_IDS.slice(),
             mouth_form_parameter_id: null,
@@ -899,10 +1027,23 @@ function normalizeLive2DConfig(sourceConfig) {
         ? sourceConfig.models.find((model) => model && model.model_url)
         : null;
     const modelConfig = selectedModel || sourceConfig;
+    if (!modelConfig || modelConfig.available === false) {
+        return {
+            selection_key: "",
+            source,
+            model_url: "",
+            lip_sync_parameter_ids: DEFAULT_LIP_SYNC_IDS.slice(),
+            mouth_form_parameter_id: null,
+            expressions: [],
+            motions: [],
+        };
+    }
     const lipSyncParameterIds = Array.isArray(modelConfig.lip_sync_parameter_ids)
         ? modelConfig.lip_sync_parameter_ids.filter((item) => typeof item === "string")
         : [];
     return {
+        selection_key: String(modelConfig.selection_key || sourceConfig.selection_key || ""),
+        source,
         model_url: String(modelConfig.model_url || ""),
         lip_sync_parameter_ids: lipSyncParameterIds.length > 0
             ? lipSyncParameterIds
@@ -1038,6 +1179,9 @@ function markLive2DUnavailable(messageKey) {
     destroyLive2DApp();
     if (canvasHost) {
         canvasHost.dataset.live2d = "fallback";
+        canvasHost.dataset.live2dSource = live2dConfig ? live2dConfig.source : "";
+        canvasHost.dataset.live2dSelectionKey = live2dConfig ? live2dConfig.selection_key : "";
+        canvasHost.dataset.live2dModelUrl = live2dConfig ? live2dConfig.model_url : "";
         canvasHost.dataset.i18nFallbackKey = messageKey;
         canvasHost.textContent = i18n.t(messageKey);
     }

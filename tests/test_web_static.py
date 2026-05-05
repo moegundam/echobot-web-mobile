@@ -240,6 +240,11 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn("fetchSessionRuntimeContext", stage_js)
         self.assertIn("runtimeContextSummaryItems", messenger_js)
         self.assertIn("runtimeContextValue", stage_js)
+        self.assertIn("STAGE_CONTEXT_REFRESH_INTERVAL_MS", stage_js)
+        self.assertIn("stageContextLive2DConfig", stage_js)
+        self.assertIn("reloadLive2DFromContext", stage_js)
+        self.assertIn("canvasHost.dataset.live2dSelectionKey", stage_js)
+        self.assertNotIn("normalizeLive2DConfig(config && config.live2d)", stage_js)
         self.assertIn("loadSessions", messenger_js)
         self.assertIn("uploadSelectedFiles", messenger_js)
         self.assertIn("uploadMessengerAttachment", messenger_js)
@@ -288,7 +293,8 @@ class WebStaticAssetTests(unittest.TestCase):
             flags=re.S,
         )
         final_handler = re.search(
-            r'source\.addEventListener\("assistant_final".*?\}\);',
+            r'source\.addEventListener\("assistant_final".*?'
+            r'await playTts\(payload\.text\);.*?\n    \}\);',
             stage_js,
             flags=re.S,
         )
@@ -296,6 +302,7 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIsNotNone(final_handler)
         self.assertNotIn("playTts", delta_handler.group(0))
         self.assertIn("playTts(payload.text)", final_handler.group(0))
+        self.assertIn("refreshStageContext", final_handler.group(0))
 
         for key in (
             "stage.sessionTarget",
