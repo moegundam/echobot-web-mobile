@@ -294,7 +294,9 @@ async function createSession() {
         return;
     }
     const roleName = String((DOM.createCharacter && DOM.createCharacter.value) || "").trim();
-    const routeMode = String((DOM.createRouteMode && DOM.createRouteMode.value) || "").trim();
+    const routeMode = normalizeRouteMode(
+        (DOM.createRouteMode && DOM.createRouteMode.value) || "",
+    );
     const channelType = String((DOM.createChannelType && DOM.createChannelType.value) || "").trim();
     const channelIntegrationId = String(
         (DOM.createChannelIntegration && DOM.createChannelIntegration.value) || "",
@@ -353,6 +355,14 @@ function channelLabel(integration) {
         return `${name} · ${i18n.t("channelTargets.notRunning")}`;
     }
     return name;
+}
+
+function normalizeRouteMode(routeMode) {
+    const value = String(routeMode || "").trim().toLowerCase();
+    if (value === "agent") {
+        return "force_agent";
+    }
+    return ["chat_only", "auto", "force_agent"].includes(value) ? value : "chat_only";
 }
 
 async function useInConsole(sessionName) {
@@ -430,7 +440,7 @@ async function editSession(sessionName) {
             DOM.editCharacter.value = String(detail.role_name || "");
         }
         if (DOM.editRouteMode) {
-            DOM.editRouteMode.value = String(detail.route_mode || "chat_only");
+            DOM.editRouteMode.value = normalizeRouteMode(detail.route_mode || "chat_only");
         }
         if (DOM.editChannelType) {
             DOM.editChannelType.value = String(detail.channel_type || "");
@@ -459,7 +469,9 @@ async function saveSessionBinding() {
         return;
     }
     const roleName = String((DOM.editCharacter && DOM.editCharacter.value) || "").trim();
-    const routeMode = String((DOM.editRouteMode && DOM.editRouteMode.value) || "").trim();
+    const routeMode = normalizeRouteMode(
+        (DOM.editRouteMode && DOM.editRouteMode.value) || "",
+    );
     const channelType = String((DOM.editChannelType && DOM.editChannelType.value) || "").trim();
     const channelIntegrationId = String(
         (DOM.editChannelIntegration && DOM.editChannelIntegration.value) || "",

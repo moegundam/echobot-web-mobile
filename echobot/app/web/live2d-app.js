@@ -20,11 +20,13 @@ const state = {
 
 const DOM = {
     list: document.getElementById("live2d-profile-list"),
+    create: document.getElementById("live2d-profile-create"),
     form: document.getElementById("live2d-profile-form"),
     title: document.getElementById("live2d-profile-title"),
     status: document.getElementById("live2d-profile-status"),
     activate: document.getElementById("live2d-profile-activate"),
     save: document.getElementById("live2d-profile-save"),
+    remove: document.getElementById("live2d-profile-delete"),
     label: document.getElementById("live2d-profile-label"),
     selection: document.getElementById("live2d-selection"),
     detail: document.getElementById("live2d-selection-detail"),
@@ -46,6 +48,12 @@ DOM.form.addEventListener("submit", (event) => {
 });
 DOM.activate.addEventListener("click", () => {
     void activateSelectedProfile();
+});
+DOM.create.addEventListener("click", () => {
+    void createProfileFromSelection();
+});
+DOM.remove.addEventListener("click", () => {
+    void deleteSelectedProfile();
 });
 
 void load();
@@ -133,8 +141,10 @@ function renderSelectedProfile() {
         ? i18n.t("live2dAdmin.available", { model: profile.model_name || profile.selection_key })
         : i18n.t("live2dAdmin.unavailable");
     const disabled = formActionsDisabled();
+    DOM.create.disabled = disabled;
     DOM.activate.disabled = disabled || profile.id === activeProfileId();
     DOM.save.disabled = disabled;
+    DOM.remove.disabled = disabled || !canDeleteSelectedProfile(profile);
 }
 
 function renderCatalog() {
@@ -185,6 +195,48 @@ async function saveSelectedProfile() {
     }
 }
 
+async function createProfileFromSelection() {
+    if (formActionsDisabled()) {
+        return;
+    }
+    const sourceProfile = selectedProfile();
+    const label = window.prompt(
+        i18n.t("models.createPrompt"),
+        nextProfileLabel(),
+    );
+    if (label === null) {
+        return;
+    }
+    const cleanedLabel = String(label || "").trim();
+    if (!cleanedLabel) {
+        setStatusKey("models.createNameRequired");
+        return;
+    }
+
+    setBusy(true);
+    setStatusKey("models.creating");
+    try {
+        const created = await requestJson("/api/model-profiles", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                label: cleanedLabel,
+                source_profile_id: sourceProfile.id,
+            }),
+        });
+        state.selectedProfileId = created.profile_id;
+        await load();
+        state.selectedProfileId = created.profile_id;
+        render();
+        setStatusKey("models.created");
+    } catch (error) {
+        console.error(error);
+        setRawStatus(error.message || i18n.t("models.createFailed"));
+    } finally {
+        setBusy(false);
+    }
+}
+
 async function activateSelectedProfile() {
     if (formActionsDisabled()) {
         return;
@@ -206,6 +258,40 @@ async function activateSelectedProfile() {
     } catch (error) {
         console.error(error);
         setRawStatus(error.message || i18n.t("models.activateFailed"));
+    } finally {
+        setBusy(false);
+    }
+}
+
+async function deleteSelectedProfile() {
+    if (formActionsDisabled()) {
+        return;
+    }
+    const profile = selectedProfile();
+    if (!canDeleteSelectedProfile(profile)) {
+        setStatusKey("models.deleteBlocked");
+        return;
+    }
+    if (!window.confirm(i18n.t("models.deleteConfirm", { profile: profile.name || profile.id }))) {
+        return;
+    }
+
+    setBusy(true);
+    setStatusKey("models.deleting");
+    try {
+        const payload = await requestJson(`/api/model-profiles/${profile.id}`, {
+            method: "DELETE",
+        });
+        state.selectedProfileId = payload.active_profile_id
+            || (Array.isArray(payload.profiles) && payload.profiles[0] && payload.profiles[0].profile_id)
+            || "a";
+        await load();
+        state.selectedProfileId = activeProfileId() || state.selectedProfileId;
+        render();
+        setStatusKey("models.deleted");
+    } catch (error) {
+        console.error(error);
+        setRawStatus(error.message || i18n.t("models.deleteFailed"));
     } finally {
         setBusy(false);
     }
@@ -237,6 +323,21 @@ function activeProfileId() {
     return state.payload && state.payload.active_profile_id || "";
 }
 
+function canDeleteSelectedProfile(profile = selectedProfile()) {
+    const profileCount = live2dProfiles().length;
+    return Boolean(
+        profile
+        && profile.id
+        && profile.id !== activeProfileId()
+        && profileCount > 1,
+    );
+}
+
+function nextProfileLabel() {
+    const count = live2dProfiles().length + 1;
+    return i18n.t("models.newProfileDefault", { count });
+}
+
 function modelProfileScope() {
     return modelProfileScopeFromConfig(state.webConfig);
 }
@@ -256,6 +357,12 @@ function profileBadge(profile) {
 function setBusy(busy) {
     state.busy = Boolean(busy);
     DOM.form.classList.toggle("is-busy", state.busy);
+    const disabled = formActionsDisabled();
+    const profile = selectedProfile();
+    DOM.create.disabled = disabled;
+    DOM.activate.disabled = disabled || profile.id === activeProfileId();
+    DOM.save.disabled = disabled;
+    DOM.remove.disabled = disabled || !canDeleteSelectedProfile(profile);
 }
 
 function setStatusKey(key) {

@@ -26,9 +26,6 @@ export function createSessionSidebarController(deps) {
     function setSessionControlsBusy(isBusy, statusText = null) {
         sessionState.sessionLoading = isBusy;
 
-        if (DOM.sessionCreateButton) {
-            DOM.sessionCreateButton.disabled = isBusy || chatState.chatBusy;
-        }
         if (DOM.sessionRefreshButton) {
             DOM.sessionRefreshButton.disabled = isBusy || chatState.chatBusy;
         }

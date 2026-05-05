@@ -187,7 +187,6 @@ status.bindFeatures({
 });
 
 sessions.bindRoleHooks({
-    closeRoleEditor: roles.closeRoleEditor,
     syncRolePanelForCurrentSession: roles.syncRolePanelForCurrentSession,
 });
 roles.bindSessionHooks({

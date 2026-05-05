@@ -20,16 +20,6 @@ export function createSessionsApi(deps) {
         });
     }
 
-    async function createSession(sessionName) {
-        return await requestJson("/api/sessions", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify(sessionName ? { name: sessionName } : {}),
-        });
-    }
-
     async function updateSessionRole(sessionName, roleName) {
         return await requestJson(
             `/api/sessions/${encodeURIComponent(sessionName)}/role`,
@@ -57,7 +47,6 @@ export function createSessionsApi(deps) {
     }
 
     return {
-        createSession: createSession,
         requestSessionDetail: requestSessionDetail,
         requestSessionSummaries: requestSessionSummaries,
         switchCurrentSession: switchCurrentSession,

@@ -2,6 +2,9 @@ const ROUTE_MODE_VALUES = new Set(["auto", "chat_only", "force_agent"]);
 
 export function normalizeRouteMode(routeMode) {
     const value = String(routeMode || "").trim().toLowerCase();
+    if (value === "agent") {
+        return "force_agent";
+    }
     return ROUTE_MODE_VALUES.has(value) ? value : "auto";
 }
 

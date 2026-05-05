@@ -162,11 +162,6 @@ export function wireAppEvents(features) {
     bindOptionalClick(DOM.roleSidebarClose, () => layout.setRoleSidebarOpen(false));
     bindOptionalClick(DOM.roleSidebarBackdrop, () => layout.setRoleSidebarOpen(false));
     bindOptionalClick(DOM.roleRefreshButton, roles.refreshRolePanel);
-    bindOptionalClick(DOM.roleNewButton, () => roles.openRoleEditor("create"));
-    bindOptionalClick(DOM.roleEditButton, roles.handleEditRoleClick);
-    bindOptionalClick(DOM.roleDeleteButton, roles.handleDeleteRoleClick);
-    bindOptionalClick(DOM.roleSaveButton, roles.handleSaveRoleClick);
-    bindOptionalClick(DOM.roleCancelButton, roles.closeRoleEditor);
 
     bindOptionalClick(DOM.sessionSidebarToggle, (event) => {
         layout.stopSummaryButtonToggle(event);
@@ -174,7 +169,6 @@ export function wireAppEvents(features) {
     });
     bindOptionalClick(DOM.sessionSidebarClose, () => layout.setSessionSidebarOpen(false));
     bindOptionalClick(DOM.sessionSidebarBackdrop, () => layout.setSessionSidebarOpen(false));
-    bindOptionalClick(DOM.sessionCreateButton, sessions.handleCreateSession);
     bindOptionalClick(DOM.sessionRefreshButton, sessions.refreshSessionList);
     bindOptionalClickHandler(DOM.sessionList, sessions.handleSessionListClick);
 

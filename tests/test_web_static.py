@@ -54,6 +54,7 @@ class WebStaticAssetTests(unittest.TestCase):
         app_js = (WEB_ROOT / "app.js").read_text(encoding="utf-8")
         sessions_js = (WEB_ROOT / "features" / "sessions.js").read_text(encoding="utf-8")
         session_sidebar_js = (WEB_ROOT / "features" / "sessions" / "sidebar.js").read_text(encoding="utf-8")
+        route_mode_js = (WEB_ROOT / "features" / "sessions" / "route-mode.js").read_text(encoding="utf-8")
         chat_runner_js = (WEB_ROOT / "features" / "chat" / "job-runner.js").read_text(encoding="utf-8")
         roles_js = (WEB_ROOT / "features" / "roles.js").read_text(encoding="utf-8")
         panels_css = (WEB_ROOT / "styles" / "panels.css").read_text(encoding="utf-8")
@@ -74,9 +75,13 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn('id="role-model-profile-detail"', html)
         self.assertIn('href="/admin/sessions"', html)
         self.assertIn('href="/admin/characters"', html)
+        self.assertNotIn('id="session-create-button"', html)
+        self.assertNotIn('id="role-editor"', html)
         self.assertNotIn('id="role-new-button"', html)
         self.assertNotIn('id="role-edit-button"', html)
         self.assertNotIn('id="role-delete-button"', html)
+        self.assertNotIn('id="role-save-button"', html)
+        self.assertNotIn('id="role-cancel-button"', html)
         self.assertIn('id="model-profile-select"', html)
         self.assertIn('id="model-profile-link"', html)
         self.assertIn('data-i18n-key="console.groupModelRouting"', html)
@@ -92,8 +97,14 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn("renderSessionSettings", sessions_js)
         self.assertIn("sessionModelProfileLabel", sessions_js)
         self.assertIn("sessionSourceLabel", sessions_js)
+        self.assertIn('value === "agent"', route_mode_js)
+        self.assertIn('return "force_agent"', route_mode_js)
+        self.assertNotIn("handleCreateSession", sessions_js)
         self.assertNotIn('action === "rename"', sessions_js)
         self.assertNotIn('action === "delete"', sessions_js)
+        self.assertNotIn('requestJson("/api/roles", {\n                    method: "POST"', roles_js)
+        self.assertNotIn('`/api/roles/${encodeURIComponent(roleState.currentRoleName)}`', roles_js)
+        self.assertNotIn('`/api/roles/${encodeURIComponent(roleCard.name)}`', roles_js)
         self.assertNotIn('t("console.rename")', session_sidebar_js)
         self.assertNotIn('t("console.delete")', session_sidebar_js)
         self.assertIn(".session-settings-summary-block", panels_css)
@@ -141,12 +152,15 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn('WebPageRoute("/admin/sessions"', app_routes)
         self.assertIn('href="/admin/sessions"', admin_html)
         self.assertIn('data-i18n-key="admin.sessions"', admin_html)
+        self.assertNotIn("Read-only admin index", admin_html)
         self.assertIn('id="sessions-list"', sessions_html)
         self.assertIn('id="sessions-create-form"', sessions_html)
         self.assertIn('id="sessions-create"', sessions_html)
         self.assertIn('id="sessions-create-name"', sessions_html)
         self.assertIn('id="sessions-create-character"', sessions_html)
         self.assertIn('id="sessions-create-route-mode"', sessions_html)
+        self.assertIn('value="force_agent"', sessions_html)
+        self.assertNotIn('value="agent"', sessions_html)
         self.assertIn('id="sessions-create-channel-type"', sessions_html)
         self.assertIn('id="sessions-create-channel-integration"', sessions_html)
         self.assertIn('id="sessions-edit-form"', sessions_html)
@@ -212,6 +226,7 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn('id="messenger-file-input"', messenger_html)
         self.assertIn('id="messenger-attachments"', messenger_html)
         self.assertIn('id="stage-session-select"', stage_html)
+        self.assertIn('data-i18n-key="stage.sessionTarget">Session</span>', stage_html)
         self.assertIn('id="stage-role-label"', stage_html)
         self.assertIn('id="stage-model-profile-label"', stage_html)
         self.assertIn('id="stage-voice-profile-label"', stage_html)
@@ -258,6 +273,14 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn("playStageMotion", stage_js)
         self.assertIn("subtitleElement.textContent", stage_js)
         self.assertNotIn("subtitleElement.innerHTML", stage_js)
+        self.assertGreaterEqual(i18n_js.count('"stage.sessionTarget": "Session"'), 3)
+        self.assertGreaterEqual(i18n_js.count('"messenger.sessionTarget": "Session"'), 3)
+        self.assertNotIn('"stage.sessionTarget": "Target"', i18n_js)
+        self.assertNotIn('"stage.sessionTarget": "通訊目標"', i18n_js)
+        self.assertNotIn('"stage.sessionTarget": "通讯目标"', i18n_js)
+        self.assertNotIn('"messenger.sessionTarget": "Target"', i18n_js)
+        self.assertNotIn('"messenger.sessionTarget": "通訊目標"', i18n_js)
+        self.assertNotIn('"messenger.sessionTarget": "通讯目标"', i18n_js)
 
         delta_handler = re.search(
             r'source\.addEventListener\("assistant_delta".*?\}\);',
@@ -381,6 +404,12 @@ class WebStaticAssetTests(unittest.TestCase):
         models_html = (WEB_ROOT / "models.html").read_text(encoding="utf-8")
         voice_html = (WEB_ROOT / "voice-models.html").read_text(encoding="utf-8")
         live2d_html = (WEB_ROOT / "live2d.html").read_text(encoding="utf-8")
+        sessions_html = (WEB_ROOT / "sessions.html").read_text(encoding="utf-8")
+        characters_html = (WEB_ROOT / "characters.html").read_text(encoding="utf-8")
+        openwebui_html = (WEB_ROOT / "openwebui.html").read_text(encoding="utf-8")
+        guide_html = (WEB_ROOT / "guide.html").read_text(encoding="utf-8")
+        structure_html = (WEB_ROOT / "structure.html").read_text(encoding="utf-8")
+        models_js = (WEB_ROOT / "models-app.js").read_text(encoding="utf-8")
         voice_js = (WEB_ROOT / "voice-models-app.js").read_text(encoding="utf-8")
         live2d_js = (WEB_ROOT / "live2d-app.js").read_text(encoding="utf-8")
         i18n_js = (WEB_ROOT / "shell-i18n.js").read_text(encoding="utf-8")
@@ -389,12 +418,36 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn('WebPageRoute("/admin/live2d"', app_routes)
         self.assertIn('href="/admin/voice-models"', admin_html)
         self.assertIn('href="/admin/live2d"', admin_html)
+        expected_links_by_page = {
+            "sessions": (sessions_html, ("/admin/models", "/admin/voice-models", "/admin/live2d", "/admin/openwebui")),
+            "characters": (characters_html, ("/admin/models", "/admin/voice-models", "/admin/live2d", "/admin/openwebui")),
+            "models": (models_html, ("/admin/voice-models", "/admin/live2d", "/admin/openwebui")),
+            "voice": (voice_html, ("/admin/models", "/admin/live2d", "/admin/openwebui")),
+            "live2d": (live2d_html, ("/admin/models", "/admin/voice-models", "/admin/openwebui")),
+            "openwebui": (openwebui_html, ("/admin/models", "/admin/voice-models", "/admin/live2d")),
+            "guide": (guide_html, ("/admin/models", "/admin/voice-models", "/admin/live2d", "/admin/openwebui")),
+            "structure": (structure_html, ("/admin/models", "/admin/voice-models", "/admin/live2d", "/admin/openwebui")),
+        }
+        for _page_name, (html, expected_links) in expected_links_by_page.items():
+            for href in expected_links:
+                self.assertIn(f'href="{href}"', html)
         self.assertIn('data-i18n-key="admin.llmModels"', admin_html)
         self.assertIn('id="model-chat-model"', models_html)
+        self.assertNotIn('id="model-tts-provider"', models_html)
+        self.assertNotIn('id="model-asr-provider"', models_html)
+        self.assertNotIn('id="model-live2d-selection"', models_html)
+        self.assertNotIn('model-tts-', models_js)
+        self.assertNotIn('model-asr-', models_js)
+        self.assertNotIn('model-live2d-', models_js)
+        self.assertNotIn('tts: {', models_js)
+        self.assertNotIn('asr: {', models_js)
+        self.assertNotIn('live2d: {', models_js)
         self.assertIn('id="voice-profile-label"', voice_html)
         self.assertIn('id="voice-tts-provider"', voice_html)
         self.assertIn('id="voice-stt-provider"', voice_html)
         self.assertIn('id="live2d-profile-label"', live2d_html)
+        self.assertIn('id="live2d-profile-create"', live2d_html)
+        self.assertIn('id="live2d-profile-delete"', live2d_html)
         self.assertIn('id="live2d-selection"', live2d_html)
         self.assertIn('label: DOM.label.value', voice_js)
         self.assertIn('label: DOM.label.value', live2d_js)
@@ -402,6 +455,8 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn('"/api/live2d-models"', live2d_js)
         self.assertIn('"/api/model-profiles"', voice_js)
         self.assertIn('"/api/model-profiles"', live2d_js)
+        self.assertIn("createProfileFromSelection", live2d_js)
+        self.assertIn("deleteSelectedProfile", live2d_js)
 
         for key in (
             "admin.llmModels",

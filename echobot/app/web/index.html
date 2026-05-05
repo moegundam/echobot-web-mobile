@@ -177,9 +177,6 @@
                     </button>
                 </div>
                 <div class="session-sidebar-toolbar">
-                    <button id="session-create-button" class="primary-button" type="button">
-                        <span data-i18n-key="console.createSession">New session</span>
-                    </button>
                     <a class="console-control-link" href="/admin/sessions" data-i18n-key="admin.sessions">Sessions</a>
                     <button
                         id="session-refresh-button"
@@ -238,21 +235,6 @@
                     <div id="role-preview" class="role-preview">
                         <p class="section-title" data-i18n-key="console.roleContent">Role content</p>
                         <pre id="role-prompt-preview" class="role-preview-content" data-i18n-key="console.roleContentLoading">Loading role content...</pre>
-                    </div>
-                    <div id="role-editor" class="role-editor" hidden>
-                        <p id="role-editor-title" class="section-title" data-i18n-key="console.roleEditor">Role editor</p>
-                        <label class="field">
-                            <span data-i18n-key="console.roleName">Role name</span>
-                            <input id="role-name-input" type="text" placeholder="Example: assistant" data-i18n-placeholder-key="console.roleNamePlaceholder">
-                        </label>
-                        <label class="field">
-                            <span data-i18n-key="console.rolePrompt">Role prompt</span>
-                            <textarea id="role-prompt-input" rows="10" placeholder="Write the role prompt here." data-i18n-placeholder-key="console.rolePromptPlaceholder"></textarea>
-                        </label>
-                        <div class="role-editor-actions">
-                            <button id="role-save-button" class="primary-button" type="button" data-i18n-key="console.save">Save</button>
-                            <button id="role-cancel-button" class="ghost-button" type="button" data-i18n-key="console.cancel">Cancel</button>
-                        </div>
                     </div>
                 </div>
             </section>

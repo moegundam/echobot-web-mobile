@@ -22,13 +22,17 @@
             <a href="/admin" data-i18n-key="guide.backToAdmin">Back to Admin</a>
             <a href="/console" data-i18n-key="admin.console">Console</a>
             <a href="/admin/sessions" data-i18n-key="admin.sessions">Sessions</a>
+            <a href="/admin/structure" data-i18n-key="admin.structure">Site Structure</a>
             <a href="/admin/characters" data-i18n-key="admin.characters">Characters</a>
             <a href="/admin/models" data-i18n-key="admin.llmModels">LLM Models</a>
             <a href="/admin/voice-models" data-i18n-key="admin.voiceModels">Voice Models</a>
             <a href="/admin/channels" data-i18n-key="admin.channels">Channels</a>
+            <a href="/admin/guide" data-i18n-key="admin.guide">Operation Guide</a>
+            <a href="/admin/openwebui" data-i18n-key="admin.openwebui">Open WebUI Bridge</a>
         </nav>
         <section class="models-layout" aria-label="Live2D profile editor" data-i18n-aria-label-key="live2dAdmin.editorAria">
             <aside class="model-profile-sidebar">
+                <button id="live2d-profile-create" class="model-profile-create" type="button" data-i18n-key="models.create">Add profile</button>
                 <div id="live2d-profile-list" class="model-profile-list"></div>
             </aside>
             <form id="live2d-profile-form" class="model-profile-form">
@@ -40,6 +44,7 @@
                     <div class="model-profile-actions">
                         <button id="live2d-profile-activate" type="button" data-i18n-key="models.activate">Activate</button>
                         <button id="live2d-profile-save" type="submit" data-i18n-key="models.save">Save</button>
+                        <button id="live2d-profile-delete" class="model-profile-delete" type="button" data-i18n-key="models.delete">Delete</button>
                     </div>
                 </div>
                 <label>

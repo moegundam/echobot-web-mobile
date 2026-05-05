@@ -41,9 +41,6 @@ export function createUiStatusController() {
         if (DOM.composerImageInput) {
             DOM.composerImageInput.disabled = isBusy || Boolean(chatState.activeChatJobId);
         }
-        if (DOM.sessionCreateButton) {
-            DOM.sessionCreateButton.disabled = isBusy || sessionState.sessionLoading;
-        }
         if (DOM.sessionRefreshButton) {
             DOM.sessionRefreshButton.disabled = isBusy || sessionState.sessionLoading;
         }

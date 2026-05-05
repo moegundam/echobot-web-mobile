@@ -39,7 +39,6 @@ export const roleState = {
     currentRoleCard: null,
     roles: [],
     roleLoading: false,
-    roleEditorMode: "closed",
 };
 
 export const panelState = {

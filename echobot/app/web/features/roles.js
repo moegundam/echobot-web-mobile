@@ -207,44 +207,16 @@ export function createRolesModule(deps) {
     }
 
     function updateRoleActionState() {
-        const roleCard = roleState.currentRoleCard;
         const isBusy = chatState.chatBusy || roleState.roleLoading;
-        const editorOpen = roleState.roleEditorMode !== "closed";
-        const controlsLocked = isBusy || editorOpen;
 
         if (DOM.roleSelect) {
-            DOM.roleSelect.disabled = controlsLocked || !roleState.roles || roleState.roles.length === 0;
+            DOM.roleSelect.disabled = isBusy || !roleState.roles || roleState.roles.length === 0;
         }
         if (DOM.roleRefreshButton) {
-            DOM.roleRefreshButton.disabled = controlsLocked;
-        }
-        if (DOM.roleNewButton) {
-            DOM.roleNewButton.disabled = controlsLocked;
-        }
-        if (DOM.roleEditButton) {
-            DOM.roleEditButton.disabled = controlsLocked || !roleCard || !roleCard.editable;
-        }
-        if (DOM.roleDeleteButton) {
-            DOM.roleDeleteButton.disabled = controlsLocked || !roleCard || !roleCard.deletable;
-        }
-        if (DOM.roleSaveButton) {
-            DOM.roleSaveButton.disabled = isBusy || !editorOpen;
-        }
-        if (DOM.roleCancelButton) {
-            DOM.roleCancelButton.disabled = roleState.roleLoading;
+            DOM.roleRefreshButton.disabled = isBusy;
         }
         if (DOM.rolePreview) {
-            DOM.rolePreview.hidden = editorOpen;
-        }
-        if (DOM.roleEditor) {
-            DOM.roleEditor.hidden = !editorOpen;
-        }
-        if (DOM.roleNameInput) {
-            DOM.roleNameInput.disabled = roleState.roleLoading || roleState.roleEditorMode !== "create";
-            DOM.roleNameInput.readOnly = roleState.roleEditorMode !== "create";
-        }
-        if (DOM.rolePromptInput) {
-            DOM.rolePromptInput.disabled = roleState.roleLoading || !editorOpen;
+            DOM.rolePreview.hidden = false;
         }
     }
 
@@ -264,7 +236,6 @@ export function createRolesModule(deps) {
             return;
         }
 
-        closeRoleEditor();
         setRoleControlsBusy(true, t("console.switchingRole"));
         try {
             const expectedBoundProfile = modelProfileForRole(nextRoleName);
@@ -337,197 +308,17 @@ export function createRolesModule(deps) {
         return sessionDetail;
     }
 
-    function openRoleEditor(mode) {
-        if (!DOM.roleEditor || !DOM.roleNameInput || !DOM.rolePromptInput || !DOM.roleEditorTitle) {
-            return;
-        }
-
-        if (mode === "edit" && (!roleState.currentRoleCard || !roleState.currentRoleCard.editable)) {
-            return;
-        }
-
-        roleState.roleEditorMode = mode;
-        DOM.roleEditor.hidden = false;
-        if (mode === "create") {
-            DOM.roleEditorTitle.textContent = t("console.newRoleCard");
-            DOM.roleNameInput.value = "";
-            DOM.rolePromptInput.value = "";
-            DOM.roleNameInput.focus();
-        } else {
-            DOM.roleEditorTitle.textContent = t("console.editRoleCard", { role: roleState.currentRoleCard.name });
-            DOM.roleNameInput.value = roleState.currentRoleCard.name || "";
-            DOM.rolePromptInput.value = roleState.currentRoleCard.prompt || "";
-            DOM.rolePromptInput.focus();
-        }
-        updateRoleActionState();
-    }
-
-    function closeRoleEditor() {
-        roleState.roleEditorMode = "closed";
-        if (DOM.roleEditor) {
-            DOM.roleEditor.hidden = true;
-        }
-        if (DOM.roleNameInput) {
-            DOM.roleNameInput.value = "";
-        }
-        if (DOM.rolePromptInput) {
-            DOM.rolePromptInput.value = "";
-        }
-        if (DOM.roleEditorTitle) {
-            DOM.roleEditorTitle.textContent = t("console.roleEditor");
-        }
-        updateRoleActionState();
-    }
-
-    async function handleEditRoleClick() {
-        if (!roleState.currentRoleCard || !roleState.currentRoleCard.editable) {
-            return;
-        }
-        await refreshCurrentRoleCard({ silent: true });
-        openRoleEditor("edit");
-    }
-
-    async function handleSaveRoleClick() {
-        if (
-            chatState.chatBusy
-            || roleState.roleLoading
-            || roleState.roleEditorMode === "closed"
-        ) {
-            return;
-        }
-
-        const roleName = DOM.roleNameInput ? DOM.roleNameInput.value.trim() : "";
-        const prompt = DOM.rolePromptInput ? DOM.rolePromptInput.value.trim() : "";
-        const isCreateMode = roleState.roleEditorMode === "create";
-        let shouldRefreshRoleList = false;
-        if (!prompt) {
-            setRoleStatus(t("console.rolePromptRequired"));
-            return;
-        }
-        if (isCreateMode && !roleName) {
-            setRoleStatus(t("console.roleNameRequired"));
-            return;
-        }
-
-        setRoleControlsBusy(
-            true,
-            isCreateMode ? t("console.creatingRole") : t("console.savingRole"),
-        );
-        try {
-            let roleDetail;
-            if (isCreateMode) {
-                roleDetail = await requestJson("/api/roles", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify({
-                        name: roleName,
-                        prompt: prompt,
-                    }),
-                });
-                await setCurrentSessionRole(roleDetail.name, { silent: true });
-                shouldRefreshRoleList = true;
-            } else {
-                roleDetail = await requestJson(
-                    `/api/roles/${encodeURIComponent(roleState.currentRoleName)}`,
-                    {
-                        method: "PUT",
-                        headers: {
-                            "Content-Type": "application/json",
-                        },
-                        body: JSON.stringify({
-                            prompt: prompt,
-                        }),
-                    },
-                );
-            }
-
-            roleState.currentRoleName = roleDetail.name || roleState.currentRoleName;
-            roleState.currentRoleCard = roleDetail;
-            renderCurrentRoleCard();
-            closeRoleEditor();
-            await refreshCurrentRoleCard({ silent: true });
-            setRoleStatus("");
-            setRunStatus(
-                isCreateMode
-                    ? t("console.roleCreated", { role: roleDetail.name })
-                    : t("console.roleSaved", { role: roleDetail.name }),
-            );
-        } catch (error) {
-            console.error(error);
-            setRoleStatus(error.message || t("console.saveRoleFailed"));
-            addMessage("system", `${t("console.saveRoleFailed")}: ${error.message || error}`, t("console.systemLabel"));
-        } finally {
-            setRoleControlsBusy(false);
-        }
-
-        if (shouldRefreshRoleList) {
-            await refreshRoleList({ silent: true });
-        }
-    }
-
-    async function handleDeleteRoleClick() {
-        const roleCard = roleState.currentRoleCard;
-        if (
-            !roleCard
-            || !roleCard.deletable
-            || chatState.chatBusy
-            || roleState.roleLoading
-        ) {
-            return;
-        }
-        if (!window.confirm(t("console.deleteRoleConfirm", { role: roleCard.name }))) {
-            return;
-        }
-
-        let shouldRefreshRoleList = false;
-        setRoleControlsBusy(true, t("console.deletingRole"));
-        try {
-            await requestJson(`/api/roles/${encodeURIComponent(roleCard.name)}`, {
-                method: "DELETE",
-            });
-            shouldRefreshRoleList = true;
-            closeRoleEditor();
-            const sessionDetail = await requestJson("/api/sessions/current");
-            sessionHooks.applySessionDetail(sessionDetail);
-            await refreshCurrentRoleCard({ silent: true });
-            setRoleStatus("");
-            setRunStatus(t("console.roleDeleted", { role: roleCard.name }));
-        } catch (error) {
-            console.error(error);
-            setRoleStatus(error.message || t("console.deleteRoleFailed"));
-            addMessage("system", `${t("console.deleteRoleFailed")}: ${error.message || error}`, t("console.systemLabel"));
-        } finally {
-            setRoleControlsBusy(false);
-        }
-
-        if (shouldRefreshRoleList) {
-            await refreshRoleList({ silent: true });
-        }
-    }
-
     return {
         bindSessionHooks: bindSessionHooks,
         initializeRolePanel: initializeRolePanel,
         syncRolePanelForCurrentSession: syncRolePanelForCurrentSession,
         refreshRolePanel: refreshRolePanel,
         handleRoleSelectionChange: handleRoleSelectionChange,
-        handleEditRoleClick: handleEditRoleClick,
-        handleSaveRoleClick: handleSaveRoleClick,
-        handleDeleteRoleClick: handleDeleteRoleClick,
-        openRoleEditor: openRoleEditor,
-        closeRoleEditor: closeRoleEditor,
         updateRoleActionState: updateRoleActionState,
         refreshLocalizedText() {
             renderRoleSelectOptions();
             renderCurrentRoleCard();
             renderRoleModelProfileCard();
-            if (roleState.roleEditorMode === "create" && DOM.roleEditorTitle) {
-                DOM.roleEditorTitle.textContent = t("console.newRoleCard");
-            } else if (roleState.roleEditorMode === "edit" && DOM.roleEditorTitle && roleState.currentRoleCard) {
-                DOM.roleEditorTitle.textContent = t("console.editRoleCard", { role: roleState.currentRoleCard.name });
-            }
         },
     };
 }

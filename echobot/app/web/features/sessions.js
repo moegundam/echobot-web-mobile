@@ -42,7 +42,6 @@ export function createSessionsModule(deps) {
     });
 
     let roleHooks = {
-        closeRoleEditor() {},
         syncRolePanelForCurrentSession() {
             return Promise.resolve();
         },
@@ -219,60 +218,6 @@ export function createSessionsModule(deps) {
         }
     }
 
-    async function handleCreateSession() {
-        if (chatState.chatBusy || sessionState.sessionLoading) {
-            return;
-        }
-
-        const rawName = window.prompt(t("console.createSessionPrompt"), "");
-        if (rawName === null) {
-            return;
-        }
-
-        let sessionName = "";
-        const preferredRoleName = roleState.currentRoleName || "default";
-        const preferredRouteMode = normalizeRouteMode(sessionState.currentRouteMode);
-        try {
-            sessionName = rawName.trim() ? normalizeSessionName(rawName) : "";
-        } catch (error) {
-            sidebar.setSessionSidebarStatus(error.message || t("console.invalidSessionName"));
-            addMessage("system", `${t("console.createSessionFailed")}: ${error.message || error}`, t("console.systemLabel"));
-            return;
-        }
-
-        stopSpeechPlayback();
-        sidebar.setSessionControlsBusy(true, t("console.creatingSession"));
-
-        try {
-            let sessionDetail = await api.createSession(sessionName);
-            if (
-                preferredRoleName
-                && sessionDetail.role_name !== preferredRoleName
-            ) {
-                sessionDetail = await api.updateSessionRole(
-                    sessionDetail.name,
-                    preferredRoleName,
-                );
-            }
-            if (sessionDetail.route_mode !== preferredRouteMode) {
-                sessionDetail = await api.updateSessionRouteMode(
-                    sessionDetail.name,
-                    preferredRouteMode,
-                );
-            }
-            sidebar.applySessionSummaries(await api.requestSessionSummaries());
-            applySessionDetail(sessionDetail);
-            sidebar.setSessionSidebarStatus("");
-            setRunStatus(t("console.sessionCreated", { session: sessionDetail.name }));
-        } catch (error) {
-            console.error(error);
-            sidebar.setSessionSidebarStatus(error.message || t("console.createSessionFailed"));
-            addMessage("system", `${t("console.createSessionFailed")}: ${error.message || error}`, t("console.systemLabel"));
-        } finally {
-            sidebar.setSessionControlsBusy(false);
-        }
-    }
-
     function applySessionDetail(sessionDetail, options = {}) {
         const sessionName = normalizeSessionName(sessionDetail.name || DEFAULT_SESSION_NAME);
         const nextHistory = normalizeHistory(sessionDetail.history);
@@ -285,7 +230,6 @@ export function createSessionsModule(deps) {
             ? findAppendedMessages(sessionState.currentSessionHistory, nextHistory)
             : [];
 
-        roleHooks.closeRoleEditor();
         sessionState.currentSessionName = sessionName;
         sessionState.currentSessionUpdatedAt = String(sessionDetail.updated_at || "").trim();
         sessionState.currentSessionHistory = nextHistory;
@@ -459,7 +403,6 @@ export function createSessionsModule(deps) {
         applySessionDetail: applySessionDetail,
         applySessionSummaries: sidebar.applySessionSummaries,
         bindRoleHooks: bindRoleHooks,
-        handleCreateSession: handleCreateSession,
         handleRouteModeChange: handleRouteModeChange,
         handleSessionListClick: handleSessionListClick,
         initializeSessionPanel: initializeSessionPanel,
