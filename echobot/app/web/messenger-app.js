@@ -9,11 +9,18 @@ const messagesElement = document.getElementById("messenger-messages");
 const sessionInput = document.getElementById("messenger-session");
 const sessionSelect = document.getElementById("messenger-session-select");
 const statusElement = document.getElementById("messenger-status");
+const recordButton = document.getElementById("messenger-record");
+const fileInput = document.getElementById("messenger-file-input");
+const urlInput = document.getElementById("messenger-url");
+const attachmentsElement = document.getElementById("messenger-attachments");
 
 const DEFAULT_ROUTE_MODE = "chat_only";
 const stageDirectivePattern = /^\s*\[(emotion|expression|motion)\s*[:=]\s*([^\]\r\n]{1,256})\]\s*/i;
 let currentStatusKey = "messenger.status.ready";
-let messengerStageTargets = [];
+let messengerSessions = [];
+let pendingAttachments = [];
+let recognition = null;
+let recording = false;
 const i18n = initShellI18n({
     onChange: () => {
         refreshLocalizedMessengerText();
@@ -31,6 +38,24 @@ if (form) {
         await submitMessage();
     });
 }
+if (fileInput) {
+    fileInput.addEventListener("change", () => {
+        void uploadSelectedFiles();
+    });
+}
+if (recordButton) {
+    recordButton.addEventListener("click", () => {
+        toggleRecording();
+    });
+}
+document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+        stopRecording();
+    }
+});
+window.addEventListener("pagehide", () => {
+    stopRecording();
+});
 
 function resolveInitialSessionName() {
     const params = new URLSearchParams(window.location.search);
@@ -55,7 +80,7 @@ function initMessengerSessionControls() {
         sessionSelect.addEventListener("change", () => {
             setActiveSessionName(sessionSelect.value, { updateUrl: true });
         });
-        loadStageTargets();
+        loadSessions();
     }
 }
 
@@ -75,48 +100,48 @@ function setActiveSessionName(value, options = {}) {
     return nextSessionName;
 }
 
-async function loadStageTargets() {
+async function loadSessions() {
     if (!sessionSelect) {
         return;
     }
     try {
-        const response = await fetch("/api/channels/stage-targets");
+        const response = await fetch("/api/sessions");
         if (!response.ok) {
             throw await responseToError(response);
         }
         const payload = await response.json();
-        messengerStageTargets = Array.isArray(payload.targets) ? payload.targets : [];
-        renderStageTargetOptions(messengerStageTargets);
+        messengerSessions = Array.isArray(payload) ? payload : [];
+        renderSessionOptions(messengerSessions);
     } catch (error) {
-        console.warn("Unable to load messenger targets", error);
-        messengerStageTargets = [];
-        renderStageTargetOptions([]);
-        setStatus("messenger.sessionTargetLoadFailed");
+        console.warn("Unable to load messenger sessions", error);
+        messengerSessions = [];
+        renderSessionOptions([]);
+        setStatus("messenger.sessionLoadFailed");
     }
 }
 
-function renderStageTargetOptions(targets) {
+function renderSessionOptions(sessions) {
     if (!sessionSelect) {
         return;
     }
     const currentSession = String((sessionInput && sessionInput.value) || "default").trim() || "default";
-    const options = buildStageTargetOptions(targets, currentSession);
+    const options = buildSessionOptions(sessions, currentSession);
     sessionSelect.replaceChildren(...options);
     sessionSelect.value = currentSession;
 }
 
-function buildStageTargetOptions(targets, currentSession) {
+function buildSessionOptions(sessions, currentSession) {
     const options = [];
     const seenSessions = new Set();
-    for (const target of targets) {
-        const sessionName = String((target && target.session_name) || "").trim();
+    for (const session of sessions) {
+        const sessionName = String((session && session.name) || "").trim();
         if (!sessionName || seenSessions.has(sessionName)) {
             continue;
         }
         seenSessions.add(sessionName);
         const option = document.createElement("option");
         option.value = sessionName;
-        option.textContent = stageTargetLabel(target);
+        option.textContent = sessionName;
         options.push(option);
     }
 
@@ -129,19 +154,6 @@ function buildStageTargetOptions(targets, currentSession) {
         options.unshift(fallbackOption);
     }
     return options;
-}
-
-function stageTargetLabel(target) {
-    const baseLabel = String(
-        (target && target.display_name) || (target && target.session_name) || "default",
-    );
-    if (target && target.enabled === false) {
-        return `${baseLabel} · ${i18n.t("channelTargets.disabled")}`;
-    }
-    if (target && target.running === false) {
-        return `${baseLabel} · ${i18n.t("channelTargets.notRunning")}`;
-    }
-    return baseLabel;
 }
 
 function updateSessionUrl(sessionName) {
@@ -162,16 +174,25 @@ function setStatus(key) {
 }
 
 async function submitMessage() {
-    const prompt = String((input && input.value) || "").trim();
-    if (!prompt) {
+    const attachments = [...pendingAttachments];
+    const prompt = promptWithUrl(String((input && input.value) || "").trim());
+    const messagePrompt = prompt || (
+        attachments.length > 0 ? i18n.t("messenger.attachmentOnlyPrompt") : ""
+    );
+    if (!messagePrompt) {
         return;
     }
 
     const sessionName = currentSessionName();
-    appendMessage("user", prompt);
+    appendMessage("user", messagePrompt);
     if (input) {
         input.value = "";
     }
+    if (urlInput) {
+        urlInput.value = "";
+    }
+    pendingAttachments = [];
+    renderPendingAttachments();
 
     const assistantNode = appendMessage("assistant", "");
     let assistantText = "";
@@ -184,10 +205,16 @@ async function submitMessage() {
         });
         await streamChat(
             {
-                prompt: prompt,
+                prompt: messagePrompt,
                 session_name: sessionName,
                 route_mode: DEFAULT_ROUTE_MODE,
                 response_language: i18n.language,
+                images: attachments
+                    .filter((item) => item.kind === "image")
+                    .map((item) => ({ attachment_id: item.attachment_id })),
+                files: attachments
+                    .filter((item) => item.kind === "file")
+                    .map((item) => ({ attachment_id: item.attachment_id })),
             },
             {
                 onChunk: async (delta) => {
@@ -218,6 +245,210 @@ async function submitMessage() {
     }
 }
 
+function promptWithUrl(rawPrompt) {
+    const prompt = String(rawPrompt || "").trim();
+    const url = String((urlInput && urlInput.value) || "").trim();
+    if (!url) {
+        return prompt;
+    }
+    const urlBlock = `URL:\n${url}`;
+    return prompt ? `${prompt}\n\n${urlBlock}` : urlBlock;
+}
+
+async function uploadSelectedFiles() {
+    if (!fileInput) {
+        return;
+    }
+    const files = Array.from(fileInput.files || []);
+    if (files.length === 0) {
+        return;
+    }
+
+    setBusy(true);
+    setStatus("messenger.uploading");
+    try {
+        for (const file of files) {
+            pendingAttachments.push(await uploadMessengerAttachment(file));
+            renderPendingAttachments();
+        }
+        setStatus("messenger.attached");
+    } catch (error) {
+        console.error(error);
+        setStatus("messenger.uploadFailed");
+    } finally {
+        fileInput.value = "";
+        setBusy(false);
+    }
+}
+
+async function uploadMessengerAttachment(file) {
+    const kind = String(file && file.type || "").startsWith("image/") ? "image" : "file";
+    const endpoint = kind === "image" ? "/api/attachments/images" : "/api/attachments/files";
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const response = await fetch(endpoint, {
+        method: "POST",
+        body: formData,
+    });
+    if (!response.ok) {
+        throw await responseToError(response);
+    }
+    const payload = await response.json();
+    const attachmentId = String((payload && payload.attachment_id) || "");
+    if (!attachmentId) {
+        throw new Error(i18n.t("messenger.uploadFailed"));
+    }
+    return {
+        kind: kind,
+        attachment_id: attachmentId,
+        label: String(
+            (payload && payload.original_filename) || (file && file.name) || attachmentId,
+        ),
+    };
+}
+
+function renderPendingAttachments() {
+    if (!attachmentsElement) {
+        return;
+    }
+    const chips = pendingAttachments.map((item, index) => {
+        const chip = document.createElement("span");
+        chip.className = "messenger-attachment-chip";
+
+        const label = document.createElement("span");
+        label.textContent = `${i18n.t("messenger.attached")}: ${item.label}`;
+
+        const removeButton = document.createElement("button");
+        removeButton.type = "button";
+        removeButton.textContent = i18n.t("messenger.removeAttachment");
+        removeButton.addEventListener("click", () => {
+            removePendingAttachment(index);
+        });
+
+        chip.append(label, removeButton);
+        return chip;
+    });
+    attachmentsElement.replaceChildren(...chips);
+}
+
+function removePendingAttachment(index) {
+    pendingAttachments = pendingAttachments.filter((_item, itemIndex) => itemIndex !== index);
+    renderPendingAttachments();
+}
+
+function toggleRecording() {
+    if (recording) {
+        stopRecording();
+        return;
+    }
+    startRecording();
+}
+
+function startRecording() {
+    recognition = recognition || createSpeechRecognition();
+    if (!recognition) {
+        setStatus("messenger.recordingUnsupported");
+        updateRecordButton();
+        return;
+    }
+
+    recognition.lang = speechRecognitionLanguage();
+    recognition.onresult = (event) => {
+        let transcript = "";
+        for (let index = event.resultIndex; index < event.results.length; index += 1) {
+            transcript += event.results[index][0].transcript;
+        }
+        appendTranscript(transcript);
+    };
+    recognition.onerror = (event) => {
+        console.warn("Messenger speech recognition error", event);
+        recording = false;
+        setStatus("messenger.recordingUnsupported");
+        updateRecordButton();
+    };
+    recognition.onend = () => {
+        const wasRecording = recording;
+        recording = false;
+        if (wasRecording && currentStatusKey === "messenger.recording") {
+            setStatus("messenger.status.ready");
+        }
+        updateRecordButton();
+    };
+
+    try {
+        recognition.start();
+        recording = true;
+        setStatus("messenger.recording");
+        updateRecordButton();
+    } catch (error) {
+        console.warn("Unable to start messenger speech recognition", error);
+        recording = false;
+        setStatus("messenger.recordingUnsupported");
+        updateRecordButton();
+    }
+}
+
+function stopRecording() {
+    if (!recognition) {
+        recording = false;
+        updateRecordButton();
+        return;
+    }
+    const wasRecording = recording;
+    recording = false;
+    try {
+        recognition.stop();
+    } catch (_error) {
+        // Browser speech recognition can throw when already stopped.
+    }
+    if (wasRecording && currentStatusKey === "messenger.recording") {
+        setStatus("messenger.status.ready");
+    }
+    updateRecordButton();
+}
+
+function createSpeechRecognition() {
+    const SpeechRecognitionConstructor = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognitionConstructor) {
+        return null;
+    }
+    const speechRecognition = new SpeechRecognitionConstructor();
+    speechRecognition.continuous = false;
+    speechRecognition.interimResults = false;
+    return speechRecognition;
+}
+
+function speechRecognitionLanguage() {
+    if (i18n.language === "zh-Hans") {
+        return "zh-CN";
+    }
+    if (i18n.language === "zh-Hant") {
+        return "zh-TW";
+    }
+    return "en-US";
+}
+
+function appendTranscript(transcript) {
+    const text = String(transcript || "").trim();
+    if (!text || !input) {
+        return;
+    }
+    const existing = String(input.value || "").trim();
+    input.value = existing ? `${existing} ${text}` : text;
+    input.focus();
+}
+
+function updateRecordButton() {
+    if (!recordButton) {
+        return;
+    }
+    recordButton.textContent = i18n.t(recording
+        ? "messenger.stopRecording"
+        : "messenger.startRecording");
+    recordButton.setAttribute("aria-pressed", recording ? "true" : "false");
+}
+
 function appendMessage(role, text) {
     const row = document.createElement("article");
     row.className = `message message-${role}`;
@@ -245,6 +476,15 @@ function setBusy(isBusy) {
     }
     if (input) {
         input.disabled = isBusy;
+    }
+    if (fileInput) {
+        fileInput.disabled = isBusy;
+    }
+    if (urlInput) {
+        urlInput.disabled = isBusy;
+    }
+    if (recordButton) {
+        recordButton.disabled = isBusy && !recording;
     }
 }
 
@@ -343,7 +583,9 @@ function refreshLocalizedMessengerText() {
     document.querySelectorAll("[data-message-role]").forEach((label) => {
         label.textContent = messageRoleLabel(label.dataset.messageRole);
     });
-    renderStageTargetOptions(messengerStageTargets);
+    renderSessionOptions(messengerSessions);
+    renderPendingAttachments();
+    updateRecordButton();
 }
 
 function messageRoleLabel(role) {

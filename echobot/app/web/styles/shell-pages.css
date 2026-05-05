@@ -402,10 +402,72 @@ textarea {
     padding: 12px;
 }
 
+.messenger-input-tools {
+    display: grid;
+    grid-template-columns: auto minmax(180px, 1fr) auto;
+    gap: 8px;
+    align-items: end;
+    grid-column: 1 / -1;
+}
+
+.messenger-input-tools label {
+    display: grid;
+    gap: 5px;
+    color: var(--shell-muted);
+    font-size: 0.82rem;
+}
+
+.messenger-input-tools input[type="url"],
+.messenger-input-tools button,
+.messenger-file-control {
+    min-height: 38px;
+}
+
+.messenger-file-control input {
+    max-width: 220px;
+}
+
+.messenger-attachments {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    grid-column: 1 / -1;
+}
+
+.messenger-attachment-chip {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+    max-width: 100%;
+    padding: 6px 8px;
+    border: 1px solid var(--shell-line);
+    border-radius: 8px;
+    background: var(--shell-surface-strong);
+    color: var(--shell-text);
+    font-size: 0.82rem;
+}
+
+.messenger-attachment-chip span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .messenger-composer textarea {
     min-height: 92px;
     padding: 10px;
     line-height: 1.4;
+}
+
+@media (max-width: 520px) {
+    .messenger-input-tools {
+        grid-template-columns: 1fr;
+        align-items: stretch;
+    }
+
+    .messenger-file-control input {
+        max-width: 100%;
+    }
 }
 
 .admin-root {

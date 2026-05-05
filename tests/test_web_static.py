@@ -172,12 +172,22 @@ class WebStaticAssetTests(unittest.TestCase):
         i18n_js = (WEB_ROOT / "shell-i18n.js").read_text(encoding="utf-8")
 
         self.assertIn('id="messenger-session-select"', messenger_html)
+        self.assertIn('id="messenger-record"', messenger_html)
+        self.assertIn('id="messenger-url"', messenger_html)
+        self.assertIn('id="messenger-file-input"', messenger_html)
+        self.assertIn('id="messenger-attachments"', messenger_html)
         self.assertIn('id="stage-session-select"', stage_html)
         self.assertIn('id="stage-role-label"', stage_html)
         self.assertIn('id="stage-model-profile-label"', stage_html)
-        self.assertIn('"/api/channels/stage-targets"', messenger_js)
+        self.assertIn('"/api/sessions"', messenger_js)
+        self.assertNotIn('"/api/channels/stage-targets"', messenger_js)
         self.assertIn('"/api/channels/stage-targets"', stage_js)
-        self.assertIn("loadStageTargets", messenger_js)
+        self.assertIn("loadSessions", messenger_js)
+        self.assertIn("uploadSelectedFiles", messenger_js)
+        self.assertIn("uploadMessengerAttachment", messenger_js)
+        self.assertIn("pendingAttachments", messenger_js)
+        self.assertIn("promptWithUrl", messenger_js)
+        self.assertIn("createSpeechRecognition", messenger_js)
         self.assertIn("loadStageTargets", stage_js)
         self.assertIn("/api/stage/context?session_name=", stage_js)
         self.assertIn("loadStageContext", stage_js)
@@ -228,9 +238,20 @@ class WebStaticAssetTests(unittest.TestCase):
             "stage.roleLabel",
             "stage.modelProfileLabel",
             "stage.modelProfileNone",
-            "messenger.sessionTarget",
+            "messenger.session",
             "messenger.sessionFallback",
-            "messenger.sessionTargetLoadFailed",
+            "messenger.sessionLoadFailed",
+            "messenger.uploadFile",
+            "messenger.urlInput",
+            "messenger.urlPlaceholder",
+            "messenger.startRecording",
+            "messenger.stopRecording",
+            "messenger.recording",
+            "messenger.recordingUnsupported",
+            "messenger.uploading",
+            "messenger.uploadFailed",
+            "messenger.attached",
+            "messenger.removeAttachment",
             "channelTargets.disabled",
             "channelTargets.notRunning",
         ):

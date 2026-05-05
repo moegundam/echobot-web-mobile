@@ -16,13 +16,25 @@
             <div class="language-switcher" data-language-switcher></div>
             <div class="display-mode-switcher" data-display-mode-switcher></div>
             <label class="session-control">
-                <span data-i18n-key="messenger.sessionTarget">Target</span>
+                <span data-i18n-key="messenger.session">Session</span>
                 <select id="messenger-session-select" autocomplete="off"></select>
                 <input id="messenger-session" type="hidden" value="default" autocomplete="off">
             </label>
         </header>
         <section id="messenger-messages" class="messenger-messages" aria-live="polite"></section>
         <form id="messenger-form" class="messenger-composer">
+            <div class="messenger-input-tools">
+                <button id="messenger-record" type="button" data-i18n-key="messenger.startRecording">Start recording</button>
+                <label>
+                    <span data-i18n-key="messenger.urlInput">URL</span>
+                    <input id="messenger-url" type="url" autocomplete="off" data-i18n-placeholder-key="messenger.urlPlaceholder">
+                </label>
+                <label class="messenger-file-control">
+                    <span data-i18n-key="messenger.uploadFile">Upload file</span>
+                    <input id="messenger-file-input" type="file" multiple>
+                </label>
+            </div>
+            <div id="messenger-attachments" class="messenger-attachments" aria-live="polite"></div>
             <textarea id="messenger-input" rows="3" placeholder="Type a message" data-i18n-placeholder-key="messenger.inputPlaceholder"></textarea>
             <button id="messenger-send" type="submit" data-i18n-key="messenger.send">Send</button>
         </form>
