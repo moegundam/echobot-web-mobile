@@ -27,6 +27,7 @@ from .routers import (
     model_profiles,
     openwebui,
     roles,
+    session_catalog,
     sessions,
     stage,
     web,
@@ -123,6 +124,7 @@ def create_app(
     app.include_router(heartbeat.router, prefix="/api")
     app.include_router(roles.router, prefix="/api")
     app.include_router(model_profiles.router, prefix="/api")
+    app.include_router(session_catalog.router, prefix="/api")
     app.include_router(channels.router, prefix="/api")
     app.include_router(stage.router, prefix="/api")
     app.include_router(openwebui.router, prefix="/api")

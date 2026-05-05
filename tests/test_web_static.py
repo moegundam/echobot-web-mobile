@@ -283,6 +283,42 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn('"characters.exportPackage"', i18n_js)
         self.assertIn('"characters.importPackageTitle"', i18n_js)
 
+    def test_session_centered_admin_model_pages_are_split(self) -> None:
+        app_routes = (WEB_ROOT.parents[0] / "web_pages.py").read_text(encoding="utf-8")
+        admin_html = (WEB_ROOT / "admin.html").read_text(encoding="utf-8")
+        models_html = (WEB_ROOT / "models.html").read_text(encoding="utf-8")
+        voice_html = (WEB_ROOT / "voice-models.html").read_text(encoding="utf-8")
+        live2d_html = (WEB_ROOT / "live2d.html").read_text(encoding="utf-8")
+        voice_js = (WEB_ROOT / "voice-models-app.js").read_text(encoding="utf-8")
+        live2d_js = (WEB_ROOT / "live2d-app.js").read_text(encoding="utf-8")
+        i18n_js = (WEB_ROOT / "shell-i18n.js").read_text(encoding="utf-8")
+
+        self.assertIn('WebPageRoute("/admin/voice-models"', app_routes)
+        self.assertIn('WebPageRoute("/admin/live2d"', app_routes)
+        self.assertIn('href="/admin/voice-models"', admin_html)
+        self.assertIn('href="/admin/live2d"', admin_html)
+        self.assertIn('data-i18n-key="admin.llmModels"', admin_html)
+        self.assertIn('id="model-chat-model"', models_html)
+        self.assertIn('id="voice-tts-provider"', voice_html)
+        self.assertIn('id="voice-stt-provider"', voice_html)
+        self.assertIn('id="live2d-selection"', live2d_html)
+        self.assertIn('"/api/voice-models"', voice_js)
+        self.assertIn('"/api/live2d-models"', live2d_js)
+        self.assertIn('"/api/model-profiles"', voice_js)
+        self.assertIn('"/api/model-profiles"', live2d_js)
+
+        for key in (
+            "admin.llmModels",
+            "admin.voiceModels",
+            "admin.live2d",
+            "voiceModels.heading",
+            "voiceModels.description",
+            "live2dAdmin.heading",
+            "live2dAdmin.description",
+            "live2dAdmin.catalog",
+        ):
+            self.assertGreaterEqual(i18n_js.count(f'"{key}"'), 3)
+
     def test_channels_page_has_edit_and_smoke_controls(self) -> None:
         channels_js = (WEB_ROOT / "channels-app.js").read_text(encoding="utf-8")
         i18n_js = (WEB_ROOT / "shell-i18n.js").read_text(encoding="utf-8")

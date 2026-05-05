@@ -1,0 +1,297 @@
+import { initShellI18n } from "./shell-i18n.js?v=admin-boundary-1";
+import { initShellDisplayMode } from "./shell-display-mode.js?v=site-public-6";
+import {
+    applyModelProfileToLocalPreferences,
+    modelProfileScopeFromConfig,
+    notifyModelProfileChanged,
+} from "./model-profile-runtime.js?v=model-profile-2";
+
+const state = {
+    payload: null,
+    live2dPayload: null,
+    webConfig: null,
+    selectedProfileId: "a",
+    busy: false,
+    loaded: false,
+    loadError: "",
+    statusKey: "",
+    statusRaw: "",
+};
+
+const DOM = {
+    list: document.getElementById("live2d-profile-list"),
+    form: document.getElementById("live2d-profile-form"),
+    title: document.getElementById("live2d-profile-title"),
+    status: document.getElementById("live2d-profile-status"),
+    activate: document.getElementById("live2d-profile-activate"),
+    save: document.getElementById("live2d-profile-save"),
+    selection: document.getElementById("live2d-selection"),
+    detail: document.getElementById("live2d-selection-detail"),
+    catalog: document.getElementById("live2d-catalog-list"),
+};
+
+const i18n = initShellI18n({
+    onChange: () => {
+        displayMode.refresh();
+        render();
+        refreshStatus();
+    },
+});
+const displayMode = initShellDisplayMode({ t: i18n.t });
+
+DOM.form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    void saveSelectedProfile();
+});
+DOM.activate.addEventListener("click", () => {
+    void activateSelectedProfile();
+});
+
+void load();
+
+async function load() {
+    setBusy(true);
+    state.loaded = false;
+    state.loadError = "";
+    setStatusKey("models.loading");
+    try {
+        const [payload, live2dPayload, webConfig] = await Promise.all([
+            requestJson("/api/model-profiles"),
+            requestJson("/api/live2d-models"),
+            requestJson("/api/web/config"),
+        ]);
+        state.payload = payload;
+        state.live2dPayload = live2dPayload;
+        state.webConfig = webConfig;
+        state.selectedProfileId = live2dPayload.active_live2d_model_id || payload.active_profile_id || "a";
+        state.loaded = true;
+        render();
+        setStatusKey("models.ready");
+    } catch (error) {
+        console.error(error);
+        state.loadError = error.message || i18n.t("models.loadFailed");
+        render();
+        setRawStatus(state.loadError);
+    } finally {
+        setBusy(false);
+    }
+}
+
+function render() {
+    renderProfileList();
+    renderSelectionOptions();
+    renderSelectedProfile();
+    renderCatalog();
+}
+
+function renderProfileList() {
+    DOM.list.replaceChildren();
+    live2dProfiles().forEach((profile) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "model-profile-card";
+        button.classList.toggle("is-selected", profile.id === state.selectedProfileId);
+        button.classList.toggle("is-active", profile.id === activeProfileId());
+
+        const code = document.createElement("strong");
+        code.textContent = profileBadge(profile);
+        const label = document.createElement("span");
+        label.textContent = profile.name || profile.id.toUpperCase();
+        const status = document.createElement("small");
+        status.textContent = profile.selection_key || i18n.t("models.keepDefault");
+
+        button.append(code, label, status);
+        button.addEventListener("click", () => {
+            state.selectedProfileId = profile.id;
+            render();
+        });
+        DOM.list.appendChild(button);
+    });
+}
+
+function renderSelectionOptions() {
+    DOM.selection.replaceChildren();
+    const emptyOption = document.createElement("option");
+    emptyOption.value = "";
+    emptyOption.textContent = i18n.t("models.keepDefault");
+    DOM.selection.appendChild(emptyOption);
+    catalog().forEach((item) => {
+        const option = document.createElement("option");
+        option.value = item.selection_key;
+        option.textContent = item.model_name || item.directory_name || item.selection_key;
+        DOM.selection.appendChild(option);
+    });
+}
+
+function renderSelectedProfile() {
+    const profile = selectedProfile();
+    DOM.title.textContent = `${profile.id.toUpperCase()} · ${profile.name}`;
+    DOM.selection.value = profile.selection_key || "";
+    DOM.detail.textContent = profile.available
+        ? i18n.t("live2dAdmin.available", { model: profile.model_name || profile.selection_key })
+        : i18n.t("live2dAdmin.unavailable");
+    const disabled = formActionsDisabled();
+    DOM.activate.disabled = disabled || profile.id === activeProfileId();
+    DOM.save.disabled = disabled;
+}
+
+function renderCatalog() {
+    DOM.catalog.replaceChildren();
+    catalog().forEach((item) => {
+        const card = document.createElement("article");
+        card.className = "model-profile-card";
+        const code = document.createElement("strong");
+        code.textContent = "L2";
+        const title = document.createElement("span");
+        title.textContent = item.model_name || item.directory_name || item.selection_key;
+        const meta = document.createElement("small");
+        meta.textContent = item.selection_key || "";
+        card.append(code, title, meta);
+        DOM.catalog.appendChild(card);
+    });
+}
+
+async function saveSelectedProfile() {
+    if (formActionsDisabled()) {
+        return;
+    }
+    const profile = selectedProfile();
+    setBusy(true);
+    setStatusKey("models.saving");
+    try {
+        const updated = await requestJson(`/api/model-profiles/${profile.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                live2d: {
+                    selection_key: DOM.selection.value,
+                },
+            }),
+        });
+        if (updated.profile_id === activeProfileId()) {
+            applyModelProfileToLocalPreferences(updated);
+            notifyModelProfileChanged(updated.profile_id, modelProfileScope());
+        }
+        await load();
+        setStatusKey("models.saved");
+    } catch (error) {
+        console.error(error);
+        setRawStatus(error.message || i18n.t("models.saveFailed"));
+    } finally {
+        setBusy(false);
+    }
+}
+
+async function activateSelectedProfile() {
+    if (formActionsDisabled()) {
+        return;
+    }
+    const profile = selectedProfile();
+    setBusy(true);
+    setStatusKey("models.activating");
+    try {
+        const payload = await requestJson(`/api/model-profiles/${profile.id}/activate`, {
+            method: "POST",
+        });
+        const activeProfile = payload.profiles.find((item) => item.profile_id === payload.active_profile_id);
+        if (activeProfile) {
+            applyModelProfileToLocalPreferences(activeProfile);
+            notifyModelProfileChanged(activeProfile.profile_id, modelProfileScope());
+        }
+        await load();
+        setStatusKey("models.activated");
+    } catch (error) {
+        console.error(error);
+        setRawStatus(error.message || i18n.t("models.activateFailed"));
+    } finally {
+        setBusy(false);
+    }
+}
+
+function selectedProfile() {
+    return live2dProfiles().find((item) => item.id === state.selectedProfileId)
+        || live2dProfiles()[0]
+        || {
+            id: "a",
+            name: i18n.t("models.newProfileDefault", { count: 1 }),
+            selection_key: "",
+        };
+}
+
+function live2dProfiles() {
+    return state.live2dPayload && Array.isArray(state.live2dPayload.models)
+        ? state.live2dPayload.models
+        : [];
+}
+
+function catalog() {
+    return state.live2dPayload && Array.isArray(state.live2dPayload.catalog)
+        ? state.live2dPayload.catalog
+        : [];
+}
+
+function activeProfileId() {
+    return state.payload && state.payload.active_profile_id || "";
+}
+
+function modelProfileScope() {
+    return modelProfileScopeFromConfig(state.webConfig);
+}
+
+function profileBadge(profile) {
+    const label = String(profile.name || profile.id || "").trim();
+    const words = label.match(/[A-Za-z0-9]+/g) || [];
+    if (words.length >= 2) {
+        return `${words[0][0]}${words[1][0]}`.toUpperCase();
+    }
+    if (words.length === 1) {
+        return words[0].slice(0, 2).toUpperCase();
+    }
+    return String(profile.id || "?").slice(0, 2).toUpperCase();
+}
+
+function setBusy(busy) {
+    state.busy = Boolean(busy);
+    DOM.form.classList.toggle("is-busy", state.busy);
+}
+
+function setStatusKey(key) {
+    state.statusKey = key;
+    state.statusRaw = "";
+    refreshStatus();
+}
+
+function setRawStatus(message) {
+    state.statusKey = "";
+    state.statusRaw = String(message || "");
+    refreshStatus();
+}
+
+function refreshStatus() {
+    DOM.status.textContent = state.statusKey ? i18n.t(state.statusKey) : state.statusRaw;
+}
+
+function formActionsDisabled() {
+    return state.busy || !state.loaded || Boolean(state.loadError);
+}
+
+async function requestJson(url, options = {}) {
+    const response = await fetch(url, {
+        ...options,
+        headers: {
+            Accept: "application/json",
+            ...(options.headers || {}),
+        },
+    });
+    if (!response.ok) {
+        let detail = response.statusText;
+        try {
+            const payload = await response.json();
+            detail = payload.detail || detail;
+        } catch (_error) {
+            // Keep statusText when response body is not JSON.
+        }
+        throw new Error(detail);
+    }
+    return response.json();
+}

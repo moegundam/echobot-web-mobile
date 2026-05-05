@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>EchoBot Live2D Models</title>
+    <link rel="stylesheet" href="/web/assets/styles/shell-pages.css?v=site-public-6">
+</head>
+<body class="admin-page models-page" data-page-title-key="live2dAdmin.pageTitle">
+    <main id="live2d-root" class="admin-root models-root">
+        <header class="admin-header">
+            <div>
+                <h1 data-i18n-key="live2dAdmin.heading">Live2D Models</h1>
+                <p data-i18n-key="live2dAdmin.description">Visual model selection per profile</p>
+            </div>
+            <div class="shell-header-controls">
+                <div class="language-switcher" data-language-switcher></div>
+                <div class="display-mode-switcher" data-display-mode-switcher></div>
+            </div>
+        </header>
+        <nav class="admin-grid guide-nav" aria-label="Live2D quick links" data-i18n-aria-label-key="live2dAdmin.linksAria">
+            <a href="/admin" data-i18n-key="guide.backToAdmin">Back to Admin</a>
+            <a href="/console" data-i18n-key="admin.console">Console</a>
+            <a href="/admin/sessions" data-i18n-key="admin.sessions">Sessions</a>
+            <a href="/admin/characters" data-i18n-key="admin.characters">Characters</a>
+            <a href="/admin/models" data-i18n-key="admin.llmModels">LLM Models</a>
+            <a href="/admin/voice-models" data-i18n-key="admin.voiceModels">Voice Models</a>
+            <a href="/admin/channels" data-i18n-key="admin.channels">Channels</a>
+        </nav>
+        <section class="models-layout" aria-label="Live2D profile editor" data-i18n-aria-label-key="live2dAdmin.editorAria">
+            <aside class="model-profile-sidebar">
+                <div id="live2d-profile-list" class="model-profile-list"></div>
+            </aside>
+            <form id="live2d-profile-form" class="model-profile-form">
+                <div class="model-profile-form-header">
+                    <div>
+                        <h2 id="live2d-profile-title">Live2D profile</h2>
+                        <p id="live2d-profile-status">loading...</p>
+                    </div>
+                    <div class="model-profile-actions">
+                        <button id="live2d-profile-activate" type="button" data-i18n-key="models.activate">Activate</button>
+                        <button id="live2d-profile-save" type="submit" data-i18n-key="models.save">Save</button>
+                    </div>
+                </div>
+                <section class="model-profile-section">
+                    <h3 data-i18n-key="models.live2d">Live2D model</h3>
+                    <label>
+                        <span data-i18n-key="models.live2dSelection">Selection</span>
+                        <select id="live2d-selection"></select>
+                    </label>
+                    <p id="live2d-selection-detail"></p>
+                </section>
+                <section class="model-profile-section">
+                    <h3 data-i18n-key="live2dAdmin.catalog">Available catalog</h3>
+                    <div id="live2d-catalog-list" class="model-profile-list"></div>
+                </section>
+            </form>
+        </section>
+    </main>
+    <script type="module" src="/web/assets/live2d-app.js?v=session-centered-1"></script>
+</body>
+</html>

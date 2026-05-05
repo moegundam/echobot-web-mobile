@@ -3,15 +3,15 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>EchoBot Model Profiles</title>
+    <title>EchoBot LLM Models</title>
     <link rel="stylesheet" href="/web/assets/styles/shell-pages.css?v=site-public-6">
 </head>
 <body class="admin-page models-page" data-page-title-key="models.pageTitle">
     <main id="models-root" class="admin-root models-root">
         <header class="admin-header">
             <div>
-                <h1 data-i18n-key="models.heading">Model Profiles</h1>
-                <p data-i18n-key="models.description">Character model routing</p>
+                <h1 data-i18n-key="models.heading">LLM Models</h1>
+                <p data-i18n-key="models.description">Chat model provider settings</p>
             </div>
             <div class="shell-header-controls">
                 <div class="language-switcher" data-language-switcher></div>
@@ -24,16 +24,11 @@
             <a href="/admin/sessions" data-i18n-key="admin.sessions">Sessions</a>
             <a href="/admin/structure" data-i18n-key="admin.structure">Site Structure</a>
             <a href="/admin/characters" data-i18n-key="admin.characters">Characters</a>
+            <a href="/admin/voice-models" data-i18n-key="admin.voiceModels">Voice Models</a>
+            <a href="/admin/live2d" data-i18n-key="admin.live2d">Live2D</a>
             <a href="/admin/channels" data-i18n-key="admin.channels">Channels</a>
             <a href="/admin/guide" data-i18n-key="admin.guide">Operation Guide</a>
         </nav>
-        <section class="model-role-bindings" aria-label="Role model routing" data-i18n-aria-label-key="models.roleBindingsAria">
-            <div>
-                <h2 data-i18n-key="models.roleBindings">Role bindings</h2>
-                <p data-i18n-key="models.roleBindingsHelp">Choose which profile activates when Console switches to a role.</p>
-            </div>
-            <div id="model-role-binding-list" class="model-role-binding-list"></div>
-        </section>
         <section class="models-layout" aria-label="Model profile editor" data-i18n-aria-label-key="models.editorAria">
             <aside class="model-profile-sidebar">
                 <button id="model-profile-create" class="model-profile-create" type="button" data-i18n-key="models.create">Add profile</button>
@@ -89,7 +84,8 @@
                         </label>
                     </div>
                 </section>
-                <section class="model-profile-section">
+                <div id="model-role-binding-list" hidden></div>
+                <section class="model-profile-section" hidden>
                     <h3 data-i18n-key="models.tts">TTS model</h3>
                     <div class="model-profile-field-grid">
                         <label>
@@ -119,7 +115,7 @@
                         </label>
                     </div>
                 </section>
-                <section class="model-profile-section">
+                <section class="model-profile-section" hidden>
                     <h3 data-i18n-key="models.asr">ASR model</h3>
                     <div class="model-profile-field-grid">
                         <label>
@@ -149,7 +145,7 @@
                         </label>
                     </div>
                 </section>
-                <section class="model-profile-section">
+                <section class="model-profile-section" hidden>
                     <h3 data-i18n-key="models.live2d">Live2D model</h3>
                     <label>
                         <span data-i18n-key="models.live2dSelection">Selection</span>

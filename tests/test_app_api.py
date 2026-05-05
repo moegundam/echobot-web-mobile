@@ -1485,6 +1485,8 @@ class AppApiTests(unittest.TestCase):
                 "/admin/characters",
                 "/admin/openwebui",
                 "/admin/models",
+                "/admin/voice-models",
+                "/admin/live2d",
                 "/docs",
                 "/redoc",
                 "/openapi.json",
@@ -1516,6 +1518,10 @@ class AppApiTests(unittest.TestCase):
             self.assertIn("data-display-mode-switcher", authorized[8].text)
             self.assertIn('id="models-root"', authorized[9].text)
             self.assertIn("data-display-mode-switcher", authorized[9].text)
+            self.assertIn('id="voice-models-root"', authorized[10].text)
+            self.assertIn("data-display-mode-switcher", authorized[10].text)
+            self.assertIn('id="live2d-root"', authorized[11].text)
+            self.assertIn("data-display-mode-switcher", authorized[11].text)
 
     def test_web_page_route_registry_serves_known_shells(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1545,6 +1551,8 @@ class AppApiTests(unittest.TestCase):
                 "/admin/characters": 'id="characters-root"',
                 "/admin/openwebui": 'id="openwebui-root"',
                 "/admin/models": 'id="models-root"',
+                "/admin/voice-models": 'id="voice-models-root"',
+                "/admin/live2d": 'id="live2d-root"',
             }
 
             with TestClient(app) as client:
@@ -2218,6 +2226,183 @@ class AppApiTests(unittest.TestCase):
             self.assertEqual("default", beta_context.json()["role_name"])
             self.assertEqual("a", beta_context.json()["model_profile_id"])
             self.assertEqual("active", beta_context.json()["model_profile_source"])
+
+    def test_session_centered_admin_projection_apis_split_runtime_profiles(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            app = create_app(
+                runtime_options=RuntimeOptions(
+                    workspace=workspace,
+                    no_tools=True,
+                    no_skills=True,
+                    no_memory=True,
+                    no_heartbeat=True,
+                ),
+                channel_config_path=workspace / ".echobot" / "channels.json",
+                context_builder=build_test_context,
+            )
+
+            raw_channel_config = {
+                "console": {"enabled": False, "allow_from": []},
+                "telegram": {
+                    "enabled": True,
+                    "allow_from": ["12345"],
+                    "mirror_to_stage": True,
+                    "stage_session_name": "Telegram Live",
+                    "bot_token": "telegram-projection-secret",
+                    "proxy": "",
+                    "reply_to_message": False,
+                },
+                "discord": {
+                    "enabled": False,
+                    "allow_from": ["discord-user"],
+                    "mirror_to_stage": True,
+                    "stage_session_name": "Discord Live",
+                    "bot_token": "discord-projection-secret",
+                    "webhook_url": "https://discord.com/api/webhooks/1/token",
+                    "webhook_secret": "discord-webhook-projection-secret",
+                    "application_id": "discord-app-id",
+                    "guild_id": "discord-guild-id",
+                },
+                "qq": {
+                    "enabled": False,
+                    "allow_from": ["qq-user"],
+                    "mirror_to_stage": False,
+                    "app_id": "qq-app-id",
+                    "client_secret": "qq-projection-secret",
+                },
+            }
+
+            with TestClient(app) as client:
+                web_config = client.get("/api/web/config")
+                live2d_key = web_config.json()["live2d"]["models"][0]["selection_key"]
+                updated_profile = client.patch(
+                    "/api/model-profiles/b",
+                    json={
+                        "label": "Session Runtime B",
+                        "chat": {
+                            "provider": "private-litellm",
+                            "model": "session-chat-model",
+                            "base_url": "http://session-llm.test/v1",
+                            "temperature": 0.3,
+                            "max_tokens": 1234,
+                            "api_key": "session-chat-secret",
+                        },
+                        "tts": {
+                            "provider": "openai-compatible",
+                            "model": "session-tts-model",
+                            "base_url": "http://session-tts.test/v1",
+                            "voice": "session-voice",
+                            "api_key": "session-tts-secret",
+                        },
+                        "asr": {
+                            "provider": "openai-transcriptions",
+                            "model": "session-stt-model",
+                            "base_url": "http://session-stt.test/v1",
+                            "language": "zh-TW",
+                            "api_key": "session-stt-secret",
+                        },
+                        "live2d": {
+                            "selection_key": live2d_key,
+                        },
+                    },
+                )
+                client.post(
+                    "/api/roles",
+                    json={
+                        "name": "Session Host",
+                        "prompt": "# Session Host\n\nUse session settings.",
+                    },
+                )
+                client.put(
+                    "/api/model-profiles/role-bindings/session-host",
+                    json={"profile_id": "b"},
+                )
+                switched = client.put(
+                    "/api/sessions/default/role",
+                    json={"role_name": "session-host"},
+                )
+                route_mode = client.put(
+                    "/api/sessions/default/route-mode",
+                    json={"route_mode": "chat_only"},
+                )
+                client.put("/api/channels/config", json=raw_channel_config)
+
+                llm_models = client.get("/api/llm-models")
+                voice_models = client.get("/api/voice-models")
+                live2d_models = client.get("/api/live2d-models")
+                integrations = client.get("/api/channel-integrations")
+                context = client.get("/api/sessions/default/runtime-context")
+
+            self.assertEqual(200, updated_profile.status_code)
+            self.assertEqual(200, switched.status_code)
+            self.assertEqual(200, route_mode.status_code)
+
+            self.assertEqual(200, llm_models.status_code)
+            self.assertEqual("b", llm_models.json()["active_model_id"])
+            llm_model = next(
+                item for item in llm_models.json()["models"] if item["id"] == "b"
+            )
+            self.assertEqual("Session Runtime B", llm_model["name"])
+            self.assertEqual("private-litellm", llm_model["provider"])
+            self.assertEqual("session-chat-model", llm_model["model"])
+            self.assertEqual("http://session-llm.test/v1", llm_model["base_url"])
+            self.assertEqual(0.3, llm_model["temperature"])
+            self.assertEqual(1234, llm_model["max_tokens"])
+            self.assertTrue(llm_model["api_key_configured"])
+            self.assertEqual("profile", llm_model["api_key_source"])
+            self.assertNotIn("tts", llm_model)
+            self.assertNotIn("asr", llm_model)
+
+            self.assertEqual(200, voice_models.status_code)
+            self.assertEqual("b", voice_models.json()["active_voice_profile_id"])
+            voice_profile = next(
+                item for item in voice_models.json()["profiles"] if item["id"] == "b"
+            )
+            self.assertEqual("session-voice", voice_profile["tts"]["voice"])
+            self.assertEqual("session-stt-model", voice_profile["stt"]["model"])
+            self.assertEqual("zh-TW", voice_profile["stt"]["language"])
+            self.assertTrue(voice_profile["tts"]["api_key_configured"])
+            self.assertTrue(voice_profile["stt"]["api_key_configured"])
+
+            self.assertEqual(200, live2d_models.status_code)
+            self.assertEqual("b", live2d_models.json()["active_live2d_model_id"])
+            live2d_profile = next(
+                item for item in live2d_models.json()["models"] if item["id"] == "b"
+            )
+            self.assertEqual(live2d_key, live2d_profile["selection_key"])
+            self.assertTrue(live2d_profile["available"])
+
+            self.assertEqual(200, integrations.status_code)
+            telegram = next(
+                item for item in integrations.json()["integrations"] if item["id"] == "telegram"
+            )
+            self.assertEqual("telegram", telegram["type"])
+            self.assertTrue(telegram["enabled"])
+            self.assertTrue(telegram["configured"])
+            self.assertEqual("telegram-live", telegram["stage_session_name"])
+            self.assertTrue(telegram["config"]["bot_token_configured"])
+            self.assertEqual("", telegram["config"]["bot_token"])
+            integration_text = json.dumps(integrations.json())
+            self.assertNotIn("telegram-projection-secret", integration_text)
+            self.assertNotIn("discord-projection-secret", integration_text)
+            self.assertNotIn("discord-webhook-projection-secret", integration_text)
+            self.assertNotIn("qq-projection-secret", integration_text)
+
+            self.assertEqual(200, context.status_code)
+            self.assertEqual("default", context.json()["session_name"])
+            self.assertEqual("session-host", context.json()["role_name"])
+            self.assertEqual("chat_only", context.json()["route_mode"])
+            self.assertEqual("session-host", context.json()["character"]["name"])
+            self.assertEqual("b", context.json()["character"]["effective_model_profile_id"])
+            self.assertEqual("session-chat-model", context.json()["llm_model"]["model"])
+            self.assertEqual("session-voice", context.json()["voice_profile"]["tts"]["voice"])
+            self.assertEqual(live2d_key, context.json()["live2d_model"]["selection_key"])
+            self.assertIsNone(context.json()["channel"])
+            context_text = json.dumps(context.json())
+            self.assertNotIn("session-chat-secret", context_text)
+            self.assertNotIn("session-tts-secret", context_text)
+            self.assertNotIn("session-stt-secret", context_text)
 
     def test_character_profiles_combine_role_prompt_and_model_binding(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

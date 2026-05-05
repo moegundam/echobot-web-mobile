@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>EchoBot Voice Models</title>
+    <link rel="stylesheet" href="/web/assets/styles/shell-pages.css?v=site-public-6">
+</head>
+<body class="admin-page models-page" data-page-title-key="voiceModels.pageTitle">
+    <main id="voice-models-root" class="admin-root models-root">
+        <header class="admin-header">
+            <div>
+                <h1 data-i18n-key="voiceModels.heading">Voice Models</h1>
+                <p data-i18n-key="voiceModels.description">STT and TTS profile settings</p>
+            </div>
+            <div class="shell-header-controls">
+                <div class="language-switcher" data-language-switcher></div>
+                <div class="display-mode-switcher" data-display-mode-switcher></div>
+            </div>
+        </header>
+        <nav class="admin-grid guide-nav" aria-label="Voice model quick links" data-i18n-aria-label-key="voiceModels.linksAria">
+            <a href="/admin" data-i18n-key="guide.backToAdmin">Back to Admin</a>
+            <a href="/console" data-i18n-key="admin.console">Console</a>
+            <a href="/admin/sessions" data-i18n-key="admin.sessions">Sessions</a>
+            <a href="/admin/characters" data-i18n-key="admin.characters">Characters</a>
+            <a href="/admin/models" data-i18n-key="admin.llmModels">LLM Models</a>
+            <a href="/admin/live2d" data-i18n-key="admin.live2d">Live2D</a>
+            <a href="/admin/channels" data-i18n-key="admin.channels">Channels</a>
+        </nav>
+        <section class="models-layout" aria-label="Voice profile editor" data-i18n-aria-label-key="voiceModels.editorAria">
+            <aside class="model-profile-sidebar">
+                <button id="voice-profile-create" class="model-profile-create" type="button" data-i18n-key="models.create">Add profile</button>
+                <div id="voice-profile-list" class="model-profile-list"></div>
+            </aside>
+            <form id="voice-profile-form" class="model-profile-form">
+                <div class="model-profile-form-header">
+                    <div>
+                        <h2 id="voice-profile-title">Voice profile</h2>
+                        <p id="voice-profile-status">loading...</p>
+                    </div>
+                    <div class="model-profile-actions">
+                        <button id="voice-profile-activate" type="button" data-i18n-key="models.activate">Activate</button>
+                        <button id="voice-profile-save" type="submit" data-i18n-key="models.save">Save</button>
+                        <button id="voice-profile-delete" class="model-profile-delete" type="button" data-i18n-key="models.delete">Delete</button>
+                    </div>
+                </div>
+                <label>
+                    <span data-i18n-key="models.label">Label</span>
+                    <input id="voice-profile-label" type="text" maxlength="80" autocomplete="off">
+                </label>
+                <section class="model-profile-section">
+                    <h3 data-i18n-key="models.tts">TTS model</h3>
+                    <div class="model-profile-field-grid">
+                        <label>
+                            <span data-i18n-key="models.provider">Provider</span>
+                            <select id="voice-tts-provider"></select>
+                        </label>
+                        <label>
+                            <span data-i18n-key="models.model">Model</span>
+                            <input id="voice-tts-model" type="text" autocomplete="off">
+                        </label>
+                        <label>
+                            <span data-i18n-key="models.baseUrl">Base URL</span>
+                            <input id="voice-tts-base-url" type="url" autocomplete="off">
+                        </label>
+                        <label>
+                            <span data-i18n-key="models.apiKey">API key</span>
+                            <input id="voice-tts-api-key" type="password" autocomplete="off" data-i18n-placeholder-key="models.apiKeyPlaceholder">
+                            <small id="voice-tts-api-key-status"></small>
+                        </label>
+                        <label class="model-profile-checkbox">
+                            <input id="voice-tts-clear-api-key" type="checkbox">
+                            <span data-i18n-key="models.clearApiKey">Clear saved key</span>
+                        </label>
+                        <label>
+                            <span data-i18n-key="models.voice">Voice</span>
+                            <input id="voice-tts-voice" type="text" autocomplete="off">
+                        </label>
+                    </div>
+                </section>
+                <section class="model-profile-section">
+                    <h3 data-i18n-key="models.asr">STT model</h3>
+                    <div class="model-profile-field-grid">
+                        <label>
+                            <span data-i18n-key="models.provider">Provider</span>
+                            <select id="voice-stt-provider"></select>
+                        </label>
+                        <label>
+                            <span data-i18n-key="models.model">Model</span>
+                            <input id="voice-stt-model" type="text" autocomplete="off">
+                        </label>
+                        <label>
+                            <span data-i18n-key="models.baseUrl">Base URL</span>
+                            <input id="voice-stt-base-url" type="url" autocomplete="off">
+                        </label>
+                        <label>
+                            <span data-i18n-key="models.apiKey">API key</span>
+                            <input id="voice-stt-api-key" type="password" autocomplete="off" data-i18n-placeholder-key="models.apiKeyPlaceholder">
+                            <small id="voice-stt-api-key-status"></small>
+                        </label>
+                        <label class="model-profile-checkbox">
+                            <input id="voice-stt-clear-api-key" type="checkbox">
+                            <span data-i18n-key="models.clearApiKey">Clear saved key</span>
+                        </label>
+                        <label>
+                            <span data-i18n-key="models.language">Language</span>
+                            <input id="voice-stt-language" type="text" autocomplete="off">
+                        </label>
+                    </div>
+                </section>
+            </form>
+        </section>
+    </main>
+    <script type="module" src="/web/assets/voice-models-app.js?v=session-centered-1"></script>
+</body>
+</html>

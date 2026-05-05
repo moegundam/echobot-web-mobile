@@ -23,4 +23,6 @@ WEB_PAGE_ROUTES: tuple[WebPageRoute, ...] = (
     WebPageRoute("/admin/characters", "characters.html", "admin_characters"),
     WebPageRoute("/admin/openwebui", "openwebui.html", "admin_openwebui"),
     WebPageRoute("/admin/models", "models.html", "admin_models"),
+    WebPageRoute("/admin/voice-models", "voice-models.html", "admin_voice_models"),
+    WebPageRoute("/admin/live2d", "live2d.html", "admin_live2d"),
 )

@@ -343,6 +343,91 @@ class ModelProfilesResponse(StrictSchemaModel):
     profiles: list[ModelProfileModel] = Field(default_factory=list)
 
 
+class LLMModelAdminModel(StrictSchemaModel):
+    id: str
+    name: str
+    provider: str = "openai-compatible"
+    model: str = ""
+    base_url: str = ""
+    temperature: float | None = None
+    max_tokens: int | None = None
+    api_key_configured: bool = False
+    api_key_source: str = ""
+    source_model_profile_id: str = ""
+
+
+class LLMModelsResponse(StrictSchemaModel):
+    active_model_id: str = "a"
+    models: list[LLMModelAdminModel] = Field(default_factory=list)
+
+
+class SpeechModelAdminConfigModel(StrictSchemaModel):
+    provider: str = ""
+    model: str = ""
+    base_url: str = ""
+    voice: str = ""
+    language: str = ""
+    api_key_configured: bool = False
+    api_key_source: str = ""
+
+
+class VoiceProfileAdminModel(StrictSchemaModel):
+    id: str
+    name: str
+    tts: SpeechModelAdminConfigModel = Field(default_factory=SpeechModelAdminConfigModel)
+    stt: SpeechModelAdminConfigModel = Field(default_factory=SpeechModelAdminConfigModel)
+    source_model_profile_id: str = ""
+
+
+class VoiceProfilesResponse(StrictSchemaModel):
+    active_voice_profile_id: str = "a"
+    profiles: list[VoiceProfileAdminModel] = Field(default_factory=list)
+
+
+class Live2DModelAdminModel(StrictSchemaModel):
+    id: str
+    name: str
+    selection_key: str = ""
+    source_model_profile_id: str = ""
+    available: bool = False
+    model_name: str = ""
+    model_url: str = ""
+
+
+class Live2DModelsResponse(StrictSchemaModel):
+    active_live2d_model_id: str = "a"
+    models: list[Live2DModelAdminModel] = Field(default_factory=list)
+    catalog: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class ChannelIntegrationAdminModel(StrictSchemaModel):
+    id: str
+    type: str
+    name: str
+    enabled: bool = False
+    running: bool = False
+    configured: bool = False
+    mirror_to_stage: bool = False
+    stage_session_name: str = ""
+    selectable: bool = False
+    config: dict[str, Any] = Field(default_factory=dict)
+
+
+class ChannelIntegrationsResponse(StrictSchemaModel):
+    integrations: list[ChannelIntegrationAdminModel] = Field(default_factory=list)
+
+
+class SessionRuntimeContextResponse(StrictSchemaModel):
+    session_name: str = "default"
+    role_name: str = "default"
+    route_mode: RouteMode = DEFAULT_ROUTE_MODE
+    character: CharacterProfileModel | None = None
+    llm_model: LLMModelAdminModel | None = None
+    voice_profile: VoiceProfileAdminModel | None = None
+    live2d_model: Live2DModelAdminModel | None = None
+    channel: ChannelIntegrationAdminModel | None = None
+
+
 class StageContextResponse(StrictSchemaModel):
     session_name: str = "default"
     role_name: str = "default"
