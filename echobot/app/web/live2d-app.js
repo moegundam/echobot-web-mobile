@@ -25,6 +25,7 @@ const DOM = {
     status: document.getElementById("live2d-profile-status"),
     activate: document.getElementById("live2d-profile-activate"),
     save: document.getElementById("live2d-profile-save"),
+    label: document.getElementById("live2d-profile-label"),
     selection: document.getElementById("live2d-selection"),
     detail: document.getElementById("live2d-selection-detail"),
     catalog: document.getElementById("live2d-catalog-list"),
@@ -126,6 +127,7 @@ function renderSelectionOptions() {
 function renderSelectedProfile() {
     const profile = selectedProfile();
     DOM.title.textContent = `${profile.id.toUpperCase()} · ${profile.name}`;
+    DOM.label.value = profile.name || "";
     DOM.selection.value = profile.selection_key || "";
     DOM.detail.textContent = profile.available
         ? i18n.t("live2dAdmin.available", { model: profile.model_name || profile.selection_key })
@@ -163,6 +165,7 @@ async function saveSelectedProfile() {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
+                label: DOM.label.value,
                 live2d: {
                     selection_key: DOM.selection.value,
                 },

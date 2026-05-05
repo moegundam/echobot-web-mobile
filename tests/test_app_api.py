@@ -2447,6 +2447,7 @@ class AppApiTests(unittest.TestCase):
             voice_profile = next(
                 item for item in voice_models.json()["profiles"] if item["id"] == "b"
             )
+            self.assertEqual("Session Runtime B", voice_profile["name"])
             self.assertEqual("session-voice", voice_profile["tts"]["voice"])
             self.assertEqual("session-stt-model", voice_profile["stt"]["model"])
             self.assertEqual("zh-TW", voice_profile["stt"]["language"])
@@ -2458,6 +2459,7 @@ class AppApiTests(unittest.TestCase):
             live2d_profile = next(
                 item for item in live2d_models.json()["models"] if item["id"] == "b"
             )
+            self.assertEqual("Session Runtime B", live2d_profile["name"])
             self.assertEqual(live2d_key, live2d_profile["selection_key"])
             self.assertTrue(live2d_profile["available"])
 
