@@ -17,6 +17,7 @@ const FALLBACK_FIELDS = {
         { name: "bot_token", kind: "secret" },
         { name: "proxy", kind: "text" },
         { name: "reply_to_message", kind: "bool" },
+        { name: "drop_pending_updates", kind: "bool" },
     ],
     discord: [
         { name: "allow_from", kind: "textarea" },
@@ -39,6 +40,7 @@ const FIELD_LABEL_KEYS = {
     bot_token: "channels.fieldBotToken",
     proxy: "channels.fieldProxy",
     reply_to_message: "channels.fieldReplyToMessage",
+    drop_pending_updates: "channels.fieldDropPendingUpdates",
     webhook_secret: "channels.fieldWebhookSecret",
     webhook_url: "channels.fieldWebhookUrl",
     channel_id: "channels.fieldChannelId",

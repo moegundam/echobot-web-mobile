@@ -182,6 +182,13 @@ def _telegram_smoke_result(config: dict[str, Any]) -> dict[str, Any]:
             enabled,
             "enabled" if enabled else "saved but disabled",
         ),
+        _check(
+            "pending_updates",
+            True,
+            "pending updates will be dropped on startup"
+            if bool(config.get("drop_pending_updates", True))
+            else "pending updates will be processed on startup",
+        ),
     ]
     ok = bot_token_ok and TELEGRAM_AVAILABLE
     if not ok:
@@ -197,6 +204,7 @@ def _telegram_smoke_result(config: dict[str, Any]) -> dict[str, Any]:
         "checks": checks,
         "next_steps": [
             "Enable Telegram after checking allow_from and local network access.",
+            "Set drop_pending_updates=false only for validation runs that need to process already-sent test messages.",
             "Use HTTPS tunnel only when switching to webhook mode in a later slice.",
         ],
     }

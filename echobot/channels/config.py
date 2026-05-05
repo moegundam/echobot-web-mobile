@@ -29,6 +29,7 @@ class TelegramChannelConfig(BaseChannelConfig):
     bot_token: str = ""
     proxy: str = ""
     reply_to_message: bool = False
+    drop_pending_updates: bool = True
 
 
 @dataclass(slots=True)

@@ -1025,6 +1025,7 @@ class AppApiTests(unittest.TestCase):
                     "bot_token": "telegram-secret-token",
                     "proxy": "socks5://127.0.0.1:1080",
                     "reply_to_message": True,
+                    "drop_pending_updates": False,
                 },
                 "discord": {
                     "enabled": False,
@@ -1070,6 +1071,7 @@ class AppApiTests(unittest.TestCase):
                 self.assertEqual("", payload["qq"]["client_secret"])
                 self.assertTrue(payload["qq"]["client_secret_configured"])
                 self.assertEqual("socks5://127.0.0.1:1080", payload["telegram"]["proxy"])
+                self.assertFalse(payload["telegram"]["drop_pending_updates"])
                 self.assertEqual("qq-app-id", payload["qq"]["app_id"])
 
             stored_text = config_path.read_text(encoding="utf-8")
@@ -1124,6 +1126,7 @@ class AppApiTests(unittest.TestCase):
                 client.put("/api/channels/config", json=raw_config)
                 redacted = client.get("/api/channels/config").json()
                 redacted["telegram"]["proxy"] = "http://proxy.local:8080"
+                redacted["telegram"]["drop_pending_updates"] = False
                 preserved = client.put("/api/channels/config", json=redacted)
 
             self.assertEqual(200, preserved.status_code)
@@ -1133,6 +1136,7 @@ class AppApiTests(unittest.TestCase):
             stored_text = config_path.read_text(encoding="utf-8")
             self.assertIn("telegram-secret-token", stored_text)
             self.assertIn("discord-secret-token", stored_text)
+            self.assertIn('"drop_pending_updates": false', stored_text)
             self.assertIn("discord-webhook-secret", stored_text)
             self.assertIn("qq-client-secret", stored_text)
             self.assertIn("http://proxy.local:8080", stored_text)
@@ -1188,6 +1192,10 @@ class AppApiTests(unittest.TestCase):
             self.assertEqual("telegram", telegram.json()["channel"])
             self.assertTrue(telegram.json()["ok"])
             self.assertEqual("configured_disabled", telegram.json()["status"])
+            self.assertIn(
+                "pending_updates",
+                [item["name"] for item in telegram.json()["checks"]],
+            )
             self.assertNotIn("telegram-secret-token", json.dumps(telegram.json()))
 
             self.assertEqual(200, discord.status_code)

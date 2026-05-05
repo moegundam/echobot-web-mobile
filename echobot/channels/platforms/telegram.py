@@ -102,7 +102,9 @@ class TelegramChannel(BaseChannel):
             logger.debug("Telegram command registration failed", exc_info=True)
         await self._app.updater.start_polling(
             allowed_updates=["message"],
-            drop_pending_updates=True,
+            drop_pending_updates=bool(
+                getattr(self.config, "drop_pending_updates", True),
+            ),
             error_callback=self._on_polling_error,
         )
         logger.info("Telegram channel started")

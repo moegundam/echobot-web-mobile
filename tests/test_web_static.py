@@ -422,6 +422,7 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn('i18n.t("channels.saveChanges")', channels_js)
         self.assertIn('i18n.t("channels.reload")', channels_js)
         self.assertIn('i18n.t("channels.smokeTest")', channels_js)
+        self.assertIn("drop_pending_updates", channels_js)
 
         self.assertIn('"channels.saveChanges"', i18n_js)
         self.assertIn('"channels.reload"', i18n_js)
@@ -438,6 +439,7 @@ class WebStaticAssetTests(unittest.TestCase):
             "channels.fieldBotToken",
             "channels.fieldProxy",
             "channels.fieldReplyToMessage",
+            "channels.fieldDropPendingUpdates",
             "channels.fieldWebhookSecret",
             "channels.fieldWebhookUrl",
             "channels.fieldChannelId",
