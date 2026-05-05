@@ -146,13 +146,13 @@ A model profile management page was added:
 
 `/admin/channels` has been upgraded from a read-only planning page into a messaging-platform setup entry:
 
-- Telegram can store enabled state, allow list, bot token, proxy, and reply-to-message behavior.
+- Telegram can store enabled state, allow list, bot token, proxy, reply-to-message behavior, and whether pending updates are dropped on startup.
 - Discord can store enabled state, allow list, bot token, webhook URL, webhook secret, application/guild/channel ids.
 - Secret fields only expose configured status in the API and UI; plaintext values are never returned.
 - `POST /api/channels/{channel}/smoke` provides safe local readiness checks without echoing tokens in responses.
 - `GET /api/channels/stage-targets` exposes a secret-free messaging target list so `/stage` and `/messenger` can select the Stage session bound to a configured platform.
-- The Telegram polling runtime has passed a local bot E2E smoke; the test token is stored only in repo-external ignored runtime config and is not committed.
-- Production messaging gateways can set `mirror_to_stage` and `stage_session_name`; Telegram replies have been verified to mirror into the `/stage` frontend.
+- Telegram token validation, Bot API `getMe`, poller startup, Bot API outbound, session binding, and Stage target projection have passed local checks; the test token is stored only in repo-external ignored runtime config and is not committed.
+- Production messaging gateways can set `mirror_to_stage` and `stage_session_name`; the real Telegram user inbound message to EchoBot reply to `/stage` mirror E2E still needs validation with a fresh Telegram user message.
 - Discord is config/smoke-ready for now; its runtime adapter is still a later implementation slice.
 
 ### 11. Deployment And Architecture Documentation
@@ -160,6 +160,7 @@ A model profile management page was added:
 This edition adds planning, site structure, and reference documents:
 
 - [`docs/implementation/echobot-web-mobile-integration-plan.md`](./docs/implementation/echobot-web-mobile-integration-plan.md)
+- [`docs/implementation/echobot-web-page-links.md`](./docs/implementation/echobot-web-page-links.md)
 - [`docs/implementation/echobot-web-site-structure.md`](./docs/implementation/echobot-web-site-structure.md)
 - [`docs/implementation/open-llm-vtuber-reference-gap.md`](./docs/implementation/open-llm-vtuber-reference-gap.md)
 
@@ -176,7 +177,7 @@ Completed so far:
 
 Not finished or still planned:
 
-- Telegram and QQ already have built-in runtime adapters. `/admin/channels` can now save Telegram / Discord settings and run smoke readiness checks, and Telegram local bot polling E2E plus Stage mirroring have passed. Discord, LINE, and WhatsApp production runtime adapters remain planned.
+- Telegram and QQ already have built-in runtime adapters. `/admin/channels` can now save Telegram / Discord settings and run smoke readiness checks. Telegram token validation, poller startup, Bot API outbound, session binding, and Stage target projection have passed local checks, but the real Telegram user inbound message to EchoBot reply to `/stage` mirror E2E is still not complete. Discord, LINE, and WhatsApp production runtime adapters remain planned.
 - The EchoBot-side narrow Open WebUI bridge API and documentation page exist, but Open WebUI does not need to be connected yet.
 - `/admin` v1 is mostly an index, guide, and status surface. It is not a complete production SaaS admin console.
 - Stage / Live2D / ASR / TTS have v1 integration and local smoke coverage. Real-device microphone and long-running voice interaction checks still need HTTPS plus real-device validation.
@@ -244,7 +245,7 @@ This branch has been verified with:
 - 10 routes × mobile/desktop × 3 languages browser checks.
 - i18n key coverage.
 - API route/auth tests.
-- Full pytest: `321 passed`.
+- Full pytest: `337 passed, 1 warning, 16 subtests passed`.
 
 ## Project Rules
 

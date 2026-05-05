@@ -146,13 +146,13 @@ python -m echobot app --host 127.0.0.1 --port 8001
 
 `/admin/channels` 已從只讀規劃頁升級為通訊平台設定入口：
 
-- Telegram 可設定 enabled、allow list、bot token、proxy 與 reply-to-message。
+- Telegram 可設定 enabled、allow list、bot token、proxy、reply-to-message 與啟動時是否丟棄 pending updates。
 - Discord 可設定 enabled、allow list、bot token、webhook URL、webhook secret、application/guild/channel id。
 - Secret 欄位在 API 與 UI 中只顯示 configured 狀態，不回傳明文。
 - `POST /api/channels/{channel}/smoke` 提供安全的本機 readiness check，不會把 token 回傳到 response。
 - `GET /api/channels/stage-targets` 提供無 secret 的通訊 target 清單，讓 `/stage` 與 `/messenger` 直接選擇已設定平台綁定的前台 session。
-- Telegram polling runtime 已做過本機 bot E2E smoke；測試 token 只放在 repo 外的 ignored runtime config，不寫入版本庫。
-- 正式通訊 gateway 可設定 `mirror_to_stage` 與 `stage_session_name`；Telegram 回覆已驗證會同步顯示在 `/stage` 前台。
+- Telegram token、Bot API `getMe`、poller 啟動、Bot API outbound、session 綁定與 Stage target projection 已做過本機驗證；測試 token 只放在 repo 外的 ignored runtime config，不寫入版本庫。
+- 正式通訊 gateway 可設定 `mirror_to_stage` 與 `stage_session_name`；Telegram 使用者 inbound 訊息到 EchoBot 回覆再同步 `/stage` 的真實 E2E 仍需用新 Telegram 使用者訊息驗收。
 - Discord 目前是 config/smoke-ready，runtime adapter 仍需後續切片才會正式接收 Discord 訊息。
 
 ### 11. 部署與架構文件
@@ -160,6 +160,7 @@ python -m echobot app --host 127.0.0.1 --port 8001
 新增專案規劃、網站結構與參考文件：
 
 - [`docs/implementation/echobot-web-mobile-integration-plan.md`](./docs/implementation/echobot-web-mobile-integration-plan.md)
+- [`docs/implementation/echobot-web-page-links.md`](./docs/implementation/echobot-web-page-links.md)
 - [`docs/implementation/echobot-web-site-structure.md`](./docs/implementation/echobot-web-site-structure.md)
 - [`docs/implementation/open-llm-vtuber-reference-gap.md`](./docs/implementation/open-llm-vtuber-reference-gap.md)
 
@@ -176,7 +177,7 @@ python -m echobot app --host 127.0.0.1 --port 8001
 
 尚未完成或仍屬規劃中的部分：
 
-- Telegram 與 QQ 已有 built-in runtime adapter；`/admin/channels` 已可保存 Telegram / Discord 設定並做 smoke readiness，Telegram 本機 bot polling E2E 與前台同步已通過。Discord、LINE、WhatsApp 正式 runtime adapter 仍屬規劃中。
+- Telegram 與 QQ 已有 built-in runtime adapter；`/admin/channels` 已可保存 Telegram / Discord 設定並做 smoke readiness。Telegram token、poller、Bot API outbound、session 綁定與 Stage target projection 已通過本機驗證，但 Telegram 使用者 inbound 訊息到 EchoBot 回覆再同步 `/stage` 的真實 E2E 仍未完成。Discord、LINE、WhatsApp 正式 runtime adapter 仍屬規劃中。
 - Open WebUI bridge 已有 EchoBot 端 narrow API 與說明頁，但尚未要求使用者實際接入 Open WebUI。
 - `/admin` 第一版偏向索引、說明與狀態檢視，還不是完整 production SaaS 管理後台。
 - Stage / Live2D / ASR / TTS 已有 v1 整合與本機 smoke；真機麥克風與長時間語音互動仍需在 HTTPS + 真機環境逐項驗收。
@@ -244,7 +245,7 @@ python -m pytest
 - 全站 10 個 route × 手機/桌面 × 3 語言瀏覽器檢查。
 - i18n key coverage。
 - API route/auth tests。
-- full pytest：`321 passed`。
+- full pytest：`337 passed, 1 warning, 16 subtests passed`。
 
 ## 專案規矩
 
