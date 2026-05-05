@@ -2404,6 +2404,107 @@ class AppApiTests(unittest.TestCase):
             self.assertNotIn("session-tts-secret", context_text)
             self.assertNotIn("session-stt-secret", context_text)
 
+    def test_character_profiles_bind_llm_voice_and_live2d_for_session_runtime(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            app = create_app(
+                runtime_options=RuntimeOptions(
+                    workspace=workspace,
+                    no_tools=True,
+                    no_skills=True,
+                    no_memory=True,
+                    no_heartbeat=True,
+                ),
+                channel_config_path=workspace / ".echobot" / "channels.json",
+                context_builder=build_test_context,
+            )
+
+            with TestClient(app) as client:
+                web_config = client.get("/api/web/config")
+                live2d_key = web_config.json()["live2d"]["models"][0]["selection_key"]
+                llm_profile = client.patch(
+                    "/api/model-profiles/b",
+                    json={
+                        "label": "Split LLM",
+                        "chat": {
+                            "provider": "private-litellm",
+                            "model": "split-llm-model",
+                            "base_url": "http://split-llm.test/v1",
+                            "api_key": "split-llm-secret",
+                        },
+                    },
+                )
+                voice_profile = client.patch(
+                    "/api/model-profiles/c",
+                    json={
+                        "label": "Split Voice",
+                        "tts": {
+                            "provider": "openai-compatible",
+                            "model": "split-tts-model",
+                            "base_url": "http://split-tts.test/v1",
+                            "voice": "split-voice",
+                            "api_key": "split-tts-secret",
+                        },
+                        "asr": {
+                            "provider": "openai-transcriptions",
+                            "model": "split-stt-model",
+                            "base_url": "http://split-stt.test/v1",
+                            "language": "ja",
+                            "api_key": "split-stt-secret",
+                        },
+                    },
+                )
+                live2d_profile = client.patch(
+                    "/api/model-profiles/d",
+                    json={
+                        "label": "Split Live2D",
+                        "live2d": {
+                            "selection_key": live2d_key,
+                        },
+                    },
+                )
+                created = client.post(
+                    "/api/character-profiles",
+                    json={
+                        "name": "Split Host",
+                        "prompt": "# Split Host\n\nUse split runtime.",
+                        "llm_model_id": "b",
+                        "voice_profile_id": "c",
+                        "live2d_model_id": "d",
+                    },
+                )
+                switched = client.put(
+                    "/api/sessions/default/role",
+                    json={"role_name": "split-host"},
+                )
+                context = client.get("/api/sessions/default/runtime-context")
+
+            self.assertEqual(200, llm_profile.status_code)
+            self.assertEqual(200, voice_profile.status_code)
+            self.assertEqual(200, live2d_profile.status_code)
+            self.assertEqual(200, created.status_code)
+            self.assertEqual("split-host", created.json()["name"])
+            self.assertEqual("b", created.json()["llm_model_id"])
+            self.assertEqual("c", created.json()["voice_profile_id"])
+            self.assertEqual("d", created.json()["live2d_model_id"])
+
+            self.assertEqual(200, switched.status_code)
+            self.assertEqual("split-host", switched.json()["role_name"])
+
+            self.assertEqual(200, context.status_code)
+            self.assertEqual("split-host", context.json()["role_name"])
+            self.assertEqual("b", context.json()["character"]["llm_model_id"])
+            self.assertEqual("c", context.json()["character"]["voice_profile_id"])
+            self.assertEqual("d", context.json()["character"]["live2d_model_id"])
+            self.assertEqual("split-llm-model", context.json()["llm_model"]["model"])
+            self.assertEqual("split-voice", context.json()["voice_profile"]["tts"]["voice"])
+            self.assertEqual("split-stt-model", context.json()["voice_profile"]["stt"]["model"])
+            self.assertEqual(live2d_key, context.json()["live2d_model"]["selection_key"])
+            context_text = json.dumps(context.json())
+            self.assertNotIn("split-llm-secret", context_text)
+            self.assertNotIn("split-tts-secret", context_text)
+            self.assertNotIn("split-stt-secret", context_text)
+
     def test_character_profiles_combine_role_prompt_and_model_binding(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             workspace = Path(temp_dir)

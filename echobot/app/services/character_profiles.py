@@ -12,6 +12,13 @@ from ...orchestration import normalize_role_name
 
 MAX_CHARACTER_EMOTION_MAPS = 64
 MAX_CHARACTER_MAP_VALUE_LENGTH = 256
+CHARACTER_RUNTIME_BINDING_FIELDS = (
+    "llm_model_id",
+    "voice_profile_id",
+    "live2d_model_id",
+    "default_channel_type",
+    "default_channel_integration_id",
+)
 
 
 class CharacterProfileSettingsService:
@@ -44,6 +51,40 @@ class CharacterProfileSettingsService:
                 roles.pop(normalized_role_name, None)
             self._save_state_unlocked(state)
         return deepcopy(normalized_maps)
+
+    def runtime_bindings_for_role(self, role_name: str) -> dict[str, str]:
+        normalized_role_name = _normalize_role_name(role_name)
+        with self._lock:
+            state = self._load_state_unlocked()
+            role_settings = state["roles"].get(normalized_role_name, {})
+            return {
+                field_name: str(role_settings.get(field_name) or "")
+                for field_name in CHARACTER_RUNTIME_BINDING_FIELDS
+            }
+
+    def set_runtime_bindings(
+        self,
+        role_name: str,
+        updates: dict[str, Any],
+    ) -> dict[str, str]:
+        normalized_role_name = _normalize_role_name(role_name)
+        normalized_updates = _normalize_runtime_binding_updates(updates)
+        with self._lock:
+            state = self._load_state_unlocked()
+            roles = state["roles"]
+            role_settings = roles.setdefault(normalized_role_name, {})
+            for field_name, value in normalized_updates.items():
+                if value:
+                    role_settings[field_name] = value
+                else:
+                    role_settings.pop(field_name, None)
+            if not role_settings:
+                roles.pop(normalized_role_name, None)
+            self._save_state_unlocked(state)
+            return {
+                field_name: str(role_settings.get(field_name) or "")
+                for field_name in CHARACTER_RUNTIME_BINDING_FIELDS
+            }
 
     def clear_role(self, role_name: str) -> None:
         normalized_role_name = _normalize_role_name(role_name)
@@ -95,10 +136,11 @@ class CharacterProfileSettingsService:
                 emotion_maps = normalize_emotion_maps(raw_settings.get("emotion_maps", []))
             except ValueError:
                 continue
+            runtime_bindings = _normalize_runtime_binding_updates(raw_settings)
             if emotion_maps:
-                state["roles"][role_name] = {
-                    "emotion_maps": emotion_maps,
-                }
+                state["roles"].setdefault(role_name, {})["emotion_maps"] = emotion_maps
+            if runtime_bindings:
+                state["roles"].setdefault(role_name, {}).update(runtime_bindings)
         return state
 
     def _save_state_unlocked(self, state: dict[str, Any]) -> None:
@@ -167,6 +209,17 @@ def _normalize_role_name(role_name: Any) -> str:
 
 def _normalize_lookup(value: Any) -> str:
     return str(value or "").strip().lower()
+
+
+def _normalize_runtime_binding_updates(updates: dict[str, Any]) -> dict[str, str]:
+    normalized: dict[str, str] = {}
+    if not isinstance(updates, dict):
+        return normalized
+    for field_name in CHARACTER_RUNTIME_BINDING_FIELDS:
+        if field_name not in updates:
+            continue
+        normalized[field_name] = _clean_map_value(updates.get(field_name, ""))
+    return normalized
 
 
 def _default_state() -> dict[str, Any]:

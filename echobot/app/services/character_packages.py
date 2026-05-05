@@ -44,6 +44,9 @@ def normalize_character_package_import(payload: Any) -> dict[str, Any]:
         "name": name,
         "prompt": prompt,
         "model_profile_id": _clean_text(character.get("model_profile_id", ""), 64),
+        "llm_model_id": _clean_text(character.get("llm_model_id", ""), 64),
+        "voice_profile_id": _clean_text(character.get("voice_profile_id", ""), 64),
+        "live2d_model_id": _clean_text(character.get("live2d_model_id", ""), 64),
         "emotion_maps": normalize_emotion_maps(character.get("emotion_maps", [])),
         "overwrite": payload.get("overwrite") is True,
     }

@@ -50,10 +50,17 @@ async def create_character_profile(
             card.name,
             emotion_maps,
         )
+        await _set_runtime_bindings_from_request(runtime, card.name, request)
         profile_payload = await _set_or_clear_binding(
             runtime,
             card.name,
             request.model_profile_id,
+        )
+        profile_payload = await _activate_binding_for_current_role(
+            runtime,
+            card.name,
+            request.model_profile_id or "",
+            profile_payload,
         )
     except ValueError as exc:
         raise _character_profile_http_exception(exc) from exc
@@ -61,6 +68,7 @@ async def create_character_profile(
         card,
         profile_payload,
         await _emotion_maps_for_role(runtime, card.name),
+        await _runtime_bindings_for_role(runtime, card.name),
     )
 
 
@@ -79,6 +87,7 @@ async def get_character_profile(
         card,
         profile_payload,
         await _emotion_maps_for_role(runtime, card.name),
+        await _runtime_bindings_for_role(runtime, card.name),
     )
 
 
@@ -94,7 +103,12 @@ async def export_character_profile_package(
         raise _character_profile_http_exception(exc) from exc
     profile_payload = await asyncio.to_thread(runtime.model_profile_service.list_profiles)
     emotion_maps = await _emotion_maps_for_role(runtime, card.name)
-    character = _character_model_from_role_card(card, profile_payload, emotion_maps)
+    character = _character_model_from_role_card(
+        card,
+        profile_payload,
+        emotion_maps,
+        await _runtime_bindings_for_role(runtime, card.name),
+    )
     model_profile_snapshot = safe_model_profile_snapshot(
         _profile_lookup(profile_payload).get(character.effective_model_profile_id),
     )
@@ -104,6 +118,9 @@ async def export_character_profile_package(
             name=character.name,
             prompt=character.prompt,
             model_profile_id=character.model_profile_id,
+            llm_model_id=character.llm_model_id,
+            voice_profile_id=character.voice_profile_id,
+            live2d_model_id=character.live2d_model_id,
             emotion_maps=character.emotion_maps,
         ),
         model_profile_snapshot=model_profile_snapshot,
@@ -126,6 +143,24 @@ async def import_character_profile_package(
             card.name,
             package["emotion_maps"],
         )
+        await asyncio.to_thread(
+            runtime.character_profile_settings_service.set_runtime_bindings,
+            card.name,
+            {
+                "llm_model_id": await _existing_model_profile_id(
+                    runtime,
+                    package["llm_model_id"],
+                ),
+                "voice_profile_id": await _existing_model_profile_id(
+                    runtime,
+                    package["voice_profile_id"],
+                ),
+                "live2d_model_id": await _existing_model_profile_id(
+                    runtime,
+                    package["live2d_model_id"],
+                ),
+            },
+        )
         profile_payload = await _set_or_clear_binding(
             runtime,
             card.name,
@@ -137,6 +172,7 @@ async def import_character_profile_package(
         card,
         profile_payload,
         await _emotion_maps_for_role(runtime, card.name),
+        await _runtime_bindings_for_role(runtime, card.name),
     )
 
 
@@ -161,6 +197,8 @@ async def update_character_profile(
                 emotion_maps,
             )
 
+        await _set_runtime_bindings_from_request(runtime, card.name, request)
+
         if request.clear_model_profile_binding:
             profile_payload = await asyncio.to_thread(
                 runtime.model_profile_service.clear_role_binding,
@@ -176,12 +214,19 @@ async def update_character_profile(
             profile_payload = await asyncio.to_thread(
                 runtime.model_profile_service.list_profiles,
             )
+        profile_payload = await _activate_binding_for_current_role(
+            runtime,
+            card.name,
+            request.model_profile_id or "",
+            profile_payload,
+        )
     except ValueError as exc:
         raise _character_profile_http_exception(exc) from exc
     return _character_model_from_role_card(
         card,
         profile_payload,
         await _emotion_maps_for_role(runtime, card.name),
+        await _runtime_bindings_for_role(runtime, card.name),
     )
 
 
@@ -283,6 +328,51 @@ async def _existing_model_profile_id(runtime, profile_id: str) -> str:
     return normalized_id
 
 
+async def _runtime_bindings_for_role(runtime, role_name: str) -> dict[str, str]:
+    return await asyncio.to_thread(
+        runtime.character_profile_settings_service.runtime_bindings_for_role,
+        role_name,
+    )
+
+
+async def _set_runtime_bindings_from_request(
+    runtime,
+    role_name: str,
+    request: CreateCharacterProfileRequest | UpdateCharacterProfileRequest,
+) -> dict[str, str]:
+    request_payload = request.model_dump(exclude_unset=True)
+    updates: dict[str, str] = {}
+    for field_name in (
+        "llm_model_id",
+        "voice_profile_id",
+        "live2d_model_id",
+        "default_channel_type",
+        "default_channel_integration_id",
+    ):
+        if field_name not in request_payload:
+            continue
+        updates[field_name] = str(request_payload.get(field_name) or "").strip()
+
+    for field_name in ("llm_model_id", "voice_profile_id", "live2d_model_id"):
+        if updates.get(field_name):
+            await _require_model_profile(runtime, updates[field_name])
+
+    if not updates:
+        return await _runtime_bindings_for_role(runtime, role_name)
+    return await asyncio.to_thread(
+        runtime.character_profile_settings_service.set_runtime_bindings,
+        role_name,
+        updates,
+    )
+
+
+async def _require_model_profile(runtime, profile_id: str) -> None:
+    try:
+        await asyncio.to_thread(runtime.model_profile_service.get_profile, profile_id)
+    except ValueError as exc:
+        raise _character_profile_http_exception(exc) from exc
+
+
 async def _activate_binding_for_current_role(
     runtime,
     role_name: str,
@@ -299,16 +389,67 @@ async def _activate_binding_for_current_role(
     if current_role_name != role_name:
         return payload
 
-    activated = await asyncio.to_thread(
+    runtime_bindings = await _runtime_bindings_for_role(runtime, role_name)
+    has_split_bindings = any(
+        runtime_bindings.get(field_name)
+        for field_name in ("llm_model_id", "voice_profile_id", "live2d_model_id")
+    )
+    if not has_split_bindings:
+        normalized_profile_id = str(profile_id or "").strip()
+        if not normalized_profile_id:
+            return payload
+        activated = await asyncio.to_thread(
+            runtime.model_profile_service.activate_profile,
+            normalized_profile_id,
+        )
+        active_profile = await asyncio.to_thread(
+            runtime.model_profile_service.get_profile_for_runtime,
+            activated["active_profile_id"],
+        )
+        await runtime.apply_model_profile(active_profile)
+        return activated
+
+    bindings = payload.get("role_bindings")
+    if not isinstance(bindings, dict):
+        bindings = {}
+    base_profile_id = str(
+        profile_id
+        or bindings.get(role_name)
+        or payload.get("active_profile_id")
+        or "a",
+    )
+    llm_profile_id = str(runtime_bindings.get("llm_model_id") or base_profile_id)
+    voice_profile_id = str(runtime_bindings.get("voice_profile_id") or base_profile_id)
+    live2d_profile_id = str(runtime_bindings.get("live2d_model_id") or base_profile_id)
+    await asyncio.to_thread(
         runtime.model_profile_service.activate_profile,
-        profile_id,
+        llm_profile_id,
     )
-    active_profile = await asyncio.to_thread(
+    base_profile = await asyncio.to_thread(
         runtime.model_profile_service.get_profile_for_runtime,
-        activated["active_profile_id"],
+        base_profile_id,
     )
-    await runtime.apply_model_profile(active_profile)
-    return activated
+    llm_profile = await asyncio.to_thread(
+        runtime.model_profile_service.get_profile_for_runtime,
+        llm_profile_id,
+    )
+    voice_profile = await asyncio.to_thread(
+        runtime.model_profile_service.get_profile_for_runtime,
+        voice_profile_id,
+    )
+    live2d_profile = await asyncio.to_thread(
+        runtime.model_profile_service.get_profile_for_runtime,
+        live2d_profile_id,
+    )
+    composed_profile = dict(base_profile)
+    composed_profile["profile_id"] = llm_profile_id
+    composed_profile["label"] = str(base_profile.get("label") or role_name)
+    composed_profile["chat"] = llm_profile.get("chat", {})
+    composed_profile["tts"] = voice_profile.get("tts", {})
+    composed_profile["asr"] = voice_profile.get("asr", {})
+    composed_profile["live2d"] = live2d_profile.get("live2d", {})
+    await runtime.apply_model_profile(composed_profile)
+    return await asyncio.to_thread(runtime.model_profile_service.list_profiles)
 
 
 def _character_profiles_response(
@@ -323,6 +464,7 @@ def _character_profiles_response(
                 role,
                 profile_payload,
                 runtime.character_profile_settings_service.emotion_maps_for_role(role.name),
+                runtime.character_profile_settings_service.runtime_bindings_for_role(role.name),
             )
             for role in sorted(roles, key=lambda item: item.name)
         ],
@@ -337,18 +479,27 @@ def _character_model_from_role_card(
     card: RoleCard,
     profile_payload: dict[str, Any],
     emotion_maps: list[dict[str, str]],
+    runtime_bindings: dict[str, str] | None = None,
 ) -> CharacterProfileModel:
+    runtime_bindings = runtime_bindings or {}
     bindings = profile_payload.get("role_bindings")
     if not isinstance(bindings, dict):
         bindings = {}
     profile_id = str(bindings.get(card.name) or "")
     active_profile_id = str(profile_payload.get("active_profile_id") or "a")
     effective_profile_id = profile_id or active_profile_id
-    effective_profile = _profile_lookup(profile_payload).get(effective_profile_id, {})
-    chat = _section(effective_profile, "chat")
-    tts = _section(effective_profile, "tts")
-    asr = _section(effective_profile, "asr")
-    live2d = _section(effective_profile, "live2d")
+    profiles = _profile_lookup(profile_payload)
+    effective_profile = profiles.get(effective_profile_id, {})
+    llm_model_id = str(runtime_bindings.get("llm_model_id") or "")
+    voice_profile_id = str(runtime_bindings.get("voice_profile_id") or "")
+    live2d_model_id = str(runtime_bindings.get("live2d_model_id") or "")
+    llm_profile = profiles.get(llm_model_id or effective_profile_id, {})
+    voice_profile = profiles.get(voice_profile_id or effective_profile_id, {})
+    visual_profile = profiles.get(live2d_model_id or effective_profile_id, {})
+    chat = _section(llm_profile, "chat")
+    tts = _section(voice_profile, "tts")
+    asr = _section(voice_profile, "asr")
+    live2d = _section(visual_profile, "live2d")
 
     return CharacterProfileModel(
         name=card.name,
@@ -357,6 +508,13 @@ def _character_model_from_role_card(
         source_path=str(card.source_path) if card.source_path is not None else None,
         prompt=card.prompt,
         model_profile_id=profile_id,
+        llm_model_id=llm_model_id,
+        voice_profile_id=voice_profile_id,
+        live2d_model_id=live2d_model_id,
+        default_channel_type=str(runtime_bindings.get("default_channel_type") or ""),
+        default_channel_integration_id=str(
+            runtime_bindings.get("default_channel_integration_id") or "",
+        ),
         effective_model_profile_id=effective_profile_id,
         model_profile_label=str(effective_profile.get("label") or effective_profile_id),
         chat_model=str(chat.get("model") or ""),

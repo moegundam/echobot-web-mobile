@@ -249,6 +249,11 @@ class CharacterProfileModel(BaseModel):
     source_path: str | None = None
     prompt: str = ""
     model_profile_id: str = ""
+    llm_model_id: str = ""
+    voice_profile_id: str = ""
+    live2d_model_id: str = ""
+    default_channel_type: str = ""
+    default_channel_integration_id: str = ""
     effective_model_profile_id: str = ""
     model_profile_label: str = ""
     chat_model: str = ""
@@ -268,12 +273,22 @@ class CreateCharacterProfileRequest(BaseModel):
     name: str
     prompt: str
     model_profile_id: str = ""
+    llm_model_id: str = ""
+    voice_profile_id: str = ""
+    live2d_model_id: str = ""
+    default_channel_type: str = ""
+    default_channel_integration_id: str = ""
     emotion_maps: list[CharacterEmotionMapModel] = Field(default_factory=list)
 
 
 class UpdateCharacterProfileRequest(BaseModel):
     prompt: str | None = None
     model_profile_id: str | None = None
+    llm_model_id: str | None = None
+    voice_profile_id: str | None = None
+    live2d_model_id: str | None = None
+    default_channel_type: str | None = None
+    default_channel_integration_id: str | None = None
     clear_model_profile_binding: bool = False
     emotion_maps: list[CharacterEmotionMapModel] | None = None
 
@@ -282,6 +297,9 @@ class CharacterPackageCharacterModel(BaseModel):
     name: str
     prompt: str
     model_profile_id: str = ""
+    llm_model_id: str = ""
+    voice_profile_id: str = ""
+    live2d_model_id: str = ""
     emotion_maps: list[CharacterEmotionMapModel] = Field(default_factory=list)
 
 

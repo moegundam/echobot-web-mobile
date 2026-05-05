@@ -102,8 +102,11 @@ async def get_session_runtime_context(
     route_mode = route_mode_from_metadata(session.metadata)
     profile_payload = await _profile_payload(runtime)
     profiles = profile_lookup(profile_payload)
-    resolved_profile_id = effective_profile_id(profile_payload, role_name)
-    resolved_profile = profiles.get(resolved_profile_id)
+    base_profile_id = effective_profile_id(profile_payload, role_name)
+    runtime_bindings = await _runtime_bindings_for_role(runtime, role_name)
+    llm_profile = profiles.get(runtime_bindings.get("llm_model_id") or base_profile_id)
+    voice_profile = profiles.get(runtime_bindings.get("voice_profile_id") or base_profile_id)
+    live2d_profile = profiles.get(runtime_bindings.get("live2d_model_id") or base_profile_id)
     catalog = await _live2d_catalog(runtime)
     catalog_by_key = {
         str(item.get("selection_key") or ""): item
@@ -118,10 +121,10 @@ async def get_session_runtime_context(
         role_name=role_name,
         route_mode=route_mode,
         character=character,
-        llm_model=llm_model_from_profile(resolved_profile) if resolved_profile else None,
-        voice_profile=voice_profile_from_profile(resolved_profile) if resolved_profile else None,
-        live2d_model=live2d_model_from_profile(resolved_profile, catalog_by_key)
-        if resolved_profile
+        llm_model=llm_model_from_profile(llm_profile) if llm_profile else None,
+        voice_profile=voice_profile_from_profile(voice_profile) if voice_profile else None,
+        live2d_model=live2d_model_from_profile(live2d_profile, catalog_by_key)
+        if live2d_profile
         else None,
         channel=channel_integration_for_session(integrations, session.name),
     )
@@ -184,11 +187,19 @@ async def _character_for_role(
         bindings = {}
     bound_profile_id = str(bindings.get(role.name) or "")
     resolved_profile_id = bound_profile_id or str(profile_payload.get("active_profile_id") or "")
-    resolved_profile = profile_lookup(profile_payload).get(resolved_profile_id, {})
-    chat = _section(resolved_profile, "chat")
-    tts = _section(resolved_profile, "tts")
-    asr = _section(resolved_profile, "asr")
-    live2d = _section(resolved_profile, "live2d")
+    runtime_bindings = await _runtime_bindings_for_role(runtime, role.name)
+    profiles = profile_lookup(profile_payload)
+    resolved_profile = profiles.get(resolved_profile_id, {})
+    llm_model_id = str(runtime_bindings.get("llm_model_id") or "")
+    voice_profile_id = str(runtime_bindings.get("voice_profile_id") or "")
+    live2d_model_id = str(runtime_bindings.get("live2d_model_id") or "")
+    llm_profile = profiles.get(llm_model_id or resolved_profile_id, {})
+    voice_profile = profiles.get(voice_profile_id or resolved_profile_id, {})
+    visual_profile = profiles.get(live2d_model_id or resolved_profile_id, {})
+    chat = _section(llm_profile, "chat")
+    tts = _section(voice_profile, "tts")
+    asr = _section(voice_profile, "asr")
+    live2d = _section(visual_profile, "live2d")
     emotion_maps = await asyncio.to_thread(
         runtime.character_profile_settings_service.emotion_maps_for_role,
         role.name,
@@ -200,6 +211,13 @@ async def _character_for_role(
         source_path=str(role.source_path) if role.source_path is not None else None,
         prompt=role.prompt,
         model_profile_id=bound_profile_id,
+        llm_model_id=llm_model_id,
+        voice_profile_id=voice_profile_id,
+        live2d_model_id=live2d_model_id,
+        default_channel_type=str(runtime_bindings.get("default_channel_type") or ""),
+        default_channel_integration_id=str(
+            runtime_bindings.get("default_channel_integration_id") or "",
+        ),
         effective_model_profile_id=resolved_profile_id,
         model_profile_label=str(resolved_profile.get("label") or resolved_profile_id),
         chat_model=str(chat.get("model") or ""),
@@ -215,6 +233,15 @@ def _ensure_runtime_services_ready(runtime) -> None:
         raise HTTPException(status_code=503, detail="Session service is not ready")
     if runtime.model_profile_service is None:
         raise HTTPException(status_code=503, detail="Model profile service is not ready")
+
+
+async def _runtime_bindings_for_role(runtime, role_name: str) -> dict[str, str]:
+    if runtime.character_profile_settings_service is None:
+        return {}
+    return await asyncio.to_thread(
+        runtime.character_profile_settings_service.runtime_bindings_for_role,
+        role_name,
+    )
 
 
 def _section(profile: dict[str, Any], section_name: str) -> dict[str, Any]:

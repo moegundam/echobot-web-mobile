@@ -23,6 +23,9 @@ const DOM = {
     remove: document.getElementById("character-profile-delete"),
     name: document.getElementById("character-name"),
     modelProfile: document.getElementById("character-model-profile"),
+    llmModel: document.getElementById("character-llm-model"),
+    voiceProfile: document.getElementById("character-voice-profile"),
+    live2dProfile: document.getElementById("character-live2d-profile"),
     prompt: document.getElementById("character-prompt"),
     emotionMap: document.getElementById("character-emotion-map"),
     emotionMapAdd: document.getElementById("character-emotion-map-add"),
@@ -129,17 +132,24 @@ function renderCharacterList() {
 }
 
 function renderModelProfileOptions() {
-    DOM.modelProfile.replaceChildren();
+    renderProfileSelectOptions(DOM.modelProfile, "characters.useActiveProfile");
+    renderProfileSelectOptions(DOM.llmModel, "characters.useBaseProfile");
+    renderProfileSelectOptions(DOM.voiceProfile, "characters.useBaseProfile");
+    renderProfileSelectOptions(DOM.live2dProfile, "characters.useBaseProfile");
+}
+
+function renderProfileSelectOptions(select, emptyLabelKey) {
+    select.replaceChildren();
     const emptyOption = document.createElement("option");
     emptyOption.value = "";
-    emptyOption.textContent = i18n.t("characters.useActiveProfile");
-    DOM.modelProfile.appendChild(emptyOption);
+    emptyOption.textContent = i18n.t(emptyLabelKey);
+    select.appendChild(emptyOption);
 
     modelProfileList().forEach((profile) => {
         const option = document.createElement("option");
         option.value = profile.profile_id;
         option.textContent = `${String(profile.profile_id || "").toUpperCase()} · ${profile.label || profile.profile_id}`;
-        DOM.modelProfile.appendChild(option);
+        select.appendChild(option);
     });
 }
 
@@ -158,6 +168,12 @@ function renderSelectedCharacter() {
     DOM.prompt.disabled = state.busy || !editable;
     DOM.modelProfile.value = creating ? "" : character ? character.model_profile_id || "" : "";
     DOM.modelProfile.disabled = state.busy || (!creating && !character);
+    DOM.llmModel.value = creating ? "" : character ? character.llm_model_id || "" : "";
+    DOM.llmModel.disabled = state.busy || (!creating && !character);
+    DOM.voiceProfile.value = creating ? "" : character ? character.voice_profile_id || "" : "";
+    DOM.voiceProfile.disabled = state.busy || (!creating && !character);
+    DOM.live2dProfile.value = creating ? "" : character ? character.live2d_model_id || "" : "";
+    DOM.live2dProfile.disabled = state.busy || (!creating && !character);
     DOM.save.disabled = state.busy || (!creating && !character);
     DOM.exportPackage.disabled = state.busy || creating || !character;
     DOM.remove.disabled = state.busy || !deletable || creating;
@@ -177,6 +193,9 @@ function renderEffectiveSummary(character) {
     const rows = character
         ? [
             ["characters.effectiveProfile", character.effective_model_profile_id || ""],
+            ["characters.llmModel", character.llm_model_id || character.effective_model_profile_id || ""],
+            ["characters.voiceProfile", character.voice_profile_id || character.effective_model_profile_id || ""],
+            ["characters.live2dProfile", character.live2d_model_id || character.effective_model_profile_id || ""],
             ["models.label", character.model_profile_label || ""],
             ["models.chat", character.chat_model || ""],
             ["models.voice", character.tts_voice || ""],
@@ -203,6 +222,9 @@ async function saveSelectedCharacter() {
     const name = DOM.name.value.trim();
     const prompt = DOM.prompt.value.trim();
     const modelProfileId = DOM.modelProfile.value.trim();
+    const llmModelId = DOM.llmModel.value.trim();
+    const voiceProfileId = DOM.voiceProfile.value.trim();
+    const live2dProfileId = DOM.live2dProfile.value.trim();
     const emotionMaps = collectEmotionMaps();
     if (state.isCreating && !name) {
         setStatusKey("characters.nameRequired");
@@ -223,6 +245,9 @@ async function saveSelectedCharacter() {
                     name,
                     prompt,
                     model_profile_id: modelProfileId,
+                    llm_model_id: llmModelId,
+                    voice_profile_id: voiceProfileId,
+                    live2d_model_id: live2dProfileId,
                     emotion_maps: emotionMaps,
                 }),
             });
@@ -237,6 +262,9 @@ async function saveSelectedCharacter() {
                 body: JSON.stringify({
                     prompt: selected.editable ? prompt : undefined,
                     model_profile_id: modelProfileId || undefined,
+                    llm_model_id: llmModelId,
+                    voice_profile_id: voiceProfileId,
+                    live2d_model_id: live2dProfileId,
                     clear_model_profile_binding: !modelProfileId,
                     emotion_maps: emotionMaps,
                 }),
@@ -562,6 +590,9 @@ function characterBadge(name) {
 function profileSummary(character) {
     if (!character) {
         return "";
+    }
+    if (character.llm_model_id || character.voice_profile_id || character.live2d_model_id) {
+        return i18n.t("characters.splitProfileSummary");
     }
     if (character.model_profile_id) {
         return i18n.t("characters.boundProfile", {
