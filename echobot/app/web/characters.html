@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>EchoBot Characters</title>
-    <link rel="stylesheet" href="/web/assets/styles/shell-pages.css?v=site-public-6">
+    <link rel="stylesheet" href="/web/assets/styles/shell-pages.css?v=session-character-binding-1">
 </head>
 <body class="admin-page characters-page" data-page-title-key="characters.pageTitle">
     <main id="characters-root" class="admin-root characters-root">
@@ -100,6 +100,9 @@
                         <select id="character-default-channel-integration"></select>
                     </label>
                 </div>
+                <p class="model-profile-help-text" data-i18n-key="characters.bindingHelp">
+                    Pick a base profile for the whole character, then override LLM, voice, or Live2D only when needed. The default channel is applied when creating a new Session from this character.
+                </p>
                 <section class="model-profile-section">
                     <h3 data-i18n-key="characters.prompt">Role prompt</h3>
                     <textarea id="character-prompt" rows="14" data-i18n-placeholder-key="characters.promptPlaceholder"></textarea>
@@ -123,6 +126,6 @@
             </form>
         </section>
     </main>
-    <script type="module" src="/web/assets/characters-app.js?v=character-package-1"></script>
+    <script type="module" src="/web/assets/characters-app.js?v=session-character-binding-1"></script>
 </body>
 </html>

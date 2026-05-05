@@ -1,5 +1,5 @@
-import { initShellI18n } from "./shell-i18n.js?v=stage-context-1";
-import { initShellDisplayMode } from "./shell-display-mode.js?v=site-public-6";
+import { initShellI18n } from "./shell-i18n.js?v=session-centered-2";
+import { initShellDisplayMode } from "./shell-display-mode.js?v=session-centered-2";
 import { rememberShellSessionName } from "./shell-session-links.js?v=site-public-6";
 import {
     fetchSessionRuntimeContext,

@@ -6,7 +6,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field
 
-from ...channels import InboundMessage
+from ...channels import InboundMessage, get_channel_definition
 from ...channels.types import ChannelAddress
 from ...runtime.sessions import normalize_session_name
 from ..schemas import channel_config_payload
@@ -22,6 +22,15 @@ class DiscordWebhookMessageRequest(BaseModel):
     text: str = Field(..., max_length=8192)
     thread_id: str | None = Field(default=None, max_length=128)
     username: str = Field(default="", max_length=128)
+    session_name: str | None = Field(default=None, max_length=128)
+
+
+class LocalChannelTestMessageRequest(BaseModel):
+    chat_id: str = Field(default="local-test", max_length=128)
+    sender_id: str = Field(default="local-user", max_length=128)
+    text: str = Field(default="ping", max_length=8192)
+    thread_id: str | None = Field(default=None, max_length=128)
+    user_id: str | None = Field(default=None, max_length=128)
     session_name: str | None = Field(default=None, max_length=128)
 
 
@@ -69,6 +78,62 @@ async def smoke_channel(
         return await runtime.channel_service.smoke_channel(channel_name)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Unknown channel") from exc
+
+
+@router.post("/channels/{channel_name}/local-test-message")
+async def publish_local_channel_test_message(
+    channel_name: str,
+    request: LocalChannelTestMessageRequest,
+    runtime=Depends(get_app_runtime),
+    _admin_user: str = Depends(require_admin_user),
+) -> dict[str, Any]:
+    normalized_channel_name = str(channel_name or "").strip().lower()
+    if get_channel_definition(normalized_channel_name) is None:
+        raise HTTPException(status_code=404, detail="Unknown channel")
+    if runtime.bus is None or runtime.channel_service is None:
+        raise HTTPException(status_code=503, detail="Channel gateway is not ready")
+
+    config = await runtime.channel_service.get_config()
+    channel_config = config.get(normalized_channel_name, {}) if isinstance(config, dict) else {}
+    if not isinstance(channel_config, dict):
+        channel_config = {}
+    allow_from = [str(item) for item in channel_config.get("allow_from", []) or []]
+    if allow_from and "*" not in allow_from and request.sender_id not in allow_from:
+        raise HTTPException(status_code=403, detail="Local test sender is not allowed")
+
+    session_name = ""
+    if request.session_name:
+        try:
+            session_name = normalize_session_name(request.session_name)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    await runtime.bus.publish_inbound(
+        InboundMessage(
+            address=ChannelAddress(
+                channel=normalized_channel_name,
+                chat_id=request.chat_id,
+                thread_id=request.thread_id,
+                user_id=request.user_id,
+            ),
+            sender_id=request.sender_id,
+            text=request.text,
+            metadata={
+                "local_test": True,
+                "session_name": session_name,
+            },
+        )
+    )
+    return {
+        "accepted": True,
+        "channel": normalized_channel_name,
+        "session_name": session_name,
+        "external_delivery": bool(
+            runtime.channel_status()
+            .get(normalized_channel_name, {})
+            .get("running", False)
+        ),
+    }
 
 
 @router.post("/channels/discord/webhook")

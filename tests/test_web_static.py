@@ -219,6 +219,9 @@ class WebStaticAssetTests(unittest.TestCase):
             "sessions.rename",
             "sessions.delete",
             "sessions.deleteConfirm",
+            "sessions.roleMeta",
+            "sessions.routeMeta",
+            "sessions.channelMeta",
         ):
             self.assertGreaterEqual(i18n_js.count(f'"{key}"'), 3)
 
@@ -244,7 +247,7 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn('id="stage-live2d-profile-label"', stage_html)
         self.assertIn('id="stage-channel-label"', stage_html)
         self.assertIn('"/api/sessions"', messenger_js)
-        self.assertNotIn('"/api/channels/stage-targets"', messenger_js)
+        self.assertIn('"/api/channels/stage-targets"', messenger_js)
         self.assertIn('"/api/channels/stage-targets"', stage_js)
         self.assertIn("/runtime-context", runtime_context_js)
         self.assertIn("fetchSessionRuntimeContext", messenger_js)
@@ -335,6 +338,7 @@ class WebStaticAssetTests(unittest.TestCase):
             "runtimeContext.internalWeb",
             "messenger.session",
             "messenger.sessionFallback",
+            "messenger.channelTargetOption",
             "messenger.sessionLoadFailed",
             "messenger.runtimeContextUnavailable",
             "messenger.uploadFile",
@@ -402,6 +406,7 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn("renderChannelIntegrationOptions", characters_js)
         self.assertIn("syncChannelTypeFromIntegration", characters_js)
         self.assertIn('"characters.heading"', i18n_js)
+        self.assertIn('"characters.bindingHelp"', i18n_js)
         self.assertIn('"characters.modelProfile"', i18n_js)
         self.assertIn('"characters.llmModel"', i18n_js)
         self.assertIn('"characters.voiceProfile"', i18n_js)
@@ -497,6 +502,9 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn('/api/channels/config', channels_js)
         self.assertIn('/api/channels/${encodeURIComponent(channelName)}/smoke', channels_js)
         self.assertIn("buildChannelHints", channels_js)
+        self.assertIn("buildLocalTestControls", channels_js)
+        self.assertIn("runLocalE2ETest", channels_js)
+        self.assertIn("/local-test-message", channels_js)
         self.assertIn("POST /api/channels/discord/webhook", channels_js)
         self.assertIn("X-EchoBot-Discord-Secret", channels_js)
         self.assertIn('i18n.t("channels.saveChanges")', channels_js)
@@ -527,6 +535,16 @@ class WebStaticAssetTests(unittest.TestCase):
             "channels.fieldAppId",
             "channels.fieldApplicationId",
             "channels.fieldGuildId",
+            "channels.localTestTitle",
+            "channels.localTestHelp",
+            "channels.localSender",
+            "channels.localChat",
+            "channels.localSession",
+            "channels.localText",
+            "channels.localTestRun",
+            "channels.localTestRunning",
+            "channels.localTestAccepted",
+            "channels.localTestFailed",
             "channels.secretConfigured",
             "channels.secretNotConfigured",
             "channels.saveChanges",
@@ -542,6 +560,12 @@ class WebStaticAssetTests(unittest.TestCase):
             "channels.ok",
             "channels.fail",
             "channels.unknown",
+            "channels.web",
+            "channels.telegram",
+            "channels.discord",
+            "channels.line",
+            "channels.whatsapp",
+            "channels.qq",
         ]
         for key in required_keys:
             self.assertGreaterEqual(i18n_js.count(f'"{key}"'), 3)

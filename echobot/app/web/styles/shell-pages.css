@@ -851,6 +851,26 @@ textarea {
     min-width: 0;
 }
 
+.channels-local-test {
+    display: grid;
+    gap: 10px;
+    min-width: 0;
+    padding: 10px;
+    border: 1px solid var(--shell-line);
+    border-radius: 8px;
+    background: rgba(255, 253, 248, 0.72);
+}
+
+.channels-local-test h4 {
+    margin: 0;
+    font-size: 0.92rem;
+    line-height: 1.25;
+}
+
+.channels-local-test button {
+    justify-self: start;
+}
+
 .guide-content {
     display: grid;
     gap: 12px;

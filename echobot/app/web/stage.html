@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>EchoBot Stage</title>
-    <link rel="stylesheet" href="/web/assets/styles/shell-pages.css?v=site-public-6">
+    <link rel="stylesheet" href="/web/assets/styles/shell-pages.css?v=stage-session-context-1">
 </head>
 <body class="stage-page" data-page-title-key="stage.pageTitle">
     <main id="stage-root" class="stage-root">
@@ -20,21 +20,21 @@
                         <select id="stage-session-select" autocomplete="off"></select>
                     </label>
                 </div>
-                <button id="stage-audio-enable" class="stage-audio-button" type="button">
+                <button id="stage-audio-enable" class="stage-audio-button" type="button" data-i18n-key="stage.audio.enable">
                     Enable audio
                 </button>
             </div>
             <div id="stage-canvas-host" class="stage-canvas-host"></div>
             <div class="stage-subtitle-panel">
-                <p id="stage-subtitle" class="stage-subtitle">Waiting for stage events...</p>
+                <p id="stage-subtitle" class="stage-subtitle" data-i18n-key="stage.waiting">Waiting for stage events...</p>
                 <div class="stage-meta-row">
-                    <span id="stage-session-label">session: default</span>
-                    <span id="stage-role-label">Role: default</span>
-                    <span id="stage-model-profile-label">Model: not set</span>
-                    <span id="stage-voice-profile-label">Voice: not set</span>
-                    <span id="stage-live2d-profile-label">Live2D: not set</span>
-                    <span id="stage-channel-label">Channel: web</span>
-                    <span id="stage-status">connecting</span>
+                    <span id="stage-session-label" data-i18n-key="stage.sessionLabel">session: default</span>
+                    <span id="stage-role-label" data-i18n-key="stage.roleLabel">Role: default</span>
+                    <span id="stage-model-profile-label" data-i18n-key="stage.modelProfileLabel">Model: not set</span>
+                    <span id="stage-voice-profile-label" data-i18n-key="stage.voiceProfileLabel">Voice: not set</span>
+                    <span id="stage-live2d-profile-label" data-i18n-key="stage.live2dProfileLabel">Live2D: not set</span>
+                    <span id="stage-channel-label" data-i18n-key="stage.channelLabel">Channel: web</span>
+                    <span id="stage-status" data-i18n-key="stage.status.connecting">connecting</span>
                 </div>
             </div>
         </section>
@@ -42,6 +42,6 @@
     <script src="/web/assets/vendor/pixi.min.js"></script>
     <script src="/web/assets/vendor/live2dcubismcore.min.js"></script>
     <script src="/web/assets/vendor/cubism4.min.js"></script>
-    <script type="module" src="/web/assets/stage-app.js?v=stage-live2d-session-1"></script>
+    <script type="module" src="/web/assets/stage-app.js?v=stage-live2d-session-2"></script>
 </body>
 </html>

@@ -1,5 +1,5 @@
-import { initShellI18n } from "./shell-i18n.js?v=admin-sessions-1";
-import { initShellDisplayMode } from "./shell-display-mode.js?v=admin-sessions-1";
+import { initShellI18n } from "./shell-i18n.js?v=session-centered-2";
+import { initShellDisplayMode } from "./shell-display-mode.js?v=session-centered-2";
 import {
     initShellSessionLinks,
     rememberShellSessionName,
@@ -52,12 +52,24 @@ DOM.createForm?.addEventListener("submit", (event) => {
     event.preventDefault();
     void createSession();
 });
+DOM.createCharacter?.addEventListener("change", () => {
+    applyCharacterDefaultsToSessionForm(DOM.createCharacter, {
+        channelType: DOM.createChannelType,
+        channelIntegration: DOM.createChannelIntegration,
+    });
+});
 DOM.createChannelIntegration?.addEventListener("change", () => {
     syncChannelTypeFromIntegration(DOM.createChannelIntegration, DOM.createChannelType);
 });
 DOM.editForm?.addEventListener("submit", (event) => {
     event.preventDefault();
     void saveSessionBinding();
+});
+DOM.editCharacter?.addEventListener("change", () => {
+    applyCharacterDefaultsToSessionForm(DOM.editCharacter, {
+        channelType: DOM.editChannelType,
+        channelIntegration: DOM.editChannelIntegration,
+    });
 });
 DOM.editChannelIntegration?.addEventListener("change", () => {
     syncChannelTypeFromIntegration(DOM.editChannelIntegration, DOM.editChannelType);
@@ -181,12 +193,12 @@ function renderChannelTypeOptions(select) {
     select.replaceChildren();
     const options = [
         ["", i18n.t("sessions.noChannelBinding")],
-        ["web", "Web"],
-        ["telegram", "Telegram"],
-        ["discord", "Discord"],
-        ["line", "LINE"],
-        ["whatsapp", "WhatsApp"],
-        ["qq", "QQ"],
+        ["web", i18n.t("channels.web")],
+        ["telegram", i18n.t("channels.telegram")],
+        ["discord", i18n.t("channels.discord")],
+        ["line", i18n.t("channels.line")],
+        ["whatsapp", i18n.t("channels.whatsapp")],
+        ["qq", i18n.t("channels.qq")],
     ];
     const existingTypes = new Set(options.map(([value]) => value));
     state.channelIntegrations.forEach((integration) => {
@@ -246,9 +258,20 @@ function buildSessionCard(session) {
 
     const meta = document.createElement("p");
     meta.className = "session-admin-meta";
-    meta.textContent = i18n.t("sessions.updatedAt", {
-        value: formatTimestamp(session.updated_at) || "-",
-    });
+    meta.textContent = [
+        i18n.t("sessions.updatedAt", {
+            value: formatTimestamp(session.updated_at) || "-",
+        }),
+        i18n.t("sessions.roleMeta", {
+            role: String(session.role_name || "default"),
+        }),
+        i18n.t("sessions.routeMeta", {
+            route: String(session.route_mode || "chat_only"),
+        }),
+        i18n.t("sessions.channelMeta", {
+            channel: sessionChannelLabel(session),
+        }),
+    ].join(" · ");
     card.appendChild(meta);
 
     const actions = document.createElement("div");
@@ -346,6 +369,28 @@ function syncChannelTypeFromIntegration(integrationSelect, channelTypeSelect) {
     }
 }
 
+function applyCharacterDefaultsToSessionForm(characterSelect, targets) {
+    const characterName = String(
+        (characterSelect && characterSelect.value) || "",
+    ).trim();
+    const character = state.characters.find(
+        (item) => String(item.name || "") === characterName,
+    );
+    if (!character) {
+        return;
+    }
+    const channelType = String(character.default_channel_type || "").trim();
+    const channelIntegrationId = String(
+        character.default_channel_integration_id || "",
+    ).trim();
+    if (channelType && targets.channelType) {
+        targets.channelType.value = channelType;
+    }
+    if (channelIntegrationId && targets.channelIntegration) {
+        targets.channelIntegration.value = channelIntegrationId;
+    }
+}
+
 function channelLabel(integration) {
     const name = String(integration && integration.name || integration && integration.id || "");
     if (integration && integration.enabled === false) {
@@ -355,6 +400,21 @@ function channelLabel(integration) {
         return `${name} · ${i18n.t("channelTargets.notRunning")}`;
     }
     return name;
+}
+
+function sessionChannelLabel(session) {
+    const integrationId = String(session.channel_integration_id || "").trim();
+    const channelType = String(session.channel_type || "").trim();
+    if (integrationId) {
+        const integration = state.channelIntegrations.find(
+            (item) => String(item.id || "") === integrationId,
+        );
+        return integration ? channelLabel(integration) : integrationId;
+    }
+    if (channelType) {
+        return channelType;
+    }
+    return i18n.t("sessions.noChannelBinding");
 }
 
 function normalizeRouteMode(routeMode) {

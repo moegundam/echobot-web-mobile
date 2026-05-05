@@ -1,5 +1,5 @@
-import { initShellI18n } from "./shell-i18n.js?v=admin-boundary-1";
-import { initShellDisplayMode } from "./shell-display-mode.js?v=site-public-6";
+import { initShellI18n } from "./shell-i18n.js?v=session-centered-2";
+import { initShellDisplayMode } from "./shell-display-mode.js?v=session-centered-2";
 
 const state = {
     payload: null,
@@ -178,7 +178,7 @@ function renderSelectedCharacter() {
         ? i18n.t("characters.newCharacter")
         : character ? character.name : i18n.t("characters.heading");
     DOM.name.value = creating ? "" : character ? character.name : "";
-    DOM.name.disabled = state.busy || !creating;
+    DOM.name.disabled = state.busy || (!creating && !editable);
     DOM.prompt.value = creating ? "" : character ? character.prompt || "" : "";
     DOM.prompt.disabled = state.busy || !editable;
     DOM.modelProfile.value = creating ? "" : character ? character.model_profile_id || "" : "";
@@ -255,6 +255,10 @@ async function saveSelectedCharacter() {
         setStatusKey("characters.nameRequired");
         return;
     }
+    if (!state.isCreating && selectedCharacter()?.editable && !name) {
+        setStatusKey("characters.nameRequired");
+        return;
+    }
     if (!prompt && (state.isCreating || selectedCharacter()?.editable)) {
         setStatusKey("characters.promptRequired");
         return;
@@ -284,9 +288,10 @@ async function saveSelectedCharacter() {
             if (!selected) {
                 return;
             }
-            await requestJson(`/api/character-profiles/${encodeURIComponent(selected.name)}`, {
+            const updated = await requestJson(`/api/character-profiles/${encodeURIComponent(selected.name)}`, {
                 method: "PATCH",
                 body: JSON.stringify({
+                    name: selected.editable ? name : undefined,
                     prompt: selected.editable ? prompt : undefined,
                     model_profile_id: modelProfileId || undefined,
                     llm_model_id: llmModelId,
@@ -298,6 +303,7 @@ async function saveSelectedCharacter() {
                     emotion_maps: emotionMaps,
                 }),
             });
+            state.selectedName = updated.name || selected.name;
         }
         await load();
         setStatusKey("characters.saved");
@@ -404,12 +410,12 @@ function renderChannelTypeOptions() {
     DOM.defaultChannelType.replaceChildren();
     const options = [
         ["", i18n.t("characters.noDefaultChannel")],
-        ["web", "Web"],
-        ["telegram", "Telegram"],
-        ["discord", "Discord"],
-        ["line", "LINE"],
-        ["whatsapp", "WhatsApp"],
-        ["qq", "QQ"],
+        ["web", i18n.t("channels.web")],
+        ["telegram", i18n.t("channels.telegram")],
+        ["discord", i18n.t("channels.discord")],
+        ["line", i18n.t("channels.line")],
+        ["whatsapp", i18n.t("channels.whatsapp")],
+        ["qq", i18n.t("channels.qq")],
     ];
     const existingTypes = new Set(options.map(([value]) => value));
     channelIntegrationList().forEach((integration) => {

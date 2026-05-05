@@ -25,6 +25,7 @@ class SessionInfo:
     name: str
     message_count: int
     updated_at: str
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class SessionStore:
@@ -218,6 +219,7 @@ class SessionStore:
                         name=str(metadata.get("name", path.stem)),
                         message_count=message_count,
                         updated_at=str(metadata.get("updated_at", "")),
+                        metadata=_read_metadata(metadata.get("metadata")),
                     )
                 )
 

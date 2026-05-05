@@ -5,7 +5,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from ...orchestration import RoleCard
+from ...orchestration import RoleCard, normalize_role_name
 from ..schemas import (
     CharacterPackageCharacterModel,
     CharacterProfileModel,
@@ -196,7 +196,35 @@ async def update_character_profile(
     _ensure_character_services_ready(runtime)
     try:
         card = await runtime.role_service.get_role(role_name)
-        if request.prompt is not None:
+        if request.name is not None and not str(request.name or "").strip():
+            raise ValueError("Role name cannot be empty")
+
+        requested_name = str(request.name or "").strip()
+        if requested_name and normalize_role_name(requested_name) != card.name:
+            old_role_name = card.name
+            existing_emotion_maps = await _emotion_maps_for_role(runtime, old_role_name)
+            existing_runtime_bindings = await _runtime_bindings_for_role(
+                runtime,
+                old_role_name,
+            )
+            existing_model_profile_id = await asyncio.to_thread(
+                runtime.model_profile_service.profile_id_for_role,
+                old_role_name,
+            )
+            card = await runtime.role_service.rename_role(
+                old_role_name,
+                requested_name,
+                prompt=request.prompt,
+            )
+            await _migrate_character_settings(
+                runtime,
+                old_role_name=old_role_name,
+                new_role_name=card.name,
+                emotion_maps=existing_emotion_maps,
+                runtime_bindings=existing_runtime_bindings,
+                model_profile_id=existing_model_profile_id,
+            )
+        elif request.prompt is not None:
             card = await runtime.role_service.update_role(card.name, request.prompt)
 
         if request.emotion_maps is not None:
@@ -374,6 +402,37 @@ async def _set_runtime_bindings_from_request(
         role_name,
         updates,
     )
+
+
+async def _migrate_character_settings(
+    runtime,
+    *,
+    old_role_name: str,
+    new_role_name: str,
+    emotion_maps: list[dict[str, str]],
+    runtime_bindings: dict[str, str],
+    model_profile_id: str,
+) -> None:
+    await asyncio.to_thread(
+        runtime.character_profile_settings_service.set_emotion_maps,
+        new_role_name,
+        emotion_maps,
+    )
+    await asyncio.to_thread(
+        runtime.character_profile_settings_service.set_runtime_bindings,
+        new_role_name,
+        runtime_bindings,
+    )
+    await asyncio.to_thread(
+        runtime.character_profile_settings_service.clear_role,
+        old_role_name,
+    )
+    await asyncio.to_thread(
+        runtime.model_profile_service.clear_role_binding,
+        old_role_name,
+    )
+    if model_profile_id:
+        await _set_or_clear_binding(runtime, new_role_name, model_profile_id)
 
 
 async def _require_model_profile(runtime, profile_id: str) -> None:

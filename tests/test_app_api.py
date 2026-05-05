@@ -1331,6 +1331,72 @@ class AppApiTests(unittest.TestCase):
             self.assertEqual("pong", detail["history"][1]["content"])
             self.assertEqual(["pong"], [item.text for item in history])
 
+    def test_local_channel_e2e_test_routes_to_bound_session_and_stage(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            app = create_app(
+                runtime_options=RuntimeOptions(
+                    workspace=workspace,
+                    no_tools=True,
+                    no_skills=True,
+                    no_memory=True,
+                    no_heartbeat=True,
+                ),
+                channel_config_path=workspace / ".echobot" / "channels.json",
+                context_builder=build_test_context,
+            )
+
+            with TestClient(app) as client:
+                client.put(
+                    "/api/channels/config",
+                    json={
+                        "discord": {
+                            "enabled": False,
+                            "allow_from": ["discord-user"],
+                            "mirror_to_stage": True,
+                            "stage_session_name": "legacy-discord-stage",
+                        },
+                    },
+                )
+                client.post(
+                    "/api/sessions",
+                    json={
+                        "name": "Ops Room",
+                        "channel_type": "discord",
+                        "channel_integration_id": "discord",
+                    },
+                )
+                rejected = client.post(
+                    "/api/channels/discord/local-test-message",
+                    json={
+                        "chat_id": "channel-1",
+                        "sender_id": "other-user",
+                        "text": "ping",
+                    },
+                )
+                accepted = client.post(
+                    "/api/channels/discord/local-test-message",
+                    json={
+                        "chat_id": "channel-1",
+                        "sender_id": "discord-user",
+                        "text": "ping",
+                    },
+                )
+                detail = _wait_for_session_messages(client, "ops-room", 2)
+                runtime = app.state.runtime
+                history = runtime.stage_event_broker.history("default", "ops-room")
+
+            self.assertEqual(403, rejected.status_code)
+            self.assertEqual(200, accepted.status_code)
+            self.assertTrue(accepted.json()["accepted"])
+            self.assertEqual("discord", accepted.json()["channel"])
+            self.assertFalse(accepted.json()["external_delivery"])
+            self.assertEqual(2, len(detail["history"]))
+            self.assertEqual("ping", detail["history"][0]["content"])
+            self.assertEqual("pong", detail["history"][1]["content"])
+            self.assertEqual(["pong"], [item.text for item in history])
+            self.assertEqual(["discord"], [item.source for item in history])
+
     def test_channel_smoke_requires_admin_allowlist(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             workspace = Path(temp_dir)
@@ -2814,6 +2880,108 @@ class AppApiTests(unittest.TestCase):
                 [item["name"] for item in listed_after_delete.json()["characters"]],
             )
 
+    def test_character_profile_rename_preserves_bindings_and_session_role(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            app = create_app(
+                runtime_options=RuntimeOptions(
+                    workspace=workspace,
+                    no_tools=True,
+                    no_skills=True,
+                    no_memory=True,
+                    no_heartbeat=True,
+                ),
+                channel_config_path=workspace / ".echobot" / "channels.json",
+                context_builder=build_test_context,
+            )
+
+            old_role_file = workspace / ".echobot" / "roles" / "old-host.md"
+            new_role_file = workspace / ".echobot" / "roles" / "renamed-host.md"
+
+            with TestClient(app) as client:
+                client.patch(
+                    "/api/model-profiles/b",
+                    json={
+                        "label": "Rename LLM",
+                        "chat": {
+                            "provider": "private-litellm",
+                            "model": "rename-chat",
+                            "base_url": "http://rename.test/v1",
+                        },
+                    },
+                )
+                created = client.post(
+                    "/api/character-profiles",
+                    json={
+                        "name": "Old Host",
+                        "prompt": "# Old Host\n\nSpeak clearly.",
+                        "model_profile_id": "b",
+                        "llm_model_id": "b",
+                        "default_channel_type": "telegram",
+                        "default_channel_integration_id": "telegram",
+                        "emotion_maps": [
+                            {
+                                "emotion": "joy",
+                                "expression": "smile.exp3.json",
+                                "motion": "wave.motion3.json",
+                            },
+                        ],
+                    },
+                )
+                session = client.post(
+                    "/api/sessions",
+                    json={
+                        "name": "Rename Session",
+                        "role_name": "Old Host",
+                    },
+                )
+                renamed = client.patch(
+                    "/api/character-profiles/old-host",
+                    json={
+                        "name": "Renamed Host",
+                        "prompt": "# Renamed Host\n\nKeep the old bindings.",
+                    },
+                )
+                old_detail = client.get("/api/character-profiles/old-host")
+                new_detail = client.get("/api/character-profiles/renamed-host")
+                session_detail = client.get("/api/sessions/rename-session")
+                runtime_context = client.get("/api/sessions/rename-session/runtime-context")
+
+            self.assertEqual(200, created.status_code)
+            self.assertEqual(200, session.status_code)
+            self.assertTrue(str(created.json()["source_path"]).endswith("old-host.md"))
+
+            self.assertEqual(200, renamed.status_code)
+            self.assertEqual("renamed-host", renamed.json()["name"])
+            self.assertEqual("# Renamed Host\n\nKeep the old bindings.", renamed.json()["prompt"])
+            self.assertEqual("b", renamed.json()["model_profile_id"])
+            self.assertEqual("b", renamed.json()["llm_model_id"])
+            self.assertEqual("telegram", renamed.json()["default_channel_type"])
+            self.assertEqual("telegram", renamed.json()["default_channel_integration_id"])
+            self.assertEqual(
+                [
+                    {
+                        "emotion": "joy",
+                        "expression": "smile.exp3.json",
+                        "motion": "wave.motion3.json",
+                    },
+                ],
+                renamed.json()["emotion_maps"],
+            )
+            self.assertEqual(404, old_detail.status_code)
+            self.assertEqual(200, new_detail.status_code)
+            self.assertEqual("renamed-host", new_detail.json()["name"])
+            self.assertFalse(old_role_file.exists())
+            self.assertTrue(new_role_file.exists())
+
+            self.assertEqual(200, session_detail.status_code)
+            self.assertEqual("renamed-host", session_detail.json()["role_name"])
+            self.assertEqual("telegram", session_detail.json()["channel_integration_id"])
+
+            self.assertEqual(200, runtime_context.status_code)
+            self.assertEqual("renamed-host", runtime_context.json()["role_name"])
+            self.assertEqual("rename-chat", runtime_context.json()["llm_model"]["model"])
+
     def test_character_profile_package_export_import_and_redacts_secrets(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             workspace = Path(temp_dir)
@@ -3602,6 +3770,15 @@ class AppApiTests(unittest.TestCase):
                         "prompt": "# Session Host\n\nOperate this session.",
                     },
                 )
+                character = client.post(
+                    "/api/character-profiles",
+                    json={
+                        "name": "Telegram Host",
+                        "prompt": "# Telegram Host\n\nUse Telegram by default.",
+                        "default_channel_type": "telegram",
+                        "default_channel_integration_id": "telegram",
+                    },
+                )
                 client.put(
                     "/api/channels/config",
                     json={
@@ -3614,6 +3791,15 @@ class AppApiTests(unittest.TestCase):
                         },
                     },
                 )
+                default_bound = client.post(
+                    "/api/sessions",
+                    json={
+                        "name": "Character Default Session",
+                        "role_name": "Telegram Host",
+                        "route_mode": "chat_only",
+                    },
+                )
+                listed = client.get("/api/sessions")
                 created = client.post(
                     "/api/sessions",
                     json={
@@ -3628,6 +3814,17 @@ class AppApiTests(unittest.TestCase):
                 context = client.get("/api/sessions/live-session/runtime-context")
 
             self.assertEqual(200, role.status_code)
+            self.assertEqual(200, character.status_code)
+            self.assertEqual(200, default_bound.status_code)
+            self.assertEqual("character-default-session", default_bound.json()["name"])
+            self.assertEqual("telegram-host", default_bound.json()["role_name"])
+            self.assertEqual("telegram", default_bound.json()["channel_type"])
+            self.assertEqual("telegram", default_bound.json()["channel_integration_id"])
+            default_summary = next(
+                item for item in listed.json() if item["name"] == "character-default-session"
+            )
+            self.assertEqual("telegram-host", default_summary["role_name"])
+            self.assertEqual("telegram", default_summary["channel_integration_id"])
             self.assertEqual(200, created.status_code)
             self.assertEqual("live-session", created.json()["name"])
             self.assertEqual("session-host", created.json()["role_name"])

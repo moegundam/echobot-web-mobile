@@ -1,88 +1,102 @@
-# EchoBot Web Site Structure - 2026-05-02
+# EchoBot Web Site Structure - 2026-05-05
 
 ## 中文版
 
 ### 目的
 
-本文件固定 EchoBot Web 入口、頁面責任、`/console` 內部分區、Admin 子頁面與 API namespace 邊界。目標是讓後續加入模型設定、Open WebUI、通訊平台與本地模型服務時，不把所有能力塞回單一頁面。
+建立一套以 Session 為核心的操作理解：先完成資源設定，再綁定角色，最後透過 `Console`、`Messenger`、`Stage` 做 session 測試。`Channels` 只負責進入口，不是核心控制面；Open WebUI bridge 是操作員工具接口。
+
+### Session 流程
+
+1. Admin 設定 LLM：到 `/admin/models` 建立可用的 LLM profile。
+2. Admin 設定 Voice：到 `/admin/voice-models` 建立 STT/TTS profile。
+3. Admin 設定 Live2D：到 `/admin/live2d` 建立視覺 profile。
+4. Admin 角色綁定：到 `/admin/characters` 將 LLM/Voice/Live2D 綁到同一角色設定。
+5. Session 測試：到 `/admin/sessions` 建立/選擇 session，接著到 `/console` 選角色與可選 channel，最後用 `/messenger?session_name=<name>` 與 `/stage?session_name=<name>` 驗證。
+6. 通道狀態確認：`/admin/channels` 僅做入口管理， Telegram / Discord 為目前可測試通道；LINE、WhatsApp、QQ 仍規劃中。
+7. Open WebUI bridge：在 `/admin/openwebui` 僅作為操作員工具接口設定與狀態檢視。
 
 ### 第一層頁面
 
 | 層級 | Route | 頁面責任 | 不應承擔 |
 |---|---|---|---|
-| 前台 | `/stage?session_name=<name>` | 純顯示角色、字幕、TTS、Live2D lip sync，接收 stage event 的 emotion/expression/motion，並可選已設定通訊平台 target | 不放設定、不做工具操作 |
-| 通訊 | `/messenger?session_name=<name>` | 輕量聊天入口，可從 Telegram/Discord 等已設定 target 選擇前台 session，將最終回覆與可選 stage directive 推到 Stage | 預設不直接觸發工具型 Agent |
-| 中台 | `/console` | 操作員即時控制台，處理 session、角色卡、ASR/TTS、Live2D、jobs、CRON、HEARTBEAT | 不當文件庫或長期設定索引 |
-| 舊 alias | `/web` | 舊入口，等價於 `/console` | 不新增新功能 |
-| 後台 | `/admin` | 受保護索引、health、docs、設定與文件入口 | 不承擔即時舞台操作 |
+| 前台 | `/stage?session_name=<name>` | 單一 session 的角色顯示、字幕、TTS、Live2D lip sync（結果輸出） | 不做即時模型/角色控制 |
+| 通訊 | `/messenger?session_name=<name>` | 輕量聊天輸入；將最終回覆同步到 Stage | 不承擔 Console 的即時控制 |
+| 中台 | `/console` | 會話層即時操作台：角色卡、模型、語音、Live2D、runtime 切換 | 不放設計文件與長期設定索引 |
+| 後台 | `/admin` | 受保護入口：模型/語音/Live2D、角色、通道、文件與設置 | 不做即時對話控制 |
 
-### `/console` 內部分區
+### `/console` 內部
 
 | 分區 | 內容 | 目的 |
 |---|---|---|
-| Stage panel | 連線狀態、session badge、active model profile、語言/顯示切換、Live2D stage、Live2D drawer | 操作員即時看到角色狀態 |
-| 控制抽屜 | session list、role card list/editor | 切換或維護目前操作上下文 |
-| Runtime settings | route mode、provider safety、ASR、TTS、Live2D、stage assets、CRON、HEARTBEAT | 改變目前 runtime 行為 |
-| Conversation area | transcript、agent trace、attachments、microphone、send controls | 執行目前 session 的對話與工作 |
+| Session panel | 連線狀態、session badge、角色/模型狀態、語言、Live2D 顯示 | 讓操作員看到會話目前狀態 |
+| Control drawers | session 清單、角色卡選擇 | 切換當前會話控制上下文 |
+| Settings groups | route mode、provider 切換、ASR、TTS、Live2D、CRON、HEARTBEAT | 控制當前 session 的執行行為 |
+| Conversation area | transcript、attachments、麥克風、發送 | 驗證 session 內訊息流程 |
 
 ### Admin 子頁面
 
 | Route | 類型 | 責任 |
 |---|---|---|
-| `/admin/structure` | 資訊架構 | 頁面地圖、Console 分區、API namespace 分組 |
-| `/admin/guide` | Runbook | 操作方式、預期成果、故障跡象、排除流程 |
-| `/admin/characters` | 角色設定 | 角色 prompt、模型 profile 綁定、TTS/ASR/Live2D 摘要、emotion-to-expression/motion map、單角色 package 匯入/匯出 |
-| `/admin/models` | 設定頁 | 預設 A-E 並可持續新增的模型 profile、API key、地端模型 base URL |
-| `/admin/channels` | 通訊平台 | Telegram / Discord 設定、Stage 前台同步、smoke readiness，並保留 QQ/LINE/WhatsApp gateway 邊界 |
-| `/admin/openwebui` | Bridge 設定 | Open WebUI narrow tool bridge 狀態與接線說明 |
+| `/admin/structure` | 架構文件 | 頁面地圖、Console 分區、API namespace |
+| `/admin/guide` | 操作說明 | Session 流程與對應檢核 |
+| `/admin/sessions` | 會話維運 | 會話建立/重命名/刪除與進入 Console |
+| `/admin/models` | 模型設定 | LLM profile 管理 |
+| `/admin/voice-models` | 語音設定 | STT/TTS profile 管理 |
+| `/admin/live2d` | 視覺設定 | Live2D 目錄與視覺 profile 管理 |
+| `/admin/characters` | 角色設定 | 角色綁定 LLM/Voice/Live2D |
+| `/admin/channels` | 通道入口 | Telegram/Discord 測試設定；LINE/WhatsApp/QQ 規劃中 |
+| `/admin/openwebui` | 工具接口 | Open WebUI bridge 接線與工具白名單 |
 
 ### API 分組
 
-| Namespace | 對應頁面 | 責任 |
+| Namespace | 對應頁面 | 職責 |
 |---|---|---|
-| `/api/web/*` | `/console` | Web config、runtime、Live2D、stage backgrounds、TTS、ASR/WebSocket |
-| `/api/chat*` | `/console`、`/messenger` | chat、stream、jobs、trace、cancel/retry |
-| `/api/sessions*` | `/console`、`/messenger`、`/stage` | session lifecycle 與 current session |
-| `/api/stage/events` | `/stage`、`/messenger` | user/session-scoped stage event publish 與 SSE subscribe；支援字幕、`character_state`、emotion、expression、motion，並可依 session 角色補上 emotion map |
-| `/api/character-profiles*` | `/admin/characters` | 角色 prompt、模型 profile 綁定、emotion map 與單角色 package 匯入/匯出的聚合 API |
-| `/api/model-profiles*` | `/admin/models`、`/console` | per-user model profile CRUD、啟用與 runtime apply |
-| `/api/openwebui/*` | `/admin/openwebui`、Open WebUI | bearer-token bridge 與窄 OpenAPI tools |
-| `/api/channels/*` | `/admin/channels` | 外部通訊平台設定、Stage 同步設定、狀態與 admin-gated smoke checks |
-| `/api/roles*`、`/api/attachments*`、`/api/cron*`、`/api/heartbeat*` | `/console` | 支援角色卡、檔案、排程與週期任務 |
+| `/api/web/*` | `/console` | Web config、runtime、Live2D、TTS、ASR、WebSocket |
+| `/api/chat*` | `/console`、`/messenger` | 對話、stream、jobs、trace |
+| `/api/sessions*` | `/console`、`/messenger`、`/stage` | session lifecycle 與當前 session |
+| `/api/stage/events` | `/stage`、`/messenger` | session-scoped 字幕與舞台事件推送 |
+| `/api/character-profiles*` | `/admin/characters` | 角色定義、prompt、角色綁定 |
+| `/api/model-profiles*` | `/admin/models`、`/console` | model profile CRUD 與啟用 |
+| `/api/voice-models` | `/admin/voice-models` | STT/TTS profile 管理 |
+| `/api/openwebui/*` | `/admin/openwebui`、Open WebUI | 操作員工具 API bridge |
+| `/api/channels/*` | `/admin/channels` | 通道設定、狀態與 smoke 準備 |
+| `/api/roles*`、`/api/attachments*`、`/api/cron*`、`/api/heartbeat*` | `/console` | 角色卡、檔案、排程、HEARTBEAT |
 
-### Route 規則
+### 規則
 
-- 新增即時操作能力時，優先放 `/console`，並維持目前 session scope。
-- 新增長期設定或文件時，放 `/admin/<topic>`。
-- 新增展示能力時，優先放 `/stage`，但 Stage 不取得設定權限。
-- 新增外部通訊平台時，先建立 `/admin/channels` 設定頁，再接 runtime adapter；正式互動入口的 assistant 回覆預設要可同步到 `/stage`。
-- `/web` 僅保留相容；新文件與導覽以 `/console` 為 canonical route。
+- Session-based 操作保持 `/admin`（設定）與 `/console`（即時操作）分離；`Messenger`/`Stage`僅作消息入口與輸出。
+- 通道是進入口，不是核心流程；先用 Telegram/Discord 驗證，其他平台暫停在規劃清單。
+- Open WebUI bridge 只在需要工具接口時使用，與一般會話測試路徑分離。
 
 ### Site Map
 
 ```mermaid
 flowchart TD
     Root["/ API identity"] --> Docs["/docs /redoc /openapi.json"]
-    Root --> Console["/console canonical operator console"]
+    Root --> Console["/console"]
     Root --> WebAlias["/web legacy alias"]
-    Root --> Stage["/stage front display"]
-    Root --> Messenger["/messenger chat entry"]
-    Root --> Admin["/admin back office"]
+    Root --> Stage["/stage"]
+    Root --> Messenger["/messenger"]
+    Root --> Admin["/admin"]
 
-    Admin --> Structure["/admin/structure site structure"]
-    Admin --> Guide["/admin/guide operation guide"]
-    Admin --> Characters["/admin/characters character profiles"]
-    Admin --> Models["/admin/models model profiles"]
-    Admin --> Channels["/admin/channels platform gateways"]
-    Admin --> OpenWebUI["/admin/openwebui bridge setup"]
+    Admin --> Structure["/admin/structure"]
+    Admin --> Guide["/admin/guide"]
+    Admin --> Sessions["/admin/sessions"]
+    Admin --> Models["/admin/models"]
+    Admin --> Voice["/admin/voice-models"]
+    Admin --> Live2D["/admin/live2d"]
+    Admin --> Characters["/admin/characters"]
+    Admin --> Channels["/admin/channels"]
+    Admin --> OpenWebUI["/admin/openwebui"]
 
     Console --> WebAPI["/api/web/*"]
     Console --> ChatAPI["/api/chat* /api/sessions* /api/roles*"]
-    Stage --> StageAPI["/api/stage/events SSE"]
     Messenger --> ChatAPI
-    Messenger --> StageAPI
+    Stage --> StageAPI["/api/stage/events SSE"]
     Characters --> CharacterAPI["/api/character-profiles*"]
     Models --> ModelAPI["/api/model-profiles*"]
+    Voice --> VoiceAPI["/api/voice-models"]
     OpenWebUI --> BridgeAPI["/api/openwebui/*"]
 ```
 
@@ -90,84 +104,98 @@ flowchart TD
 
 ### Purpose
 
-This document fixes the EchoBot Web entrypoints, page responsibilities, `/console` internal sections, Admin child pages, and API namespace boundaries. The goal is to avoid pushing every future capability back into one page as model settings, Open WebUI, communication platforms, and local model services are added.
+Define a session-centered operation flow: set up resources first, bind them into a character, then test with `Console`, `Messenger`, and `Stage`. Channels are entry points, not the core control path. Open WebUI bridge is an operator tool interface.
+
+### Session flow
+
+1. Configure LLM in `/admin/models`.
+2. Configure voice settings in `/admin/voice-models`.
+3. Configure Live2D in `/admin/live2d`.
+4. In `/admin/characters`, bind LLM profile + voice profile + Live2D profile into one character.
+5. Create/select a session in `/admin/sessions`, choose role and optional channel in `/console`, then validate through `/messenger?session_name=<name>` and `/stage?session_name=<name>`.
+6. Channel status is managed in `/admin/channels`: Telegram and Discord are smoke-ready; LINE, WhatsApp, QQ remain planned.
+7. Use `/admin/openwebui` only as the operator tool interface for bridge setup and status.
 
 ### Top-Level Pages
 
 | Layer | Route | Responsibility | Should not do |
 |---|---|---|---|
-| Front display | `/stage?session_name=<name>` | Character display, subtitles, TTS, Live2D lip sync, stage-event emotion/expression/motion, and configured messaging target selection | No settings or tool operations |
-| Communication | `/messenger?session_name=<name>` | Lightweight chat entry that can select the Stage session from configured Telegram/Discord-style targets, then publish final replies plus optional stage directives to Stage | No direct tool-capable Agent by default |
-| Console | `/console` | Real-time operator console for sessions, role cards, ASR/TTS, Live2D, jobs, CRON, HEARTBEAT | Not a documentation library or long-term settings index |
-| Legacy alias | `/web` | Existing alias for `/console` | No new feature ownership |
-| Admin | `/admin` | Protected index for health, docs, settings, and documentation pages | No live stage operation |
+| Front display | `/stage?session_name=<name>` | Single-session output: character, subtitles, TTS, and Live2D lip sync | No live model/character controls |
+| Communication | `/messenger?session_name=<name>` | Lightweight input path; publishes final assistant output to Stage | No runtime control |
+| Operator console | `/console` | Session-centered live control: role card, model, voice, Live2D, and runtime toggles | Not a docs/config index |
+| Admin | `/admin` | Protected hub for setup pages and documentation | Not live session control |
 
 ### `/console` Internal Sections
 
 | Section | Content | Purpose |
 |---|---|---|
-| Stage panel | Connection state, session badge, active model profile, language/display switches, Live2D stage, Live2D drawer | Let the operator see the character state immediately |
-| Control drawers | Session list and role card list/editor | Switch or maintain current operating context |
-| Runtime settings | Route mode, provider safety, ASR, TTS, Live2D, stage assets, CRON, HEARTBEAT | Change current runtime behavior |
-| Conversation area | Transcript, agent trace, attachments, microphone, send controls | Run the current session conversation and work |
+| Session panel | connection state, session badge, character/model status, language, Live2D view | View active session state |
+| Control drawers | session list and character card selection | Keep current session context |
+| Settings groups | route mode, provider switching, ASR/TTS, Live2D, CRON, HEARTBEAT | Change current session behavior |
+| Conversation area | transcript, attachments, mic, send controls | Run and inspect session messages |
 
 ### Admin Child Pages
 
 | Route | Type | Responsibility |
 |---|---|---|
 | `/admin/structure` | Information architecture | Page map, Console sections, API namespace grouping |
-| `/admin/guide` | Runbook | Operation flow, expected results, failure signs, troubleshooting |
-| `/admin/characters` | Character setup | Role prompt, model profile binding, TTS/ASR/Live2D summary, emotion-to-expression/motion maps, and single-character package import/export |
-| `/admin/models` | Settings page | default A-E plus user-created model profiles, API keys, local model base URLs |
-| `/admin/channels` | Messaging gateways | Telegram / Discord settings, Stage frontend mirroring, smoke readiness, plus QQ/LINE/WhatsApp gateway boundaries |
-| `/admin/openwebui` | Bridge setup | Open WebUI narrow tool bridge status and wiring notes |
+| `/admin/guide` | Runbook | Session flow and operation reference |
+| `/admin/sessions` | Session maintenance | Create, rename, delete, and open-in-console checks |
+| `/admin/models` | LLM setup | LLM profile management |
+| `/admin/voice-models` | Speech setup | STT/TTS profile management |
+| `/admin/live2d` | Visual setup | Live2D catalog and profile management |
+| `/admin/characters` | Character setup | Bind LLM, voice, and Live2D into one character |
+| `/admin/channels` | Channel entrypoints | Telegram/Discord smoke setup; LINE/WhatsApp/QQ planned |
+| `/admin/openwebui` | Tool bridge | Open WebUI interface status and operator tool wiring |
 
 ### API Groups
 
 | Namespace | Page | Responsibility |
 |---|---|---|
-| `/api/web/*` | `/console` | Web config, runtime, Live2D, stage backgrounds, TTS, ASR/WebSocket |
-| `/api/chat*` | `/console`, `/messenger` | Chat, stream, jobs, trace, cancel/retry |
-| `/api/sessions*` | `/console`, `/messenger`, `/stage` | Session lifecycle and current session |
-| `/api/stage/events` | `/stage`, `/messenger` | User/session-scoped stage event publish and SSE subscribe; supports subtitles, `character_state`, emotion, expression, motion, and role-based emotion map enrichment |
-| `/api/character-profiles*` | `/admin/characters` | Composed API for role prompts, model profile bindings, emotion maps, and single-character package import/export |
-| `/api/model-profiles*` | `/admin/models`, `/console` | Per-user model profile CRUD, activation, runtime apply |
-| `/api/openwebui/*` | `/admin/openwebui`, Open WebUI | Bearer-token bridge and narrow OpenAPI tools |
-| `/api/channels/*` | `/admin/channels` | External communication platform config, Stage mirroring config, status, and admin-gated smoke checks |
-| `/api/roles*`, `/api/attachments*`, `/api/cron*`, `/api/heartbeat*` | `/console` | Supporting role cards, files, schedules, and periodic tasks |
+| `/api/web/*` | `/console` | Web config, runtime, Live2D, TTS, ASR, WebSocket |
+| `/api/chat*` | `/console`, `/messenger` | chat, stream, jobs, trace |
+| `/api/sessions*` | `/console`, `/messenger`, `/stage` | session lifecycle and current session |
+| `/api/stage/events` | `/stage`, `/messenger` | user/session-scoped stage subtitle and event publishing |
+| `/api/character-profiles*` | `/admin/characters` | character definition and bindings |
+| `/api/model-profiles*` | `/admin/models`, `/console` | model profile CRUD and apply |
+| `/api/voice-models` | `/admin/voice-models` | STT/TTS profile management |
+| `/api/openwebui/*` | `/admin/openwebui`, Open WebUI | Operator tool bridge endpoint |
+| `/api/channels/*` | `/admin/channels` | channel settings, status, and smoke readiness |
+| `/api/roles*`, `/api/attachments*`, `/api/cron*`, `/api/heartbeat*` | `/console` | roles, files, schedules, heartbeat |
 
-### Route Rules
+### Route rules
 
-- Put new real-time operation features in `/console`, scoped to the current session.
-- Put long-term settings or documentation in `/admin/<topic>`.
-- Put display-only features in `/stage`; Stage should not gain settings authority.
-- Add external communication platforms through `/admin/channels` first, then wire runtime adapters; assistant replies from production interaction entries should be able to mirror to `/stage` by default.
-- Keep `/web` only for compatibility; use `/console` as the canonical route in docs and navigation.
+- Keep Admin (setup) and Console (live operation) separate; use Messenger/Stage only for input and output checks.
+- Channels are entry points, not the control core. Use Telegram/Discord for current tests; keep LINE/WhatsApp/QQ in roadmap.
+- Open WebUI bridge is for operator tool actions and should be tested separately from normal session-path checks.
 
 ### Site Map
 
 ```mermaid
 flowchart TD
     Root["/ API identity"] --> Docs["/docs /redoc /openapi.json"]
-    Root --> Console["/console canonical operator console"]
+    Root --> Console["/console"]
     Root --> WebAlias["/web legacy alias"]
-    Root --> Stage["/stage front display"]
-    Root --> Messenger["/messenger chat entry"]
-    Root --> Admin["/admin back office"]
+    Root --> Stage["/stage"]
+    Root --> Messenger["/messenger"]
+    Root --> Admin["/admin"]
 
-    Admin --> Structure["/admin/structure site structure"]
-    Admin --> Guide["/admin/guide operation guide"]
-    Admin --> Characters["/admin/characters character profiles"]
-    Admin --> Models["/admin/models model profiles"]
-    Admin --> Channels["/admin/channels platform gateways"]
-    Admin --> OpenWebUI["/admin/openwebui bridge setup"]
+    Admin --> Structure["/admin/structure"]
+    Admin --> Guide["/admin/guide"]
+    Admin --> Sessions["/admin/sessions"]
+    Admin --> Models["/admin/models"]
+    Admin --> Voice["/admin/voice-models"]
+    Admin --> Live2D["/admin/live2d"]
+    Admin --> Characters["/admin/characters"]
+    Admin --> Channels["/admin/channels"]
+    Admin --> OpenWebUI["/admin/openwebui"]
 
     Console --> WebAPI["/api/web/*"]
     Console --> ChatAPI["/api/chat* /api/sessions* /api/roles*"]
-    Stage --> StageAPI["/api/stage/events SSE"]
     Messenger --> ChatAPI
-    Messenger --> StageAPI
+    Stage --> StageAPI["/api/stage/events SSE"]
     Characters --> CharacterAPI["/api/character-profiles*"]
     Models --> ModelAPI["/api/model-profiles*"]
+    Voice --> VoiceAPI["/api/voice-models"]
     OpenWebUI --> BridgeAPI["/api/openwebui/*"]
 ```

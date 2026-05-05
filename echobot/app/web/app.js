@@ -19,8 +19,8 @@ import { createLive2DModule } from "./features/live2d/index.js?v=site-public-6";
 import { createRolesModule } from "./features/roles.js?v=site-public-6";
 import { createSessionsModule } from "./features/sessions.js?v=admin-boundary-1";
 import { createTtsModule } from "./features/tts.js?v=site-public-6";
-import { initShellDisplayMode } from "./shell-display-mode.js?v=site-public-6";
-import { initShellI18n } from "./shell-i18n.js?v=console-model-profile-1";
+import { initShellDisplayMode } from "./shell-display-mode.js?v=session-centered-2";
+import { initShellI18n } from "./shell-i18n.js?v=session-centered-2";
 import {
     MODEL_PROFILE_UPDATE_STORAGE_KEY,
     activeModelProfileFromConfig,

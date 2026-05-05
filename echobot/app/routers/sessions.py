@@ -15,8 +15,15 @@ from ..schemas import (
     session_summary_model_from_info,
 )
 from ..state import get_app_runtime
-from ..services.runtime_profile_composer import apply_runtime_profile_for_role
-from ..session_metadata import set_channel_binding
+from ..services.runtime_profile_composer import (
+    apply_runtime_profile_for_role,
+    runtime_bindings_for_role,
+)
+from ..session_metadata import (
+    channel_integration_id_from_metadata,
+    channel_type_from_metadata,
+    set_channel_binding,
+)
 from ...orchestration import role_name_from_metadata
 
 
@@ -68,13 +75,20 @@ async def create_session(
                 session.name,
                 request.route_mode,
             )
-        if request.channel_type or request.channel_integration_id:
+        channel_type = request.channel_type or ""
+        channel_integration_id = request.channel_integration_id or ""
+        if not channel_type and not channel_integration_id and request.role_name:
+            channel_type, channel_integration_id = await _default_channel_binding_for_role(
+                runtime,
+                role_name_from_metadata(session.metadata),
+            )
+        if channel_type or channel_integration_id:
             session = await runtime.session_service.update_session_metadata(
                 session.name,
                 lambda metadata: set_channel_binding(
                     metadata,
-                    channel_type=request.channel_type or "",
-                    channel_integration_id=request.channel_integration_id or "",
+                    channel_type=channel_type,
+                    channel_integration_id=channel_integration_id,
                 ),
             )
     except ValueError as exc:
@@ -121,6 +135,11 @@ async def set_session_role(
         )
         await _apply_bound_model_profile_for_role(
             runtime,
+            role_name_from_metadata(session.metadata),
+        )
+        session = await _apply_character_channel_defaults_if_unbound(
+            runtime,
+            session.name,
             role_name_from_metadata(session.metadata),
         )
     except ValueError as exc:
@@ -180,4 +199,43 @@ async def _apply_bound_model_profile_for_role(runtime, role_name: str) -> None:
     await apply_runtime_profile_for_role(
         runtime,
         role_name,
+    )
+
+
+async def _apply_character_channel_defaults_if_unbound(
+    runtime,
+    session_name: str,
+    role_name: str,
+):
+    session = await runtime.session_service.load_session(session_name)
+    if channel_type_from_metadata(session.metadata) or channel_integration_id_from_metadata(
+        session.metadata,
+    ):
+        return session
+
+    channel_type, channel_integration_id = await _default_channel_binding_for_role(
+        runtime,
+        role_name,
+    )
+    if not channel_type and not channel_integration_id:
+        return session
+
+    return await runtime.session_service.update_session_metadata(
+        session.name,
+        lambda metadata: set_channel_binding(
+            metadata,
+            channel_type=channel_type,
+            channel_integration_id=channel_integration_id,
+        ),
+    )
+
+
+async def _default_channel_binding_for_role(
+    runtime,
+    role_name: str,
+) -> tuple[str, str]:
+    bindings = await runtime_bindings_for_role(runtime, role_name)
+    return (
+        str(bindings.get("default_channel_type") or "").strip(),
+        str(bindings.get("default_channel_integration_id") or "").strip(),
     )

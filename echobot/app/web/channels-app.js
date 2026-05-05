@@ -1,5 +1,5 @@
-import { initShellI18n } from "./shell-i18n.js?v=admin-boundary-1";
-import { initShellDisplayMode } from "./shell-display-mode.js?v=site-public-6";
+import { initShellI18n } from "./shell-i18n.js?v=session-centered-2";
+import { initShellDisplayMode } from "./shell-display-mode.js?v=session-centered-2";
 import { initShellSessionLinks } from "./shell-session-links.js?v=site-public-6";
 
 const PLANNED_CHANNELS = [
@@ -74,12 +74,14 @@ const channelText = {
             telegram: [
                 "Inbound uses Bot API polling. Run only one EchoBot poller for the same bot token.",
                 "Keep drop pending updates enabled for clean smoke tests; disable it only when you intentionally want queued Telegram messages.",
+                "Use the local E2E test to send a controlled inbound message through EchoBot without waiting for a real platform event.",
             ],
             discord: [
                 "Inbound bridge endpoint: POST /api/channels/discord/webhook",
                 "Required header: X-EchoBot-Discord-Secret",
                 "Request JSON includes channel_id, user_id, text, and optional session_name.",
                 "Outbound replies use webhook_url when configured.",
+                "Use the local E2E test for session routing and Stage mirroring before wiring native bot events.",
             ],
         },
     },
@@ -106,12 +108,14 @@ const channelText = {
             telegram: [
                 "Inbound 使用 Bot API polling；同一個 bot token 同時間只能跑一個 EchoBot poller。",
                 "乾淨 smoke test 建議維持啟動時丟棄 pending updates；只有刻意要吃 Telegram 佇列訊息時才關閉。",
+                "可先用本機 E2E 測試送一則受控 inbound message，不必等待真實平台事件。",
             ],
             discord: [
                 "Inbound bridge endpoint：POST /api/channels/discord/webhook",
                 "必要 header：X-EchoBot-Discord-Secret",
                 "Request JSON 包含 channel_id、user_id、text，可選 session_name。",
                 "Outbound 回覆在設定 webhook_url 後會透過 Discord webhook 發送。",
+                "接原生 bot events 前，先用本機 E2E 測試驗證 session routing 與 Stage 同步。",
             ],
         },
     },
@@ -138,12 +142,14 @@ const channelText = {
             telegram: [
                 "Inbound 使用 Bot API polling；同一个 bot token 同时间只能跑一个 EchoBot poller。",
                 "干净 smoke test 建议维持启动时丢弃 pending updates；只有刻意要吃 Telegram 队列消息时才关闭。",
+                "可先用本机 E2E 测试发送一则受控 inbound message，不必等待真实平台事件。",
             ],
             discord: [
                 "Inbound bridge endpoint：POST /api/channels/discord/webhook",
                 "必要 header：X-EchoBot-Discord-Secret",
                 "Request JSON 包含 channel_id、user_id、text，可选 session_name。",
                 "Outbound 回复在设置 webhook_url 后会通过 Discord webhook 发送。",
+                "接原生 bot events 前，先用本机 E2E 测试验证 session routing 与 Stage 同步。",
             ],
         },
     },
@@ -408,8 +414,9 @@ function buildEditableChannelCard(definition) {
     const message = buildFeedbackMessage(channelName);
     const checks = buildSmokeChecks(channelName);
     const hints = buildChannelHints(channelName);
+    const localTest = buildLocalTestControls(channelName, config);
 
-    article.append(header, route, purpose, form, hints, controls, message, checks);
+    article.append(header, route, purpose, form, hints, controls, localTest, message, checks);
     return article;
 }
 
@@ -596,6 +603,71 @@ function buildChannelHints(channelName) {
         block.appendChild(item);
     });
     return block;
+}
+
+function buildLocalTestControls(channelName, config) {
+    const block = document.createElement("section");
+    block.className = "channels-local-test";
+    block.dataset.localTestChannel = channelName;
+
+    const title = document.createElement("h4");
+    title.textContent = i18n.t("channels.localTestTitle");
+    const body = document.createElement("p");
+    body.className = "channels-field-list";
+    body.textContent = i18n.t("channels.localTestHelp");
+
+    const grid = document.createElement("div");
+    grid.className = "model-profile-field-grid";
+    grid.append(
+        buildLocalTestField("sender_id", i18n.t("channels.localSender"), defaultSenderId(config)),
+        buildLocalTestField("chat_id", i18n.t("channels.localChat"), defaultChatId(channelName, config)),
+        buildLocalTestField("session_name", i18n.t("channels.localSession"), defaultStageSession(config)),
+        buildLocalTestField("text", i18n.t("channels.localText"), "ping"),
+    );
+
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = i18n.t("channels.localTestRun");
+    button.disabled = state.saving || state.smokeInFlight;
+    button.addEventListener("click", () => {
+        void runLocalE2ETest(block, channelName);
+    });
+
+    block.append(title, body, grid, button);
+    return block;
+}
+
+function buildLocalTestField(fieldName, labelText, value) {
+    const label = document.createElement("label");
+    label.className = "channels-field-row";
+    const title = document.createElement("span");
+    title.textContent = labelText;
+    const input = document.createElement("input");
+    input.type = "text";
+    input.autocomplete = "off";
+    input.value = String(value || "");
+    input.dataset.localTestField = fieldName;
+    label.append(title, input);
+    return label;
+}
+
+function defaultSenderId(config) {
+    const allowList = Array.isArray(config.allow_from)
+        ? config.allow_from.map((item) => String(item || "").trim()).filter(Boolean)
+        : [];
+    const firstAllowed = allowList.find((item) => item && item !== "*");
+    return firstAllowed || "local-user";
+}
+
+function defaultChatId(channelName, config) {
+    if (channelName === "discord" && config.channel_id) {
+        return String(config.channel_id || "");
+    }
+    return defaultSenderId(config);
+}
+
+function defaultStageSession(config) {
+    return String(config.stage_session_name || "default").trim() || "default";
 }
 
 function buildChannelSection(titleText, bodyText, cards) {
@@ -792,6 +864,46 @@ async function runSmokeTest(channelName) {
         state.smokeInFlight = false;
         renderAll();
     }
+}
+
+async function runLocalE2ETest(block, channelName) {
+    if (state.saving || state.smokeInFlight) {
+        return;
+    }
+    const payload = readLocalTestValues(block);
+    state.smokeInFlight = true;
+    state.messages[channelName] = i18n.t("channels.localTestRunning");
+    renderAll();
+    try {
+        const result = await requestJson(
+            `/api/channels/${encodeURIComponent(channelName)}/local-test-message`,
+            {
+                method: "POST",
+                body: JSON.stringify(payload),
+            },
+        );
+        state.messages[channelName] = i18n.t("channels.localTestAccepted", {
+            session: result.session_name || payload.session_name || i18n.t("channels.none"),
+        });
+    } catch (error) {
+        state.messages[channelName] = `${i18n.t("channels.localTestFailed")}: ${error.message || String(error)}`;
+    } finally {
+        state.smokeInFlight = false;
+        renderAll();
+    }
+}
+
+function readLocalTestValues(block) {
+    const payload = {};
+    const inputs = Array.from(block.querySelectorAll("[data-local-test-field]"));
+    inputs.forEach((input) => {
+        const fieldName = input.dataset.localTestField;
+        if (!fieldName) {
+            return;
+        }
+        payload[fieldName] = String(input.value || "").trim();
+    });
+    return payload;
 }
 
 function plannedChannelCard(channel) {

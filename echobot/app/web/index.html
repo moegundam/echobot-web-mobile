@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>EchoBot Live2D</title>
     <link rel="icon" href="/favicon.ico" type="image/svg+xml">
-    <link rel="stylesheet" href="/web/assets/styles/index.css?v=console-layout-1">
+    <link rel="stylesheet" href="/web/assets/styles/index.css?v=console-operation-1">
 </head>
 <body data-page-title-key="console.pageTitle">
     <div class="page-shell">
@@ -223,7 +223,12 @@
                     </div>
                     <div id="role-model-profile-card" class="role-model-profile-card">
                         <p class="section-title" data-i18n-key="console.roleModelProfile">Role model profile</p>
-                        <a id="role-model-profile-link" class="role-model-profile-link" href="/admin/models">Use active profile</a>
+                        <a
+                            id="role-model-profile-link"
+                            class="role-model-profile-link"
+                            href="/admin/models"
+                            data-i18n-key="console.roleModelProfileAction"
+                        >Manage in Admin</a>
                         <span id="role-model-profile-detail" class="muted-text role-model-profile-detail" data-i18n-key="console.roleModelProfileUnbound">No role-specific profile binding</span>
                     </div>
                     <div class="role-toolbar">
@@ -365,7 +370,7 @@
                             <span class="muted-text" data-i18n-key="console.groupRuntimeJobsHelp">Agent permissions, scheduled jobs, and heartbeat work.</span>
                         </div>
                     </div>
-                    <details id="runtime-panel" class="stage-background-panel runtime-panel" open>
+                    <details id="runtime-panel" class="stage-background-panel runtime-panel">
                         <summary class="stage-background-header">
                             <div class="stage-background-header-main">
                                 <p class="section-title" data-i18n-key="console.runtimeConfig">Runtime Config</p>
@@ -417,7 +422,7 @@
                             <span class="muted-text" data-i18n-key="console.groupLive2dStageHelp">Character model, background, effects, and stage interaction.</span>
                         </div>
                     </div>
-                    <details id="live2d-panel" class="stage-background-panel" open>
+                    <details id="live2d-panel" class="stage-background-panel">
                         <summary class="stage-background-header">
                             <div class="stage-background-header-main">
                                 <p class="section-title" data-i18n-key="console.live2dModel">Live2D Model</p>
@@ -449,7 +454,7 @@
                             </div>
                         </div>
                     </details>
-                    <details id="stage-background-panel" class="stage-background-panel" open>
+                    <details id="stage-background-panel" class="stage-background-panel">
                         <summary class="stage-background-header">
                             <div class="stage-background-header-main">
                                 <p class="section-title" data-i18n-key="console.stageBackground">Stage Background</p>
@@ -542,7 +547,7 @@
                             </div>
                         </div>
                     </details>
-                    <details id="stage-effects-panel" class="stage-effects-panel" open>
+                    <details id="stage-effects-panel" class="stage-effects-panel">
                         <summary class="stage-effects-header">
                             <p class="section-title" data-i18n-key="console.stageEffects">Lighting Effects</p>
                             <button
@@ -1023,6 +1028,6 @@
     <script src="/web/assets/vendor/pixi.min.js"></script>
     <script src="/web/assets/vendor/live2dcubismcore.min.js"></script>
     <script src="/web/assets/vendor/cubism4.min.js"></script>
-    <script type="module" src="/web/assets/app.js?v=console-layout-1"></script>
+    <script type="module" src="/web/assets/app.js?v=console-operation-1"></script>
 </body>
 </html>

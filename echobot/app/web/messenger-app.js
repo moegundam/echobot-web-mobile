@@ -1,5 +1,5 @@
-import { initShellI18n } from "./shell-i18n.js?v=site-public-6";
-import { initShellDisplayMode } from "./shell-display-mode.js?v=site-public-6";
+import { initShellI18n } from "./shell-i18n.js?v=session-centered-2";
+import { initShellDisplayMode } from "./shell-display-mode.js?v=session-centered-2";
 import { rememberShellSessionName } from "./shell-session-links.js?v=site-public-6";
 import {
     fetchSessionRuntimeContext,
@@ -23,6 +23,7 @@ const DEFAULT_ROUTE_MODE = "chat_only";
 const stageDirectivePattern = /^\s*\[(emotion|expression|motion)\s*[:=]\s*([^\]\r\n]{1,256})\]\s*/i;
 let currentStatusKey = "messenger.status.ready";
 let messengerSessions = [];
+let messengerStageTargets = [];
 let messengerRuntimeContext = null;
 let pendingAttachments = [];
 let recognition = null;
@@ -104,6 +105,8 @@ function setActiveSessionName(value, options = {}) {
     if (options.updateUrl) {
         updateSessionUrl(nextSessionName);
         void loadMessengerRuntimeContext(nextSessionName);
+    } else if (messengerRuntimeContext?.session_name !== nextSessionName) {
+        void loadMessengerRuntimeContext(nextSessionName);
     }
     return nextSessionName;
 }
@@ -113,16 +116,31 @@ async function loadSessions() {
         return;
     }
     try {
-        const response = await fetch("/api/sessions");
-        if (!response.ok) {
-            throw await responseToError(response);
+        const [sessionsResponse, targetsResponse] = await Promise.all([
+            fetch("/api/sessions"),
+            fetch("/api/channels/stage-targets").catch((error) => {
+                console.warn("Unable to load messenger channel targets", error);
+                return null;
+            }),
+        ]);
+        if (!sessionsResponse.ok) {
+            throw await responseToError(sessionsResponse);
         }
-        const payload = await response.json();
+        const payload = await sessionsResponse.json();
         messengerSessions = Array.isArray(payload) ? payload : [];
+        if (targetsResponse && targetsResponse.ok) {
+            const targetPayload = await targetsResponse.json();
+            messengerStageTargets = Array.isArray(targetPayload.targets)
+                ? targetPayload.targets
+                : [];
+        } else {
+            messengerStageTargets = [];
+        }
         renderSessionOptions(messengerSessions);
     } catch (error) {
         console.warn("Unable to load messenger sessions", error);
         messengerSessions = [];
+        messengerStageTargets = [];
         renderSessionOptions([]);
         setStatus("messenger.sessionLoadFailed");
     }
@@ -141,6 +159,22 @@ function renderSessionOptions(sessions) {
 function buildSessionOptions(sessions, currentSession) {
     const options = [];
     const seenSessions = new Set();
+    for (const target of messengerStageTargets) {
+        const sessionName = String((target && target.session_name) || "").trim();
+        if (!sessionName || seenSessions.has(sessionName)) {
+            continue;
+        }
+        seenSessions.add(sessionName);
+        const option = document.createElement("option");
+        option.value = sessionName;
+        option.textContent = i18n.t("messenger.channelTargetOption", {
+            target: String(
+                (target && (target.display_name || target.label)) || sessionName,
+            ),
+            session: sessionName,
+        });
+        options.push(option);
+    }
     for (const session of sessions) {
         const sessionName = String((session && session.name) || "").trim();
         if (!sessionName || seenSessions.has(sessionName)) {
@@ -149,7 +183,7 @@ function buildSessionOptions(sessions, currentSession) {
         seenSessions.add(sessionName);
         const option = document.createElement("option");
         option.value = sessionName;
-        option.textContent = sessionName;
+        option.textContent = sessionOptionLabel(session);
         options.push(option);
     }
 
@@ -162,6 +196,21 @@ function buildSessionOptions(sessions, currentSession) {
         options.unshift(fallbackOption);
     }
     return options;
+}
+
+function sessionOptionLabel(session) {
+    const sessionName = String((session && session.name) || "").trim();
+    const roleName = String((session && session.role_name) || "").trim();
+    const channel = String(
+        (session && (session.channel_integration_id || session.channel_type)) || "",
+    ).trim();
+    const details = [
+        roleName && roleName !== "default" ? roleName : "",
+        channel,
+    ].filter(Boolean);
+    return details.length > 0
+        ? `${sessionName} · ${details.join(" · ")}`
+        : sessionName;
 }
 
 function updateSessionUrl(sessionName) {

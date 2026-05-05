@@ -40,6 +40,10 @@ class SessionSummaryModel(BaseModel):
     name: str
     message_count: int
     updated_at: str
+    role_name: str = "default"
+    route_mode: RouteMode = DEFAULT_ROUTE_MODE
+    channel_type: str = ""
+    channel_integration_id: str = ""
 
 
 class SessionDetailModel(BaseModel):
@@ -297,6 +301,7 @@ class CreateCharacterProfileRequest(BaseModel):
 
 
 class UpdateCharacterProfileRequest(BaseModel):
+    name: str | None = None
     prompt: str | None = None
     model_profile_id: str | None = None
     llm_model_id: str | None = None
@@ -723,6 +728,10 @@ def session_summary_model_from_info(info: SessionInfo) -> SessionSummaryModel:
         name=info.name,
         message_count=info.message_count,
         updated_at=info.updated_at,
+        role_name=role_name_from_metadata(info.metadata),
+        route_mode=route_mode_from_metadata(info.metadata),
+        channel_type=channel_type_from_metadata(info.metadata),
+        channel_integration_id=channel_integration_id_from_metadata(info.metadata),
     )
 
 

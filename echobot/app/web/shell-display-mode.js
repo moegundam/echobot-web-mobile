@@ -134,9 +134,6 @@ function resolveLayoutMode(requestedMode, detectedMode, viewport) {
     if (deviceClass === "phone") {
         return requestedMode === "mobile" ? "mobile" : detectedMode;
     }
-    if (deviceClass === "tablet" && requestedMode === "desktop") {
-        return "tablet";
-    }
     return requestedMode;
 }
 
