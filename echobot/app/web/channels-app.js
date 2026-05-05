@@ -67,8 +67,20 @@ const channelText = {
         descriptions: {
             console: "Local console output channel for smoke testing.",
             telegram: "Telegram bot polling channel.",
-            discord: "Discord bot channel configuration and polling/webhook integration.",
+            discord: "Discord webhook bridge and outbound webhook delivery. Direct Discord bot events are still a later adapter.",
             qq: "QQ official bot direct-message channel.",
+        },
+        channelHints: {
+            telegram: [
+                "Inbound uses Bot API polling. Run only one EchoBot poller for the same bot token.",
+                "Keep drop pending updates enabled for clean smoke tests; disable it only when you intentionally want queued Telegram messages.",
+            ],
+            discord: [
+                "Inbound bridge endpoint: POST /api/channels/discord/webhook",
+                "Required header: X-EchoBot-Discord-Secret",
+                "Request JSON includes channel_id, user_id, text, and optional session_name.",
+                "Outbound replies use webhook_url when configured.",
+            ],
         },
     },
     "zh-Hant": {
@@ -87,8 +99,20 @@ const channelText = {
         descriptions: {
             console: "本機 console output channel，用於 smoke test。",
             telegram: "Telegram bot polling channel。",
-            discord: "Discord bot 頻道設定與 webhook/polling 整合。",
+            discord: "Discord webhook bridge 與 outbound webhook 發送；原生 Discord bot events adapter 仍是後續項目。",
             qq: "QQ 官方 bot direct-message channel。",
+        },
+        channelHints: {
+            telegram: [
+                "Inbound 使用 Bot API polling；同一個 bot token 同時間只能跑一個 EchoBot poller。",
+                "乾淨 smoke test 建議維持啟動時丟棄 pending updates；只有刻意要吃 Telegram 佇列訊息時才關閉。",
+            ],
+            discord: [
+                "Inbound bridge endpoint：POST /api/channels/discord/webhook",
+                "必要 header：X-EchoBot-Discord-Secret",
+                "Request JSON 包含 channel_id、user_id、text，可選 session_name。",
+                "Outbound 回覆在設定 webhook_url 後會透過 Discord webhook 發送。",
+            ],
         },
     },
     "zh-Hans": {
@@ -107,8 +131,20 @@ const channelText = {
         descriptions: {
             console: "本机 console output channel，用于 smoke test。",
             telegram: "Telegram bot polling channel。",
-            discord: "Discord bot 频道配置与 webhook/polling 整合。",
+            discord: "Discord webhook bridge 与 outbound webhook 发送；原生 Discord bot events adapter 仍是后续项目。",
             qq: "QQ 官方 bot direct-message channel。",
+        },
+        channelHints: {
+            telegram: [
+                "Inbound 使用 Bot API polling；同一个 bot token 同时间只能跑一个 EchoBot poller。",
+                "干净 smoke test 建议维持启动时丢弃 pending updates；只有刻意要吃 Telegram 队列消息时才关闭。",
+            ],
+            discord: [
+                "Inbound bridge endpoint：POST /api/channels/discord/webhook",
+                "必要 header：X-EchoBot-Discord-Secret",
+                "Request JSON 包含 channel_id、user_id、text，可选 session_name。",
+                "Outbound 回复在设置 webhook_url 后会通过 Discord webhook 发送。",
+            ],
         },
     },
 };
@@ -371,8 +407,9 @@ function buildEditableChannelCard(definition) {
 
     const message = buildFeedbackMessage(channelName);
     const checks = buildSmokeChecks(channelName);
+    const hints = buildChannelHints(channelName);
 
-    article.append(header, route, purpose, form, controls, message, checks);
+    article.append(header, route, purpose, form, hints, controls, message, checks);
     return article;
 }
 
@@ -544,6 +581,21 @@ function buildSmokeChecks(channelName) {
         list.appendChild(item);
     });
     return list;
+}
+
+function buildChannelHints(channelName) {
+    const hints = currentText().channelHints?.[channelName] || [];
+    const block = document.createElement("div");
+    block.className = "channels-field-list";
+    if (!Array.isArray(hints) || hints.length === 0) {
+        return block;
+    }
+    hints.forEach((hint) => {
+        const item = document.createElement("p");
+        item.textContent = hint;
+        block.appendChild(item);
+    });
+    return block;
 }
 
 function buildChannelSection(titleText, bodyText, cards) {
