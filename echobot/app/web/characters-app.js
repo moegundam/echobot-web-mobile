@@ -4,6 +4,7 @@ import { initShellDisplayMode } from "./shell-display-mode.js?v=site-public-6";
 const state = {
     payload: null,
     webConfig: null,
+    channelIntegrations: [],
     selectedName: "",
     isCreating: false,
     busy: false,
@@ -26,6 +27,8 @@ const DOM = {
     llmModel: document.getElementById("character-llm-model"),
     voiceProfile: document.getElementById("character-voice-profile"),
     live2dProfile: document.getElementById("character-live2d-profile"),
+    defaultChannelType: document.getElementById("character-default-channel-type"),
+    defaultChannelIntegration: document.getElementById("character-default-channel-integration"),
     prompt: document.getElementById("character-prompt"),
     emotionMap: document.getElementById("character-emotion-map"),
     emotionMapAdd: document.getElementById("character-emotion-map-add"),
@@ -69,6 +72,9 @@ DOM.emotionMapAdd.addEventListener("click", () => {
 DOM.importPackage.addEventListener("click", () => {
     void importCharacterPackage();
 });
+DOM.defaultChannelIntegration.addEventListener("change", () => {
+    syncChannelTypeFromIntegration();
+});
 
 void load();
 
@@ -76,15 +82,22 @@ async function load() {
     setBusy(true);
     setStatusKey("characters.loading");
     try {
-        const [payload, webConfig] = await Promise.all([
+        const [payload, webConfig, channelIntegrations] = await Promise.all([
             requestJson("/api/character-profiles"),
             requestJson("/api/web/config").catch((error) => {
                 console.warn("Unable to load Live2D options for character emotion maps", error);
                 return null;
             }),
+            requestJson("/api/channel-integrations").catch((error) => {
+                console.warn("Unable to load channel integrations for character defaults", error);
+                return { integrations: [] };
+            }),
         ]);
         state.payload = payload;
         state.webConfig = webConfig;
+        state.channelIntegrations = Array.isArray(channelIntegrations.integrations)
+            ? channelIntegrations.integrations
+            : [];
         state.isCreating = false;
         const characters = characterList();
         if (!state.selectedName && characters.length > 0) {
@@ -136,6 +149,8 @@ function renderModelProfileOptions() {
     renderProfileSelectOptions(DOM.llmModel, "characters.useBaseProfile");
     renderProfileSelectOptions(DOM.voiceProfile, "characters.useBaseProfile");
     renderProfileSelectOptions(DOM.live2dProfile, "characters.useBaseProfile");
+    renderChannelTypeOptions();
+    renderChannelIntegrationOptions();
 }
 
 function renderProfileSelectOptions(select, emptyLabelKey) {
@@ -174,6 +189,12 @@ function renderSelectedCharacter() {
     DOM.voiceProfile.disabled = state.busy || (!creating && !character);
     DOM.live2dProfile.value = creating ? "" : character ? character.live2d_model_id || "" : "";
     DOM.live2dProfile.disabled = state.busy || (!creating && !character);
+    DOM.defaultChannelType.value = creating ? "" : character ? character.default_channel_type || "" : "";
+    DOM.defaultChannelType.disabled = state.busy || (!creating && !character);
+    DOM.defaultChannelIntegration.value = creating
+        ? ""
+        : character ? character.default_channel_integration_id || "" : "";
+    DOM.defaultChannelIntegration.disabled = state.busy || (!creating && !character);
     DOM.save.disabled = state.busy || (!creating && !character);
     DOM.exportPackage.disabled = state.busy || creating || !character;
     DOM.remove.disabled = state.busy || !deletable || creating;
@@ -196,6 +217,8 @@ function renderEffectiveSummary(character) {
             ["characters.llmModel", character.llm_model_id || character.effective_model_profile_id || ""],
             ["characters.voiceProfile", character.voice_profile_id || character.effective_model_profile_id || ""],
             ["characters.live2dProfile", character.live2d_model_id || character.effective_model_profile_id || ""],
+            ["characters.defaultChannelType", character.default_channel_type || ""],
+            ["characters.defaultChannelIntegration", character.default_channel_integration_id || ""],
             ["models.label", character.model_profile_label || ""],
             ["models.chat", character.chat_model || ""],
             ["models.voice", character.tts_voice || ""],
@@ -225,6 +248,8 @@ async function saveSelectedCharacter() {
     const llmModelId = DOM.llmModel.value.trim();
     const voiceProfileId = DOM.voiceProfile.value.trim();
     const live2dProfileId = DOM.live2dProfile.value.trim();
+    const defaultChannelType = DOM.defaultChannelType.value.trim();
+    const defaultChannelIntegrationId = DOM.defaultChannelIntegration.value.trim();
     const emotionMaps = collectEmotionMaps();
     if (state.isCreating && !name) {
         setStatusKey("characters.nameRequired");
@@ -248,6 +273,8 @@ async function saveSelectedCharacter() {
                     llm_model_id: llmModelId,
                     voice_profile_id: voiceProfileId,
                     live2d_model_id: live2dProfileId,
+                    default_channel_type: defaultChannelType,
+                    default_channel_integration_id: defaultChannelIntegrationId,
                     emotion_maps: emotionMaps,
                 }),
             });
@@ -265,6 +292,8 @@ async function saveSelectedCharacter() {
                     llm_model_id: llmModelId,
                     voice_profile_id: voiceProfileId,
                     live2d_model_id: live2dProfileId,
+                    default_channel_type: defaultChannelType,
+                    default_channel_integration_id: defaultChannelIntegrationId,
                     clear_model_profile_binding: !modelProfileId,
                     emotion_maps: emotionMaps,
                 }),
@@ -369,6 +398,62 @@ function renderLive2DActionOptions(character) {
         option.label = String(item.name || item.file || "");
         DOM.motionOptions.appendChild(option);
     });
+}
+
+function renderChannelTypeOptions() {
+    DOM.defaultChannelType.replaceChildren();
+    const options = [
+        ["", i18n.t("characters.noDefaultChannel")],
+        ["web", "Web"],
+        ["telegram", "Telegram"],
+        ["discord", "Discord"],
+        ["line", "LINE"],
+        ["whatsapp", "WhatsApp"],
+        ["qq", "QQ"],
+    ];
+    const existingTypes = new Set(options.map(([value]) => value));
+    channelIntegrationList().forEach((integration) => {
+        const type = String(integration.type || integration.id || "").trim();
+        if (!type || existingTypes.has(type)) {
+            return;
+        }
+        existingTypes.add(type);
+        options.push([type, channelLabel(integration)]);
+    });
+    options.forEach(([value, label]) => {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = label;
+        DOM.defaultChannelType.appendChild(option);
+    });
+}
+
+function renderChannelIntegrationOptions() {
+    DOM.defaultChannelIntegration.replaceChildren();
+    const emptyOption = document.createElement("option");
+    emptyOption.value = "";
+    emptyOption.textContent = i18n.t("characters.noDefaultIntegration");
+    DOM.defaultChannelIntegration.appendChild(emptyOption);
+
+    channelIntegrationList().forEach((integration) => {
+        const option = document.createElement("option");
+        option.value = String(integration.id || "").trim();
+        option.textContent = channelLabel(integration);
+        DOM.defaultChannelIntegration.appendChild(option);
+    });
+}
+
+function syncChannelTypeFromIntegration() {
+    const integrationId = DOM.defaultChannelIntegration.value.trim();
+    const integration = channelIntegrationList()
+        .find((item) => String(item.id || "") === integrationId);
+    if (!integration) {
+        return;
+    }
+    const integrationType = String(integration.type || integration.id || "").trim();
+    if (integrationType) {
+        DOM.defaultChannelType.value = integrationType;
+    }
 }
 
 function renderEmotionMapEditor(character) {
@@ -553,6 +638,23 @@ function modelProfileList() {
     return state.payload && Array.isArray(state.payload.model_profiles)
         ? state.payload.model_profiles
         : [];
+}
+
+function channelIntegrationList() {
+    return Array.isArray(state.channelIntegrations)
+        ? state.channelIntegrations
+        : [];
+}
+
+function channelLabel(integration) {
+    const name = String(integration && integration.name || integration && integration.id || "");
+    if (integration && integration.enabled === false) {
+        return `${name} · ${i18n.t("channelTargets.disabled")}`;
+    }
+    if (integration && integration.running === false) {
+        return `${name} · ${i18n.t("channelTargets.notRunning")}`;
+    }
+    return name;
 }
 
 function live2dModelForCharacter(character) {
