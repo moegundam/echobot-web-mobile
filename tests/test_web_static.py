@@ -169,9 +169,11 @@ class WebStaticAssetTests(unittest.TestCase):
         stage_html = (WEB_ROOT / "stage.html").read_text(encoding="utf-8")
         messenger_js = (WEB_ROOT / "messenger-app.js").read_text(encoding="utf-8")
         stage_js = (WEB_ROOT / "stage-app.js").read_text(encoding="utf-8")
+        runtime_context_js = (WEB_ROOT / "session-runtime-context.js").read_text(encoding="utf-8")
         i18n_js = (WEB_ROOT / "shell-i18n.js").read_text(encoding="utf-8")
 
         self.assertIn('id="messenger-session-select"', messenger_html)
+        self.assertIn('id="messenger-runtime-context"', messenger_html)
         self.assertIn('id="messenger-record"', messenger_html)
         self.assertIn('id="messenger-url"', messenger_html)
         self.assertIn('id="messenger-file-input"', messenger_html)
@@ -179,9 +181,17 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn('id="stage-session-select"', stage_html)
         self.assertIn('id="stage-role-label"', stage_html)
         self.assertIn('id="stage-model-profile-label"', stage_html)
+        self.assertIn('id="stage-voice-profile-label"', stage_html)
+        self.assertIn('id="stage-live2d-profile-label"', stage_html)
+        self.assertIn('id="stage-channel-label"', stage_html)
         self.assertIn('"/api/sessions"', messenger_js)
         self.assertNotIn('"/api/channels/stage-targets"', messenger_js)
         self.assertIn('"/api/channels/stage-targets"', stage_js)
+        self.assertIn("/runtime-context", runtime_context_js)
+        self.assertIn("fetchSessionRuntimeContext", messenger_js)
+        self.assertIn("fetchSessionRuntimeContext", stage_js)
+        self.assertIn("runtimeContextSummaryItems", messenger_js)
+        self.assertIn("runtimeContextValue", stage_js)
         self.assertIn("loadSessions", messenger_js)
         self.assertIn("uploadSelectedFiles", messenger_js)
         self.assertIn("uploadMessengerAttachment", messenger_js)
@@ -189,7 +199,7 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn("promptWithUrl", messenger_js)
         self.assertIn("createSpeechRecognition", messenger_js)
         self.assertIn("loadStageTargets", stage_js)
-        self.assertIn("/api/stage/context?session_name=", stage_js)
+        self.assertNotIn("/api/stage/context?session_name=", stage_js)
         self.assertIn("loadStageContext", stage_js)
         self.assertIn("renderStageContext", stage_js)
         self.assertIn('route_mode: DEFAULT_ROUTE_MODE', messenger_js)
@@ -238,9 +248,21 @@ class WebStaticAssetTests(unittest.TestCase):
             "stage.roleLabel",
             "stage.modelProfileLabel",
             "stage.modelProfileNone",
+            "stage.voiceProfileLabel",
+            "stage.live2dProfileLabel",
+            "stage.channelLabel",
+            "runtimeContext.session",
+            "runtimeContext.character",
+            "runtimeContext.llm",
+            "runtimeContext.voice",
+            "runtimeContext.live2d",
+            "runtimeContext.channel",
+            "runtimeContext.notSet",
+            "runtimeContext.internalWeb",
             "messenger.session",
             "messenger.sessionFallback",
             "messenger.sessionLoadFailed",
+            "messenger.runtimeContextUnavailable",
             "messenger.uploadFile",
             "messenger.urlInput",
             "messenger.urlPlaceholder",

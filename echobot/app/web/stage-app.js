@@ -1,11 +1,18 @@
 import { initShellI18n } from "./shell-i18n.js?v=stage-context-1";
 import { initShellDisplayMode } from "./shell-display-mode.js?v=site-public-6";
 import { rememberShellSessionName } from "./shell-session-links.js?v=site-public-6";
+import {
+    fetchSessionRuntimeContext,
+    runtimeContextValue,
+} from "./session-runtime-context.js?v=session-runtime-context-1";
 
 const subtitleElement = document.getElementById("stage-subtitle");
 const sessionLabelElement = document.getElementById("stage-session-label");
 const roleLabelElement = document.getElementById("stage-role-label");
 const modelProfileLabelElement = document.getElementById("stage-model-profile-label");
+const voiceProfileLabelElement = document.getElementById("stage-voice-profile-label");
+const live2dProfileLabelElement = document.getElementById("stage-live2d-profile-label");
+const channelLabelElement = document.getElementById("stage-channel-label");
 const sessionSelect = document.getElementById("stage-session-select");
 const statusElement = document.getElementById("stage-status");
 const audioButton = document.getElementById("stage-audio-enable");
@@ -123,13 +130,7 @@ async function loadStageTargets() {
 
 async function loadStageContext() {
     try {
-        const response = await fetch(
-            `/api/stage/context?session_name=${encodeURIComponent(sessionName)}`,
-        );
-        if (!response.ok) {
-            throw await responseToError(response);
-        }
-        stageContext = await response.json();
+        stageContext = await fetchSessionRuntimeContext(sessionName);
     } catch (error) {
         console.warn("Unable to load stage context", error);
         stageContext = null;
@@ -152,9 +153,27 @@ function renderStageContext() {
             profile: stageModelProfileText(context),
         });
     }
+    if (voiceProfileLabelElement) {
+        voiceProfileLabelElement.textContent = i18n.t("stage.voiceProfileLabel", {
+            profile: runtimeContextValue(context, "voice", i18n.t),
+        });
+    }
+    if (live2dProfileLabelElement) {
+        live2dProfileLabelElement.textContent = i18n.t("stage.live2dProfileLabel", {
+            profile: runtimeContextValue(context, "live2d", i18n.t),
+        });
+    }
+    if (channelLabelElement) {
+        channelLabelElement.textContent = i18n.t("stage.channelLabel", {
+            channel: runtimeContextValue(context, "channel", i18n.t),
+        });
+    }
 }
 
 function stageModelProfileText(context) {
+    if (context && typeof context === "object" && context.llm_model) {
+        return runtimeContextValue(context, "llm", i18n.t);
+    }
     const label = String(context.model_profile_label || "").trim();
     const profileId = String(context.model_profile_id || "").trim();
     if (label) {

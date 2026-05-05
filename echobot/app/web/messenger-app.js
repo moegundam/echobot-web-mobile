@@ -1,6 +1,10 @@
 import { initShellI18n } from "./shell-i18n.js?v=site-public-6";
 import { initShellDisplayMode } from "./shell-display-mode.js?v=site-public-6";
 import { rememberShellSessionName } from "./shell-session-links.js?v=site-public-6";
+import {
+    fetchSessionRuntimeContext,
+    runtimeContextSummaryItems,
+} from "./session-runtime-context.js?v=session-runtime-context-1";
 
 const form = document.getElementById("messenger-form");
 const input = document.getElementById("messenger-input");
@@ -13,11 +17,13 @@ const recordButton = document.getElementById("messenger-record");
 const fileInput = document.getElementById("messenger-file-input");
 const urlInput = document.getElementById("messenger-url");
 const attachmentsElement = document.getElementById("messenger-attachments");
+const runtimeContextElement = document.getElementById("messenger-runtime-context");
 
 const DEFAULT_ROUTE_MODE = "chat_only";
 const stageDirectivePattern = /^\s*\[(emotion|expression|motion)\s*[:=]\s*([^\]\r\n]{1,256})\]\s*/i;
 let currentStatusKey = "messenger.status.ready";
 let messengerSessions = [];
+let messengerRuntimeContext = null;
 let pendingAttachments = [];
 let recognition = null;
 let recording = false;
@@ -76,6 +82,7 @@ function initMessengerSessionControls() {
     if (sessionInput) {
         sessionInput.value = initialSessionName;
     }
+    void loadMessengerRuntimeContext(initialSessionName);
     if (sessionSelect) {
         sessionSelect.addEventListener("change", () => {
             setActiveSessionName(sessionSelect.value, { updateUrl: true });
@@ -96,6 +103,7 @@ function setActiveSessionName(value, options = {}) {
     }
     if (options.updateUrl) {
         updateSessionUrl(nextSessionName);
+        void loadMessengerRuntimeContext(nextSessionName);
     }
     return nextSessionName;
 }
@@ -171,6 +179,41 @@ function setStatus(key) {
     if (statusElement) {
         statusElement.textContent = i18n.t(key);
     }
+}
+
+async function loadMessengerRuntimeContext(nextSessionName) {
+    try {
+        messengerRuntimeContext = await fetchSessionRuntimeContext(nextSessionName);
+    } catch (error) {
+        console.warn("Unable to load messenger runtime context", error);
+        messengerRuntimeContext = null;
+    }
+    renderMessengerRuntimeContext();
+}
+
+function renderMessengerRuntimeContext() {
+    if (!runtimeContextElement) {
+        return;
+    }
+    if (!messengerRuntimeContext) {
+        runtimeContextElement.textContent = i18n.t("messenger.runtimeContextUnavailable");
+        return;
+    }
+    const chips = runtimeContextSummaryItems(messengerRuntimeContext, i18n.t)
+        .map((item) => {
+            const chip = document.createElement("span");
+            chip.className = "runtime-context-chip";
+
+            const label = document.createElement("strong");
+            label.textContent = item.label;
+
+            const value = document.createElement("span");
+            value.textContent = item.value;
+
+            chip.append(label, value);
+            return chip;
+        });
+    runtimeContextElement.replaceChildren(...chips);
 }
 
 async function submitMessage() {
@@ -584,6 +627,7 @@ function refreshLocalizedMessengerText() {
         label.textContent = messageRoleLabel(label.dataset.messageRole);
     });
     renderSessionOptions(messengerSessions);
+    renderMessengerRuntimeContext();
     renderPendingAttachments();
     updateRecordButton();
 }

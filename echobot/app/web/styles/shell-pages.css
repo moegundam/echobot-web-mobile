@@ -288,13 +288,14 @@ textarea {
 
 .messenger-root {
     display: grid;
-    grid-template-rows: auto 1fr auto;
+    grid-template-rows: auto auto minmax(0, 1fr) auto;
     gap: 12px;
     padding: 12px;
 }
 
 .messenger-header,
 .messenger-composer,
+.runtime-context-strip,
 .admin-header,
 .admin-grid,
 .admin-health,
@@ -315,6 +316,41 @@ textarea {
 .admin-header {
     display: grid;
     gap: 12px;
+}
+
+.runtime-context-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    min-width: 0;
+    padding: 10px 12px;
+}
+
+.runtime-context-chip {
+    display: inline-flex;
+    gap: 5px;
+    align-items: center;
+    min-width: 0;
+    max-width: 100%;
+    padding: 5px 8px;
+    border: 1px solid rgba(39, 49, 55, 0.12);
+    border-radius: 8px;
+    background: var(--shell-surface-strong);
+    color: var(--shell-text);
+    font-size: 0.82rem;
+}
+
+.runtime-context-chip strong {
+    color: var(--shell-muted);
+    font-weight: 600;
+}
+
+.runtime-context-chip span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .messenger-header h1,
