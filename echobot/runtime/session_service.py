@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
+from typing import Any
 
 from ..orchestration import ConversationCoordinator
 from .sessions import ChatSession, SessionInfo, SessionStore, normalize_session_name
@@ -37,6 +39,17 @@ class SessionLifecycleService:
 
     async def create_session(self, name: str | None = None) -> ChatSession:
         session = await asyncio.to_thread(self._session_store.create_session, name)
+        await self._restore_session_state(session.name)
+        return session
+
+    async def update_session_metadata(
+        self,
+        name: str,
+        update: Callable[[dict[str, Any]], dict[str, Any]],
+    ) -> ChatSession:
+        session = await self.load_session(name)
+        session.metadata = update(dict(session.metadata or {}))
+        await asyncio.to_thread(self._session_store.save_session, session)
         await self._restore_session_state(session.name)
         return session
 

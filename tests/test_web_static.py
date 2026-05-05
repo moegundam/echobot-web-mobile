@@ -142,12 +142,21 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn('href="/admin/sessions"', admin_html)
         self.assertIn('data-i18n-key="admin.sessions"', admin_html)
         self.assertIn('id="sessions-list"', sessions_html)
+        self.assertIn('id="sessions-create-form"', sessions_html)
         self.assertIn('id="sessions-create"', sessions_html)
+        self.assertIn('id="sessions-create-name"', sessions_html)
+        self.assertIn('id="sessions-create-character"', sessions_html)
+        self.assertIn('id="sessions-create-route-mode"', sessions_html)
+        self.assertIn('id="sessions-create-channel-type"', sessions_html)
+        self.assertIn('id="sessions-create-channel-integration"', sessions_html)
         self.assertIn('id="sessions-refresh"', sessions_html)
         self.assertIn('"/api/sessions"', sessions_js)
+        self.assertIn('"/api/character-profiles"', sessions_js)
+        self.assertIn('"/api/channel-integrations"', sessions_js)
         self.assertIn('"/api/sessions/current"', sessions_js)
         self.assertIn("renameSession", sessions_js)
         self.assertIn("deleteSession", sessions_js)
+        self.assertIn("syncCreateChannelTypeFromIntegration", sessions_js)
         self.assertIn("/admin/sessions", structure_js)
 
         for key in (
@@ -155,6 +164,16 @@ class WebStaticAssetTests(unittest.TestCase):
             "sessions.heading",
             "sessions.description",
             "sessions.management",
+            "sessions.name",
+            "sessions.namePlaceholder",
+            "sessions.nameRequired",
+            "sessions.character",
+            "sessions.useDefaultCharacter",
+            "sessions.routeMode",
+            "sessions.channelType",
+            "sessions.channelIntegration",
+            "sessions.noChannelBinding",
+            "sessions.noChannelIntegration",
             "sessions.create",
             "sessions.refresh",
             "sessions.useInConsole",

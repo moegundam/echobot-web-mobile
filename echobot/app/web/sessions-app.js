@@ -7,6 +7,8 @@ import {
 
 const state = {
     sessions: [],
+    characters: [],
+    channelIntegrations: [],
     busy: false,
     loaded: false,
     statusKey: "sessions.loading",
@@ -15,7 +17,13 @@ const state = {
 };
 
 const DOM = {
+    createForm: document.getElementById("sessions-create-form"),
     create: document.getElementById("sessions-create"),
+    createName: document.getElementById("sessions-create-name"),
+    createCharacter: document.getElementById("sessions-create-character"),
+    createRouteMode: document.getElementById("sessions-create-route-mode"),
+    createChannelType: document.getElementById("sessions-create-channel-type"),
+    createChannelIntegration: document.getElementById("sessions-create-channel-integration"),
     list: document.getElementById("sessions-list"),
     refresh: document.getElementById("sessions-refresh"),
     status: document.getElementById("sessions-status"),
@@ -31,8 +39,12 @@ const i18n = initShellI18n({
 const displayMode = initShellDisplayMode({ t: i18n.t });
 initShellSessionLinks();
 
-DOM.create?.addEventListener("click", () => {
+DOM.createForm?.addEventListener("submit", (event) => {
+    event.preventDefault();
     void createSession();
+});
+DOM.createChannelIntegration?.addEventListener("change", () => {
+    syncCreateChannelTypeFromIntegration();
 });
 DOM.refresh?.addEventListener("click", () => {
     void loadSessions();
@@ -60,8 +72,24 @@ async function loadSessions() {
     state.loaded = false;
     setStatusKey("sessions.loading");
     try {
-        const sessions = await requestJson("/api/sessions");
+        const [sessions, characters, channelIntegrations] = await Promise.all([
+            requestJson("/api/sessions"),
+            requestJson("/api/character-profiles").catch((error) => {
+                console.warn("Unable to load characters for session creation", error);
+                return { characters: [] };
+            }),
+            requestJson("/api/channel-integrations").catch((error) => {
+                console.warn("Unable to load channel integrations for session creation", error);
+                return { integrations: [] };
+            }),
+        ]);
         state.sessions = Array.isArray(sessions) ? sessions : [];
+        state.characters = Array.isArray(characters.characters)
+            ? characters.characters
+            : [];
+        state.channelIntegrations = Array.isArray(channelIntegrations.integrations)
+            ? channelIntegrations.integrations
+            : [];
         state.loaded = true;
         render();
         setStatusKey("sessions.ready", { count: state.sessions.length });
@@ -82,6 +110,7 @@ function render() {
     if (!DOM.list) {
         return;
     }
+    renderCreateOptions();
     DOM.list.innerHTML = "";
     if (!state.sessions.length) {
         const empty = document.createElement("p");
@@ -92,6 +121,68 @@ function render() {
     }
     state.sessions.forEach((session) => {
         DOM.list.appendChild(buildSessionCard(session));
+    });
+}
+
+function renderCreateOptions() {
+    renderCharacterOptions();
+    renderChannelTypeOptions();
+    renderChannelIntegrationOptions();
+}
+
+function renderCharacterOptions() {
+    DOM.createCharacter.replaceChildren();
+    const emptyOption = document.createElement("option");
+    emptyOption.value = "";
+    emptyOption.textContent = i18n.t("sessions.useDefaultCharacter");
+    DOM.createCharacter.appendChild(emptyOption);
+    state.characters.forEach((character) => {
+        const option = document.createElement("option");
+        option.value = String(character.name || "");
+        option.textContent = String(character.name || "");
+        DOM.createCharacter.appendChild(option);
+    });
+}
+
+function renderChannelTypeOptions() {
+    DOM.createChannelType.replaceChildren();
+    const options = [
+        ["", i18n.t("sessions.noChannelBinding")],
+        ["web", "Web"],
+        ["telegram", "Telegram"],
+        ["discord", "Discord"],
+        ["line", "LINE"],
+        ["whatsapp", "WhatsApp"],
+        ["qq", "QQ"],
+    ];
+    const existingTypes = new Set(options.map(([value]) => value));
+    state.channelIntegrations.forEach((integration) => {
+        const type = String(integration.type || integration.id || "").trim();
+        if (!type || existingTypes.has(type)) {
+            return;
+        }
+        existingTypes.add(type);
+        options.push([type, channelLabel(integration)]);
+    });
+    options.forEach(([value, label]) => {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = label;
+        DOM.createChannelType.appendChild(option);
+    });
+}
+
+function renderChannelIntegrationOptions() {
+    DOM.createChannelIntegration.replaceChildren();
+    const emptyOption = document.createElement("option");
+    emptyOption.value = "";
+    emptyOption.textContent = i18n.t("sessions.noChannelIntegration");
+    DOM.createChannelIntegration.appendChild(emptyOption);
+    state.channelIntegrations.forEach((integration) => {
+        const option = document.createElement("option");
+        option.value = String(integration.id || "");
+        option.textContent = channelLabel(integration);
+        DOM.createChannelIntegration.appendChild(option);
     });
 }
 
@@ -157,20 +248,35 @@ async function createSession() {
     if (state.busy) {
         return;
     }
-    const rawName = window.prompt(i18n.t("sessions.createPrompt"));
-    const nextName = String(rawName || "").trim();
+    const nextName = String((DOM.createName && DOM.createName.value) || "").trim();
     if (!nextName) {
+        setStatusKey("sessions.nameRequired");
         return;
     }
+    const roleName = String((DOM.createCharacter && DOM.createCharacter.value) || "").trim();
+    const routeMode = String((DOM.createRouteMode && DOM.createRouteMode.value) || "").trim();
+    const channelType = String((DOM.createChannelType && DOM.createChannelType.value) || "").trim();
+    const channelIntegrationId = String(
+        (DOM.createChannelIntegration && DOM.createChannelIntegration.value) || "",
+    ).trim();
     setBusy(true);
     setStatusKey("sessions.creating");
     try {
         await requestJson("/api/sessions", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ name: nextName }),
+            body: JSON.stringify({
+                name: nextName,
+                role_name: roleName || undefined,
+                route_mode: routeMode || undefined,
+                channel_type: channelType || undefined,
+                channel_integration_id: channelIntegrationId || undefined,
+            }),
         });
         rememberShellSessionName(nextName);
+        if (DOM.createName) {
+            DOM.createName.value = "";
+        }
         await loadSessions();
         setStatusKey("sessions.created", { session: nextName });
     } catch (error) {
@@ -181,6 +287,32 @@ async function createSession() {
     } finally {
         setBusy(false);
     }
+}
+
+function syncCreateChannelTypeFromIntegration() {
+    const integrationId = String(
+        (DOM.createChannelIntegration && DOM.createChannelIntegration.value) || "",
+    ).trim();
+    const integration = state.channelIntegrations
+        .find((item) => String(item.id || "") === integrationId);
+    if (!integration) {
+        return;
+    }
+    const type = String(integration.type || integration.id || "").trim();
+    if (type && DOM.createChannelType) {
+        DOM.createChannelType.value = type;
+    }
+}
+
+function channelLabel(integration) {
+    const name = String(integration && integration.name || integration && integration.id || "");
+    if (integration && integration.enabled === false) {
+        return `${name} · ${i18n.t("channelTargets.disabled")}`;
+    }
+    if (integration && integration.running === false) {
+        return `${name} · ${i18n.t("channelTargets.notRunning")}`;
+    }
+    return name;
 }
 
 async function useInConsole(sessionName) {
@@ -269,6 +401,17 @@ function setBusy(isBusy) {
     [DOM.create, DOM.refresh].forEach((button) => {
         if (button) {
             button.disabled = isBusy;
+        }
+    });
+    [
+        DOM.createName,
+        DOM.createCharacter,
+        DOM.createRouteMode,
+        DOM.createChannelType,
+        DOM.createChannelIntegration,
+    ].forEach((field) => {
+        if (field) {
+            field.disabled = isBusy;
         }
     });
     DOM.list?.querySelectorAll("button").forEach((button) => {

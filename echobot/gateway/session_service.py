@@ -40,6 +40,9 @@ class GatewaySessionService:
     async def create_session(self, name: str | None = None):
         return await self._session_service.create_session(name)
 
+    async def update_session_metadata(self, name: str, update):
+        return await self._session_service.update_session_metadata(name, update)
+
     async def set_current_session(self, name: str) -> None:
         await self._session_service.set_current_session(name)
 

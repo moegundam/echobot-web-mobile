@@ -36,10 +36,38 @@
                     <p id="sessions-status" data-i18n-key="sessions.loading">Loading sessions...</p>
                 </div>
                 <div class="session-admin-actions">
-                    <button id="sessions-create" type="button" data-i18n-key="sessions.create">Create session</button>
                     <button id="sessions-refresh" type="button" data-i18n-key="sessions.refresh">Refresh</button>
                 </div>
             </div>
+            <form id="sessions-create-form" class="session-create-form">
+                <div class="model-profile-field-grid">
+                    <label>
+                        <span data-i18n-key="sessions.name">Session name</span>
+                        <input id="sessions-create-name" type="text" maxlength="80" autocomplete="off" data-i18n-placeholder-key="sessions.namePlaceholder">
+                    </label>
+                    <label>
+                        <span data-i18n-key="sessions.character">Character</span>
+                        <select id="sessions-create-character"></select>
+                    </label>
+                    <label>
+                        <span data-i18n-key="sessions.routeMode">Route mode</span>
+                        <select id="sessions-create-route-mode">
+                            <option value="chat_only">chat_only</option>
+                            <option value="auto">auto</option>
+                            <option value="agent">agent</option>
+                        </select>
+                    </label>
+                    <label>
+                        <span data-i18n-key="sessions.channelType">Channel type</span>
+                        <select id="sessions-create-channel-type"></select>
+                    </label>
+                    <label>
+                        <span data-i18n-key="sessions.channelIntegration">Channel integration</span>
+                        <select id="sessions-create-channel-integration"></select>
+                    </label>
+                </div>
+                <button id="sessions-create" type="submit" data-i18n-key="sessions.create">Create session</button>
+            </form>
             <div id="sessions-list" class="session-admin-list"></div>
         </section>
     </main>

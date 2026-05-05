@@ -1036,6 +1036,20 @@ textarea {
     padding: 14px;
 }
 
+.session-create-form {
+    display: grid;
+    gap: 10px;
+    padding: 12px;
+    border: 1px solid var(--shell-line);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.62);
+}
+
+.session-create-form button {
+    justify-self: start;
+    padding: 0 16px;
+}
+
 .session-admin-header,
 .session-admin-card-header,
 .session-admin-card-actions {

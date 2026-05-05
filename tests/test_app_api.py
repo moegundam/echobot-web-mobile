@@ -3431,6 +3431,70 @@ class AppApiTests(unittest.TestCase):
             self.assertEqual("user", detail.json()["history"][0]["role"])
             self.assertEqual("assistant", detail.json()["history"][1]["role"])
 
+    def test_session_create_can_bind_character_and_channel_integration(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            app = create_app(
+                runtime_options=RuntimeOptions(
+                    workspace=workspace,
+                    no_tools=True,
+                    no_skills=True,
+                    no_memory=True,
+                    no_heartbeat=True,
+                ),
+                channel_config_path=workspace / ".echobot" / "channels.json",
+                context_builder=build_test_context,
+            )
+
+            with TestClient(app) as client:
+                role = client.post(
+                    "/api/roles",
+                    json={
+                        "name": "Session Host",
+                        "prompt": "# Session Host\n\nOperate this session.",
+                    },
+                )
+                client.put(
+                    "/api/channels/config",
+                    json={
+                        "telegram": {
+                            "enabled": True,
+                            "allow_from": ["12345"],
+                            "mirror_to_stage": False,
+                            "stage_session_name": "other-stage",
+                            "bot_token": "session-channel-secret",
+                        },
+                    },
+                )
+                created = client.post(
+                    "/api/sessions",
+                    json={
+                        "name": "Live Session",
+                        "role_name": "Session Host",
+                        "route_mode": "chat_only",
+                        "channel_type": "telegram",
+                        "channel_integration_id": "telegram",
+                    },
+                )
+                detail = client.get("/api/sessions/live-session")
+                context = client.get("/api/sessions/live-session/runtime-context")
+
+            self.assertEqual(200, role.status_code)
+            self.assertEqual(200, created.status_code)
+            self.assertEqual("live-session", created.json()["name"])
+            self.assertEqual("session-host", created.json()["role_name"])
+            self.assertEqual("chat_only", created.json()["route_mode"])
+            self.assertEqual("telegram", created.json()["channel_type"])
+            self.assertEqual("telegram", created.json()["channel_integration_id"])
+            self.assertEqual(200, detail.status_code)
+            self.assertEqual("session-host", detail.json()["role_name"])
+            self.assertEqual("telegram", detail.json()["channel_integration_id"])
+            self.assertEqual(200, context.status_code)
+            self.assertEqual("session-host", context.json()["role_name"])
+            self.assertEqual("telegram", context.json()["channel"]["id"])
+            context_text = json.dumps(context.json())
+            self.assertNotIn("session-channel-secret", context_text)
+
     def test_chat_endpoint_accepts_image_only_requests(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             workspace = Path(temp_dir)

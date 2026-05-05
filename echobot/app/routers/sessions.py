@@ -15,6 +15,7 @@ from ..schemas import (
 )
 from ..state import get_app_runtime
 from ..services.runtime_profile_composer import apply_runtime_profile_for_role
+from ..session_metadata import set_channel_binding
 from ...orchestration import role_name_from_metadata
 
 
@@ -52,6 +53,29 @@ async def create_session(
 ) -> SessionDetailModel:
     try:
         session = await runtime.session_service.create_session(request.name)
+        if request.role_name:
+            session = await runtime.chat_service.set_role(
+                session.name,
+                request.role_name,
+            )
+            await _apply_bound_model_profile_for_role(
+                runtime,
+                role_name_from_metadata(session.metadata),
+            )
+        if request.route_mode is not None:
+            session = await runtime.chat_service.set_route_mode(
+                session.name,
+                request.route_mode,
+            )
+        if request.channel_type or request.channel_integration_id:
+            session = await runtime.session_service.update_session_metadata(
+                session.name,
+                lambda metadata: set_channel_binding(
+                    metadata,
+                    channel_type=request.channel_type or "",
+                    channel_integration_id=request.channel_integration_id or "",
+                ),
+            )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return session_detail_model_from_session(session)

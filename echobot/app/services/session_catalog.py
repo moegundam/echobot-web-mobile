@@ -170,6 +170,19 @@ def channel_integration_for_session(
     return None
 
 
+def channel_integration_by_id(
+    integrations: list[ChannelIntegrationAdminModel],
+    integration_id: str,
+) -> ChannelIntegrationAdminModel | None:
+    normalized_integration_id = str(integration_id or "").strip().lower()
+    if not normalized_integration_id:
+        return None
+    for integration in integrations:
+        if str(integration.id or "").strip().lower() == normalized_integration_id:
+            return integration
+    return None
+
+
 def _speech_config_from_section(section: dict[str, Any]) -> SpeechModelAdminConfigModel:
     return SpeechModelAdminConfigModel(
         provider=str(section.get("provider") or ""),

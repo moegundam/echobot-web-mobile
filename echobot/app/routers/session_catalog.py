@@ -15,6 +15,7 @@ from ..schemas import (
     VoiceProfilesResponse,
 )
 from ..services.session_catalog import (
+    channel_integration_by_id,
     channel_integration_for_session,
     effective_profile_id,
     live2d_model_from_profile,
@@ -26,6 +27,7 @@ from ..services.session_catalog import (
     project_voice_profiles,
     voice_profile_from_profile,
 )
+from ..session_metadata import channel_integration_id_from_metadata
 from ..state import get_app_runtime, require_admin_user
 
 
@@ -115,6 +117,10 @@ async def get_session_runtime_context(
     }
     character = await _character_for_role(runtime, role_name, profile_payload)
     integrations = await _channel_integrations(runtime)
+    channel = channel_integration_by_id(
+        integrations,
+        channel_integration_id_from_metadata(session.metadata),
+    ) or channel_integration_for_session(integrations, session.name)
 
     return SessionRuntimeContextResponse(
         session_name=session.name,
@@ -126,7 +132,7 @@ async def get_session_runtime_context(
         live2d_model=live2d_model_from_profile(live2d_profile, catalog_by_key)
         if live2d_profile
         else None,
-        channel=channel_integration_for_session(integrations, session.name),
+        channel=channel,
     )
 
 

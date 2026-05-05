@@ -11,6 +11,10 @@ from ..orchestration import (
     role_name_from_metadata,
     route_mode_from_metadata,
 )
+from .session_metadata import (
+    channel_integration_id_from_metadata,
+    channel_type_from_metadata,
+)
 from ..runtime.sessions import ChatSession, SessionInfo
 
 
@@ -44,11 +48,17 @@ class SessionDetailModel(BaseModel):
     compressed_summary: str = ""
     role_name: str = "default"
     route_mode: RouteMode = DEFAULT_ROUTE_MODE
+    channel_type: str = ""
+    channel_integration_id: str = ""
     history: list[MessageModel] = Field(default_factory=list)
 
 
 class CreateSessionRequest(BaseModel):
     name: str | None = None
+    role_name: str | None = None
+    route_mode: RouteMode | None = None
+    channel_type: str | None = None
+    channel_integration_id: str | None = None
 
 
 class SetCurrentSessionRequest(BaseModel):
@@ -718,6 +728,8 @@ def session_detail_model_from_session(session: ChatSession) -> SessionDetailMode
         compressed_summary=session.compressed_summary,
         role_name=role_name_from_metadata(session.metadata),
         route_mode=route_mode_from_metadata(session.metadata),
+        channel_type=channel_type_from_metadata(session.metadata),
+        channel_integration_id=channel_integration_id_from_metadata(session.metadata),
         history=[
             message_model_from_message(
                 message,
