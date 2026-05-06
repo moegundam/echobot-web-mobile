@@ -8,6 +8,7 @@ from urllib import error, parse, request
 
 
 TOKEN_ENV = "ECHOBOT_OPENWEBUI_BRIDGE_TOKEN"
+TOKEN_FILE_ENV = "ECHOBOT_OPENWEBUI_BRIDGE_TOKEN_FILE"
 
 
 def main() -> int:
@@ -16,14 +17,25 @@ def main() -> int:
     )
     parser.add_argument("--base-url", default="http://127.0.0.1:8001")
     parser.add_argument("--token", default=os.environ.get(TOKEN_ENV, ""))
+    parser.add_argument(
+        "--token-file",
+        default=os.environ.get(TOKEN_FILE_ENV, ""),
+        help=(
+            "Read the bridge bearer token from a local runtime-only file. "
+            f"Defaults to {TOKEN_FILE_ENV} when set."
+        ),
+    )
     parser.add_argument("--session-name", default="openwebui-smoke")
     parser.add_argument("--target-user-id", default="")
     parser.add_argument("--chat-prompt", default="")
     args = parser.parse_args()
 
-    token = str(args.token or "").strip()
+    token = _read_token(args.token, args.token_file)
     if not token:
-        print(f"Missing bridge token. Set {TOKEN_ENV} or pass --token.", file=sys.stderr)
+        print(
+            f"Missing bridge token. Set {TOKEN_ENV}, pass --token, or pass --token-file.",
+            file=sys.stderr,
+        )
         return 2
 
     base_url = str(args.base_url).rstrip("/")
@@ -116,6 +128,20 @@ def _headers(token: str = "") -> dict[str, str]:
     if token:
         headers["Authorization"] = f"Bearer {token}"
     return headers
+
+
+def _read_token(raw_token: str = "", token_file: str = "") -> str:
+    token = str(raw_token or "").strip()
+    if token:
+        return token
+    token_file_path = str(token_file or "").strip()
+    if not token_file_path:
+        return ""
+    try:
+        with open(token_file_path, "r", encoding="utf-8") as handle:
+            return handle.read().strip()
+    except OSError as exc:
+        raise RuntimeError(f"Could not read token file: {exc}") from exc
 
 
 def _get_json(url: str, *, token: str = ""):

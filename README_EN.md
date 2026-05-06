@@ -69,6 +69,7 @@ A Local Tunnel profile was added for private testing: EchoBot runs locally or on
 Related files:
 
 - [`docs/deployment/local-tunnel.md`](./docs/deployment/local-tunnel.md)
+- [`docs/deployment/openwebui-stable-entry.md`](./docs/deployment/openwebui-stable-entry.md)
 - [`docs/deployment/cloudflared-local-tunnel.example.yml`](./docs/deployment/cloudflared-local-tunnel.example.yml)
 - [`.env.local-tunnel.example`](./.env.local-tunnel.example)
 
@@ -180,7 +181,7 @@ Completed so far:
 Not finished or still planned:
 
 - LINE and WhatsApp production runtime adapters remain planned; the QQ adapter still has a built-in entry but has not had a long-running real-platform check.
-- The EchoBot-side narrow Open WebUI bridge API, documentation page, and local smoke script exist. GB10 host calls have been verified through an SSH reverse tunnel for tool spec, stage events, and chat. For long-running use, replace the dev tunnel with Cloudflare Tunnel, Tailscale, a VPS, or a trusted reverse proxy rather than exposing the local `127.0.0.1` service anonymously.
+- The EchoBot-side narrow Open WebUI bridge API, documentation page, and local smoke script exist. GB10 host calls have been verified through an SSH reverse tunnel for tool spec, stage events, and chat. `scripts/echobot_entrypoint.py` now lets the local app and GB10 reverse tunnel run under macOS launchd and rerun bridge smoke checks. Cloudflare Tunnel / Access remains the formal HTTPS entrypoint.
 - `/admin` v1 is mostly an index, guide, and status surface. It is not a complete production SaaS admin console.
 - Stage / Live2D / ASR / TTS have v1 integration and local smoke coverage. Real-device microphone and long-running voice interaction checks still need HTTPS plus real-device validation.
 - Multi-user private testing should use Cloudflare Access or a trusted reverse proxy. Do not expose the local service anonymously to the public internet.

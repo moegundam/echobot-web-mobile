@@ -69,6 +69,7 @@
 相關文件與範本：
 
 - [`docs/deployment/local-tunnel.md`](./docs/deployment/local-tunnel.md)
+- [`docs/deployment/openwebui-stable-entry.md`](./docs/deployment/openwebui-stable-entry.md)
 - [`docs/deployment/cloudflared-local-tunnel.example.yml`](./docs/deployment/cloudflared-local-tunnel.example.yml)
 - [`.env.local-tunnel.example`](./.env.local-tunnel.example)
 
@@ -180,7 +181,7 @@ python -m echobot app --host 127.0.0.1 --port 8001
 尚未完成或仍屬規劃中的部分：
 
 - LINE、WhatsApp 正式 runtime adapter 仍屬規劃中；QQ adapter 已保留 built-in 入口但尚未做真實平台長跑驗證。
-- Open WebUI bridge 已有 EchoBot 端 narrow API、說明頁、本機 smoke script，並已從 GB10 host 透過 SSH reverse tunnel 驗證 tool spec、stage event 與 chat。若要長期使用，仍需改成 Cloudflare Tunnel、Tailscale、VPS 或可信 reverse proxy，不建議把本機 `127.0.0.1` 服務匿名公開。
+- Open WebUI bridge 已有 EchoBot 端 narrow API、說明頁、本機 smoke script，並已從 GB10 host 透過 SSH reverse tunnel 驗證 tool spec、stage event 與 chat。新增 `scripts/echobot_entrypoint.py` 可把本機 app 與 GB10 reverse tunnel 交給 macOS launchd 管理並重跑 smoke；Cloudflare Tunnel / Access 仍是正式 HTTPS 入口。
 - `/admin` 第一版偏向索引、說明與狀態檢視，還不是完整 production SaaS 管理後台。
 - Stage / Live2D / ASR / TTS 已有 v1 整合與本機 smoke；真機麥克風與長時間語音互動仍需在 HTTPS + 真機環境逐項驗收。
 - 多使用者內測建議使用 Cloudflare Access 或可信 reverse proxy；不要把本地服務匿名直接暴露到公開網路。
