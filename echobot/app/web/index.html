@@ -5,10 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title data-i18n-key="console.pageTitle">EchoBot</title>
     <link rel="icon" href="/favicon.ico" type="image/svg+xml">
-    <link rel="stylesheet" href="/web/assets/styles/index.css?v=console-language-2">
+    <link rel="stylesheet" href="/web/assets/styles/index.css?v=ux-audit-1">
 </head>
 <body data-page-title-key="console.pageTitle">
     <div class="page-shell">
+        <h1 class="sr-only" data-i18n-key="console.pageTitle">EchoBot Console</h1>
         <section class="stage-panel">
             <div class="stage-header">
                 <div class="stage-header-meta">
@@ -25,8 +26,8 @@
                 </div>
                 <div class="stage-actions">
                     <nav class="console-quick-nav" aria-label="Console quick navigation" data-i18n-aria-label-key="console.quickNavAria">
-                        <a id="console-nav-stage-link" class="console-nav-button" href="/stage?session_name=default" data-i18n-key="console.openStage">Stage</a>
-                        <a id="console-nav-messenger-link" class="console-nav-button" href="/messenger?session_name=default" data-i18n-key="console.openMessenger">Messenger</a>
+                        <a id="console-nav-stage-link" class="console-nav-button" href="/stage?session_name=default" data-session-link data-i18n-key="console.openStage">Stage</a>
+                        <a id="console-nav-messenger-link" class="console-nav-button" href="/messenger?session_name=default" data-session-link data-i18n-key="console.openMessenger">Messenger</a>
                         <a class="console-nav-button" href="/admin" data-i18n-key="console.openAdmin">Admin</a>
                         <a class="console-nav-button" href="/admin/sessions" data-i18n-key="console.openSessions">Sessions</a>
                     </nav>
@@ -295,8 +296,8 @@
                                 <span class="muted-text" data-i18n-key="console.sessionSettingsHelp">Current session routing and display context.</span>
                             </div>
                             <div class="session-settings-actions">
-                                <a id="session-settings-stage-link" class="console-control-link" href="/stage?session_name=default" data-i18n-key="console.openStage">Stage</a>
-                                <a id="session-settings-messenger-link" class="console-control-link" href="/messenger?session_name=default" data-i18n-key="console.openMessenger">Messenger</a>
+                                <a id="session-settings-stage-link" class="console-control-link" href="/stage?session_name=default" data-session-link data-i18n-key="console.openStage">Stage</a>
+                                <a id="session-settings-messenger-link" class="console-control-link" href="/messenger?session_name=default" data-session-link data-i18n-key="console.openMessenger">Messenger</a>
                             </div>
                         </div>
                         <dl class="session-settings-grid">

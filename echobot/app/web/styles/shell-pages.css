@@ -49,6 +49,17 @@ button {
     cursor: pointer;
 }
 
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
 button:disabled {
     cursor: wait;
     opacity: 0.58;
@@ -885,7 +896,18 @@ textarea {
 }
 
 .model-profile-card small {
+    min-width: 0;
+    overflow: hidden;
     color: var(--shell-muted);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.model-profile-card span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .model-profile-card.is-selected {
@@ -974,8 +996,11 @@ textarea {
 
 .model-profile-form h2,
 .model-profile-form h3,
-.model-profile-form p {
+.model-profile-form p,
+.model-profile-form small {
     margin: 0;
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 .model-profile-form p {
@@ -1000,6 +1025,8 @@ textarea {
     border-radius: 8px;
     color: var(--shell-text);
     background: var(--shell-surface-strong);
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .model-profile-form small {
@@ -1125,6 +1152,32 @@ textarea {
 
 .channels-local-test button {
     justify-self: start;
+}
+
+.channels-local-test label {
+    display: grid;
+    gap: 6px;
+    min-width: 0;
+    color: var(--shell-muted);
+    font-size: 0.86rem;
+}
+
+.channels-local-test input,
+.channels-local-test select,
+.channels-local-test textarea {
+    width: 100%;
+    min-width: 0;
+    min-height: 40px;
+    padding: 8px 10px;
+    border: 1px solid var(--shell-line);
+    border-radius: 8px;
+    color: var(--shell-text);
+    background: var(--shell-surface-strong);
+}
+
+.channels-local-test textarea {
+    min-height: 84px;
+    resize: vertical;
 }
 
 .guide-content {

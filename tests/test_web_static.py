@@ -72,6 +72,9 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn('id="session-settings-messenger-link"', html)
         self.assertIn('id="console-nav-stage-link"', html)
         self.assertIn('id="console-nav-messenger-link"', html)
+        self.assertIn('<h1 class="sr-only" data-i18n-key="console.pageTitle">', html)
+        self.assertIn('id="console-nav-stage-link" class="console-nav-button" href="/stage?session_name=default" data-session-link', html)
+        self.assertIn('id="session-settings-stage-link" class="console-control-link" href="/stage?session_name=default" data-session-link', html)
         self.assertIn('href="/admin"', html)
         self.assertIn('data-i18n-key="console.openAdmin"', html)
         self.assertIn('data-i18n-key="console.openSessions"', html)
@@ -139,6 +142,7 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn(".session-settings-summary-block", panels_css)
         self.assertIn(".console-admin-handoff", panels_css)
         self.assertIn(".console-quick-nav", (WEB_ROOT / "styles" / "base.css").read_text(encoding="utf-8"))
+        self.assertIn(".sr-only", (WEB_ROOT / "styles" / "base.css").read_text(encoding="utf-8"))
         self.assertIn(".session-settings-grid", panels_css)
         self.assertIn(".session-settings-grid", responsive_css)
         self.assertIn(".console-nav-button", responsive_css)
@@ -153,6 +157,26 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn("renderRoleModelProfileCard", roles_js)
         self.assertIn('window.location.pathname === "/console"', app_js)
         self.assertIn("document.body.dataset.shellMode = shellMode", app_js)
+
+    def test_shell_pages_keep_accessible_headings_and_responsive_text(self) -> None:
+        stage_html = (WEB_ROOT / "stage.html").read_text(encoding="utf-8")
+        admin_html = (WEB_ROOT / "admin.html").read_text(encoding="utf-8")
+        models_html = (WEB_ROOT / "models.html").read_text(encoding="utf-8")
+        voice_html = (WEB_ROOT / "voice-models.html").read_text(encoding="utf-8")
+        live2d_html = (WEB_ROOT / "live2d.html").read_text(encoding="utf-8")
+        characters_html = (WEB_ROOT / "characters.html").read_text(encoding="utf-8")
+        shell_pages_css = (WEB_ROOT / "styles" / "shell-pages.css").read_text(encoding="utf-8")
+        i18n_js = (WEB_ROOT / "shell-i18n.js").read_text(encoding="utf-8")
+
+        self.assertIn('<h1 class="sr-only" data-i18n-key="stage.pageTitle">', stage_html)
+        self.assertIn('id="admin-health-output" data-i18n-key="admin.loading"', admin_html)
+        self.assertIn('id="model-profile-status" data-i18n-key="models.loading"', models_html)
+        self.assertIn('id="voice-profile-status" data-i18n-key="models.loading"', voice_html)
+        self.assertIn('id="live2d-profile-status" data-i18n-key="models.loading"', live2d_html)
+        self.assertIn('id="character-profile-status" data-i18n-key="characters.loading"', characters_html)
+        self.assertIn(".model-profile-card span", shell_pages_css)
+        self.assertIn(".channels-local-test input", shell_pages_css)
+        self.assertIn("overflow-wrap: anywhere", shell_pages_css)
 
         for key in (
             "console.sessionSettings",
