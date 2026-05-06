@@ -277,6 +277,10 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn('id="messenger-file-input"', messenger_html)
         self.assertIn('id="messenger-attachments"', messenger_html)
         self.assertIn('id="stage-session-select"', stage_html)
+        self.assertIn('id="stage-menu-toggle"', stage_html)
+        self.assertIn('id="stage-menu-panel"', stage_html)
+        self.assertIn('id="stage-subtitle-toggle"', stage_html)
+        self.assertIn('id="stage-subtitle-panel"', stage_html)
         self.assertIn('class="stage-quick-nav"', stage_html)
         self.assertIn('href="/messenger?session_name=default" data-session-link', stage_html)
         self.assertIn('data-i18n-key="stage.sessionTarget">Session</span>', stage_html)
@@ -308,6 +312,9 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn("promptWithUrl", messenger_js)
         self.assertIn("createSpeechRecognition", messenger_js)
         self.assertIn("loadStageTargets", stage_js)
+        self.assertIn("setStageMenuOpen", stage_js)
+        self.assertIn("setSubtitlesHidden", stage_js)
+        self.assertIn("STAGE_SUBTITLE_STORAGE_KEY", stage_js)
         self.assertNotIn("/api/stage/context?session_name=", stage_js)
         self.assertIn("loadStageContext", stage_js)
         self.assertIn("renderStageContext", stage_js)
@@ -367,6 +374,13 @@ class WebStaticAssetTests(unittest.TestCase):
         for key in (
             "stage.sessionTarget",
             "stage.quickNavAria",
+            "stage.contextAria",
+            "stage.menu.open",
+            "stage.menu.close",
+            "stage.menu.eyebrow",
+            "stage.menu.title",
+            "stage.subtitle.hide",
+            "stage.subtitle.show",
             "stage.sessionFallback",
             "stage.sessionTargetLoadFailed",
             "stage.roleLabel",

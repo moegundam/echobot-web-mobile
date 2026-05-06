@@ -1,4 +1,4 @@
-import { initShellI18n } from "./shell-i18n.js?v=session-centered-2";
+import { initShellI18n } from "./shell-i18n.js?v=stage-menu-1";
 import { initShellDisplayMode } from "./shell-display-mode.js?v=session-centered-2";
 import {
     initShellSessionLinks,
@@ -19,10 +19,17 @@ const channelLabelElement = document.getElementById("stage-channel-label");
 const sessionSelect = document.getElementById("stage-session-select");
 const statusElement = document.getElementById("stage-status");
 const audioButton = document.getElementById("stage-audio-enable");
+const subtitlePanel = document.getElementById("stage-subtitle-panel");
+const subtitleToggleButton = document.getElementById("stage-subtitle-toggle");
+const menuToggleButton = document.getElementById("stage-menu-toggle");
+const menuCloseButton = document.getElementById("stage-menu-close");
+const menuBackdrop = document.getElementById("stage-menu-backdrop");
+const menuPanel = document.getElementById("stage-menu-panel");
 const canvasHost = document.getElementById("stage-canvas-host");
 
 const DEFAULT_LIP_SYNC_IDS = ["ParamMouthOpenY", "PARAM_MOUTH_OPEN_Y", "MouthOpenY"];
 const STAGE_CONTEXT_REFRESH_INTERVAL_MS = 5000;
+const STAGE_SUBTITLE_STORAGE_KEY = "echobot.stage.subtitles.hidden";
 let sessionName = resolveSessionName();
 rememberShellSessionName(sessionName);
 initShellSessionLinks();
@@ -48,6 +55,7 @@ let live2dLoadPromise = null;
 let stageContextRefreshTimerId = 0;
 let activeStageExpressionDefinition = null;
 let stageExpressionHook = null;
+let subtitlesHidden = readStoredSubtitlesHidden();
 const expressionDataCache = new Map();
 const i18n = initShellI18n({
     onChange: () => {
@@ -70,6 +78,36 @@ if (audioButton) {
     });
 }
 
+if (subtitleToggleButton) {
+    subtitleToggleButton.addEventListener("click", () => {
+        setSubtitlesHidden(!subtitlesHidden);
+    });
+}
+
+if (menuToggleButton) {
+    menuToggleButton.addEventListener("click", () => {
+        setStageMenuOpen(true);
+    });
+}
+
+if (menuCloseButton) {
+    menuCloseButton.addEventListener("click", () => {
+        setStageMenuOpen(false);
+    });
+}
+
+if (menuBackdrop) {
+    menuBackdrop.addEventListener("click", () => {
+        setStageMenuOpen(false);
+    });
+}
+
+window.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && isStageMenuOpen()) {
+        setStageMenuOpen(false);
+    }
+});
+
 if (sessionSelect) {
     sessionSelect.addEventListener("change", () => {
         void setActiveSessionName(sessionSelect.value, { reconnect: true });
@@ -79,6 +117,8 @@ if (sessionSelect) {
 init();
 
 async function init() {
+    setSubtitlesHidden(subtitlesHidden, { persist: false });
+    setStageMenuOpen(false, { restoreFocus: false });
     setStatus("stage.status.connecting");
     await loadStageTargets();
     await loadStageContext();
@@ -96,6 +136,46 @@ function setStatus(key) {
     currentStatusKey = key;
     if (statusElement) {
         statusElement.textContent = i18n.t(key);
+        statusElement.dataset.statusKey = key;
+    }
+}
+
+function setStageMenuOpen(isOpen, options = {}) {
+    const open = Boolean(isOpen);
+    if (menuPanel) {
+        menuPanel.setAttribute("aria-hidden", open ? "false" : "true");
+    }
+    if (menuToggleButton) {
+        menuToggleButton.setAttribute("aria-expanded", open ? "true" : "false");
+        menuToggleButton.textContent = i18n.t(open ? "stage.menu.close" : "stage.menu.open");
+    }
+    if (menuBackdrop) {
+        menuBackdrop.hidden = !open;
+    }
+    document.documentElement.classList.toggle("stage-menu-open", open);
+    if (!open && menuToggleButton && options.restoreFocus !== false) {
+        menuToggleButton.focus({ preventScroll: true });
+    }
+}
+
+function isStageMenuOpen() {
+    return Boolean(menuPanel && menuPanel.getAttribute("aria-hidden") === "false");
+}
+
+function setSubtitlesHidden(hidden, options = {}) {
+    subtitlesHidden = Boolean(hidden);
+    if (subtitlePanel) {
+        subtitlePanel.hidden = subtitlesHidden;
+    }
+    if (subtitleToggleButton) {
+        subtitleToggleButton.setAttribute("aria-pressed", subtitlesHidden ? "true" : "false");
+        subtitleToggleButton.textContent = i18n.t(
+            subtitlesHidden ? "stage.subtitle.show" : "stage.subtitle.hide",
+        );
+    }
+    document.documentElement.classList.toggle("stage-subtitles-hidden", subtitlesHidden);
+    if (options.persist !== false) {
+        writeStoredSubtitlesHidden(subtitlesHidden);
     }
 }
 
@@ -1205,6 +1285,7 @@ function refreshLocalizedStageText() {
     }
     renderStageTargetOptions(stageTargets);
     updateAudioButtonText();
+    updateStageChromeText();
 }
 
 function updateAudioButtonText() {
@@ -1214,6 +1295,35 @@ function updateAudioButtonText() {
     audioButton.textContent = i18n.t(
         audioUnlocked ? "stage.audio.enabled" : "stage.audio.enable",
     );
+}
+
+function updateStageChromeText() {
+    if (subtitleToggleButton) {
+        subtitleToggleButton.textContent = i18n.t(
+            subtitlesHidden ? "stage.subtitle.show" : "stage.subtitle.hide",
+        );
+    }
+    if (menuToggleButton) {
+        menuToggleButton.textContent = i18n.t(
+            isStageMenuOpen() ? "stage.menu.close" : "stage.menu.open",
+        );
+    }
+}
+
+function readStoredSubtitlesHidden() {
+    try {
+        return window.localStorage.getItem(STAGE_SUBTITLE_STORAGE_KEY) === "1";
+    } catch (_error) {
+        return false;
+    }
+}
+
+function writeStoredSubtitlesHidden(hidden) {
+    try {
+        window.localStorage.setItem(STAGE_SUBTITLE_STORAGE_KEY, hidden ? "1" : "0");
+    } catch (_error) {
+        // Subtitle visibility is still applied for this page even if storage is blocked.
+    }
 }
 
 async function responseToError(response) {

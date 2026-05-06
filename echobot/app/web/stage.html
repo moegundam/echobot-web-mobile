@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title data-i18n-key="stage.pageTitle">EchoBot</title>
-    <link rel="stylesheet" href="/web/assets/styles/shell-pages.css?v=stage-session-context-1">
+    <link rel="stylesheet" href="/web/assets/styles/shell-pages.css?v=stage-menu-1">
 </head>
 <body class="stage-page" data-page-title-key="stage.pageTitle">
     <main id="stage-root" class="stage-root">
@@ -12,9 +12,36 @@
             <div class="stage-orbit stage-orbit-a" aria-hidden="true"></div>
             <div class="stage-orbit stage-orbit-b" aria-hidden="true"></div>
             <div class="stage-toolbar">
-                <div class="stage-toolbar-controls">
-                    <div class="language-switcher stage-language-switcher" data-language-switcher></div>
-                    <div class="display-mode-switcher stage-display-mode-switcher" data-display-mode-switcher></div>
+                <div class="stage-live-strip" aria-live="polite">
+                    <span id="stage-status" class="stage-status-pill" data-i18n-key="stage.status.connecting">connecting</span>
+                    <span id="stage-session-label" class="stage-session-pill" data-i18n-key="stage.sessionLabel">session: default</span>
+                </div>
+                <button id="stage-audio-enable" class="stage-audio-button" type="button" data-i18n-key="stage.audio.enable">
+                    Audio
+                </button>
+                <button id="stage-subtitle-toggle" class="stage-ghost-button" type="button" aria-pressed="false" data-i18n-key="stage.subtitle.hide">
+                    Hide CC
+                </button>
+                <button id="stage-menu-toggle" class="stage-menu-button" type="button" aria-expanded="false" aria-controls="stage-menu-panel" data-i18n-key="stage.menu.open">
+                    Menu
+                </button>
+            </div>
+            <button id="stage-menu-backdrop" class="stage-menu-backdrop" type="button" aria-label="Close stage menu" data-i18n-aria-label-key="stage.menu.close" hidden></button>
+            <aside id="stage-menu-panel" class="stage-menu-panel" aria-hidden="true" aria-labelledby="stage-menu-title">
+                <header class="stage-menu-header">
+                    <div>
+                        <p class="stage-menu-eyebrow" data-i18n-key="stage.menu.eyebrow">Stage controls</p>
+                        <h1 id="stage-menu-title" data-i18n-key="stage.menu.title">Stage menu</h1>
+                    </div>
+                    <button id="stage-menu-close" class="stage-menu-close" type="button" data-i18n-key="stage.menu.close">
+                        Close
+                    </button>
+                </header>
+                <div class="stage-menu-body">
+                    <div class="stage-menu-section">
+                        <div class="language-switcher stage-language-switcher" data-language-switcher></div>
+                        <div class="display-mode-switcher stage-display-mode-switcher" data-display-mode-switcher></div>
+                    </div>
                     <label class="session-control stage-session-control">
                         <span data-i18n-key="stage.sessionTarget">Session</span>
                         <select id="stage-session-select" autocomplete="off"></select>
@@ -25,29 +52,39 @@
                         <a href="/admin/sessions" data-i18n-key="admin.sessions">Sessions</a>
                         <a href="/admin" data-i18n-key="console.openAdmin">Admin</a>
                     </nav>
+                    <dl class="stage-context-list" aria-label="Stage runtime context" data-i18n-aria-label-key="stage.contextAria">
+                        <div>
+                            <dt data-i18n-key="runtimeContext.character">Character</dt>
+                            <dd id="stage-role-label" data-i18n-key="stage.roleLabel">Role: default</dd>
+                        </div>
+                        <div>
+                            <dt data-i18n-key="runtimeContext.llm">LLM</dt>
+                            <dd id="stage-model-profile-label" data-i18n-key="stage.modelProfileLabel">Model: not set</dd>
+                        </div>
+                        <div>
+                            <dt data-i18n-key="runtimeContext.voice">Voice</dt>
+                            <dd id="stage-voice-profile-label" data-i18n-key="stage.voiceProfileLabel">Voice: not set</dd>
+                        </div>
+                        <div>
+                            <dt data-i18n-key="runtimeContext.live2d">Live2D</dt>
+                            <dd id="stage-live2d-profile-label" data-i18n-key="stage.live2dProfileLabel">Live2D: not set</dd>
+                        </div>
+                        <div>
+                            <dt data-i18n-key="runtimeContext.channel">Channel</dt>
+                            <dd id="stage-channel-label" data-i18n-key="stage.channelLabel">Channel: web</dd>
+                        </div>
+                    </dl>
                 </div>
-                <button id="stage-audio-enable" class="stage-audio-button" type="button" data-i18n-key="stage.audio.enable">
-                    Enable audio
-                </button>
-            </div>
+            </aside>
             <div id="stage-canvas-host" class="stage-canvas-host"></div>
-            <div class="stage-subtitle-panel">
+            <div id="stage-subtitle-panel" class="stage-subtitle-panel">
                 <p id="stage-subtitle" class="stage-subtitle" data-i18n-key="stage.waiting">Waiting for stage events...</p>
-                <div class="stage-meta-row">
-                    <span id="stage-session-label" data-i18n-key="stage.sessionLabel">session: default</span>
-                    <span id="stage-role-label" data-i18n-key="stage.roleLabel">Role: default</span>
-                    <span id="stage-model-profile-label" data-i18n-key="stage.modelProfileLabel">Model: not set</span>
-                    <span id="stage-voice-profile-label" data-i18n-key="stage.voiceProfileLabel">Voice: not set</span>
-                    <span id="stage-live2d-profile-label" data-i18n-key="stage.live2dProfileLabel">Live2D: not set</span>
-                    <span id="stage-channel-label" data-i18n-key="stage.channelLabel">Channel: web</span>
-                    <span id="stage-status" data-i18n-key="stage.status.connecting">connecting</span>
-                </div>
             </div>
         </section>
     </main>
     <script src="/web/assets/vendor/pixi.min.js"></script>
     <script src="/web/assets/vendor/live2dcubismcore.min.js"></script>
     <script src="/web/assets/vendor/cubism4.min.js"></script>
-    <script type="module" src="/web/assets/stage-app.js?v=stage-live2d-session-2"></script>
+    <script type="module" src="/web/assets/stage-app.js?v=stage-menu-1"></script>
 </body>
 </html>
