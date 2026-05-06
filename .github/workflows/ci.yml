@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install pytest httpx
+
+      - name: Check JavaScript syntax
+        run: |
+          git ls-files '*.js' \
+            ':!:node_modules/**' \
+            ':!:vendor/**' \
+            ':!:**/vendor/**' \
+            ':!:**/*.min.js' |
+          while IFS= read -r file; do
+            node --check "$file"
+          done
+
+      - name: Compile Python
+        run: |
+          python - <<'PY'
+          import py_compile
+          import subprocess
+          import sys
+          from pathlib import Path
+
+          files = subprocess.check_output(
+              ["git", "ls-files", "*.py"],
+              text=True,
+          ).splitlines()
+
+          failed = False
+          for filename in files:
+              path = Path(filename)
+              if any(part in {".venv", "venv", "__pycache__"} for part in path.parts):
+                  continue
+              try:
+                  py_compile.compile(str(path), doraise=True)
+              except py_compile.PyCompileError as exc:
+                  failed = True
+                  print(exc, file=sys.stderr)
+
+          if failed:
+              sys.exit(1)
+          PY
+
+      - name: Public safety scan
+        run: python scripts/check_public_safety.py
+
+      - name: Whitespace check
+        run: git diff --check HEAD
+
+      - name: Run tests
+        run: pytest
