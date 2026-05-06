@@ -2850,44 +2850,46 @@ function translate(language, key, params = {}) {
 }
 
 function ensureLanguageSwitcher(controller, onChange) {
-    const container = document.querySelector("[data-language-switcher]");
-    if (!container) {
+    const containers = Array.from(document.querySelectorAll("[data-language-switcher]"));
+    if (containers.length === 0) {
         return;
     }
 
-    const label = document.createElement("label");
-    label.className = "shell-language-select-label";
+    containers.forEach((container) => {
+        const label = document.createElement("label");
+        label.className = "shell-language-select-label";
 
-    const labelText = document.createElement("span");
-    labelText.dataset.i18nKey = "common.language";
+        const labelText = document.createElement("span");
+        labelText.dataset.i18nKey = "common.language";
 
-    const select = document.createElement("select");
-    select.className = "shell-language-select";
-    select.name = "echobot-language";
-    select.setAttribute("aria-label", "Language");
+        const select = document.createElement("select");
+        select.className = "shell-language-select";
+        select.name = "echobot-language";
+        select.setAttribute("aria-label", "Language");
 
-    LANGUAGES.forEach((language) => {
-        const option = document.createElement("option");
-        option.value = language.code;
-        option.textContent = language.label;
-        select.appendChild(option);
+        LANGUAGES.forEach((language) => {
+            const option = document.createElement("option");
+            option.value = language.code;
+            option.textContent = language.label;
+            select.appendChild(option);
+        });
+
+        select.value = controller.language;
+        select.addEventListener("change", () => {
+            const nextLanguage = isSupportedLanguage(select.value)
+                ? select.value
+                : DEFAULT_LANGUAGE;
+            controller.language = nextLanguage;
+            writeStoredLanguage(nextLanguage);
+            applyStaticTranslations(controller);
+            if (typeof onChange === "function") {
+                onChange(nextLanguage);
+            }
+        });
+
+        label.append(labelText, select);
+        container.replaceChildren(label);
     });
-
-    select.value = controller.language;
-    select.addEventListener("change", () => {
-        const nextLanguage = isSupportedLanguage(select.value)
-            ? select.value
-            : DEFAULT_LANGUAGE;
-        controller.language = nextLanguage;
-        writeStoredLanguage(nextLanguage);
-        applyStaticTranslations(controller);
-        if (typeof onChange === "function") {
-            onChange(nextLanguage);
-        }
-    });
-
-    label.append(labelText, select);
-    container.replaceChildren(label);
 }
 
 function applyStaticTranslations(controller) {
