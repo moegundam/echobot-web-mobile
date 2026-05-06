@@ -68,12 +68,26 @@ def openwebui_bridge_status() -> dict[str, Any]:
         "operator_agent_enabled": settings.operator_agent_enabled,
         "allowed_target_users_configured": bool(settings.allowed_target_users),
         "require_target_user": settings.require_target_user,
+        "security_warnings": _bridge_security_warnings(settings),
         "tool_spec_url": "/api/openwebui/tools/openapi.json",
         "stage_event_url": "/api/openwebui/stage/events",
         "chat_url": "/api/openwebui/chat",
         "sessions_url": "/api/openwebui/sessions",
         "model_provider_recommendation": "Connect Open WebUI directly to a private LiteLLM, Ollama, or another OpenAI-compatible model provider. Use EchoBot only as the operator bridge.",
     }
+
+
+def _bridge_security_warnings(settings: OpenWebUIBridgeSettings) -> list[str]:
+    warnings: list[str] = []
+    if not settings.token_configured:
+        warnings.append("bridge token is missing")
+    if not settings.require_target_user and not settings.default_user_id:
+        warnings.append("target user is optional and no default user is configured")
+    if settings.operator_agent_enabled:
+        warnings.append("operator-agent mode can trigger non-chat route modes")
+    if not settings.allowed_target_users:
+        warnings.append("allowed target user allowlist is not configured")
+    return warnings
 
 
 def resolve_bridge_target_user(

@@ -12,6 +12,7 @@ from ...channels import (
     load_channels_config,
     save_channels_config,
 )
+from ...channels.platforms.discord import DISCORD_AVAILABLE
 from ...channels.platforms.telegram import TELEGRAM_AVAILABLE
 from ...runtime.sessions import normalize_session_name
 from ..schemas import CHANNEL_SECRET_FIELD_NAMES
@@ -216,19 +217,27 @@ def _discord_smoke_result(config: dict[str, Any]) -> dict[str, Any]:
     secret_ok = _configured(config, "webhook_secret")
     enabled = bool(config.get("enabled"))
     allow_list = _string_list(config.get("allow_from"))
-    credential_ok = token_ok or webhook_ok
+    native_ok = token_ok and DISCORD_AVAILABLE
+    credential_ok = webhook_ok or native_ok
     checks = [
         _check(
             "credential",
-            credential_ok,
+            token_ok or webhook_ok,
             "bot token or webhook URL configured"
-            if credential_ok
+            if token_ok or webhook_ok
             else "missing bot token or webhook URL",
+        ),
+        _check(
+            "discord_py",
+            DISCORD_AVAILABLE,
+            "installed for native bot events"
+            if DISCORD_AVAILABLE
+            else "missing discord.py; webhook mode still works if webhook_url is configured",
         ),
         _check(
             "webhook_secret",
             secret_ok,
-            "configured" if secret_ok else "optional until inbound webhook is implemented",
+            "configured" if secret_ok else "required for protected inbound webhook bridge",
         ),
         _check(
             "allow_from",
@@ -237,8 +246,12 @@ def _discord_smoke_result(config: dict[str, Any]) -> dict[str, Any]:
         ),
         _check(
             "runtime_adapter",
-            True,
-            "webhook ingress and outbound webhook delivery available; bot gateway still planned",
+            webhook_ok or native_ok,
+            "native bot events available"
+            if native_ok
+            else "webhook ingress/outbound delivery available"
+            if webhook_ok
+            else "configure webhook_url or install discord.py with bot_token",
         ),
         _check(
             "enabled",
@@ -253,9 +266,10 @@ def _discord_smoke_result(config: dict[str, Any]) -> dict[str, Any]:
         "status": status,
         "checks": checks,
         "next_steps": [
-            "Use /api/channels/discord/webhook for controlled inbound webhook tests.",
-            "Add the Discord bot runtime adapter before enabling direct bot events.",
-            "Verify Discord intents and interaction/webhook mode in the Discord Developer Portal.",
+            "Runtime adapter supports native bot events when discord.py is installed and webhook bridge when webhook_url is configured.",
+            "Use /api/channels/discord/webhook for controlled inbound webhook tests when webhook_secret is configured.",
+            "For native bot events, install discord.py, set bot_token, enable Message Content Intent in the Discord Developer Portal, and restart EchoBot.",
+            "Keep allow_from restricted before enabling the channel for shared servers.",
         ],
     }
 

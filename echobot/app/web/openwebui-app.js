@@ -45,6 +45,15 @@ const bridgeContent = {
                     "Then call the chat tool and confirm the EchoBot session history changes under the selected target user.",
                 ],
             },
+            {
+                title: "Local bridge verification",
+                body: "Use the repo smoke script before registering the tool server in Open WebUI.",
+                items: [
+                    "Run `python scripts/openwebui_bridge_smoke.py --base-url http://127.0.0.1:8001 --session-name demo` with `ECHOBOT_OPENWEBUI_BRIDGE_TOKEN` set.",
+                    "The script checks status, the narrow tool spec, session listing, and Stage event publishing.",
+                    "Use `--chat-prompt` only when the selected model provider is ready to answer.",
+                ],
+            },
         ],
     },
     "zh-Hant": {
@@ -89,6 +98,15 @@ const bridgeContent = {
                     "再呼叫 chat tool，確認 EchoBot session history 寫入選定的 target user namespace。",
                 ],
             },
+            {
+                title: "本機 Bridge 驗證",
+                body: "在 Open WebUI 註冊 tool server 前，先用 repo smoke script 驗證 EchoBot 端。",
+                items: [
+                    "設定 `ECHOBOT_OPENWEBUI_BRIDGE_TOKEN` 後執行 `python scripts/openwebui_bridge_smoke.py --base-url http://127.0.0.1:8001 --session-name demo`。",
+                    "腳本會檢查 status、窄 tool spec、session list 與 Stage event 發布。",
+                    "只有在模型 provider 已可回覆時，才加 `--chat-prompt` 做 chat 工具驗證。",
+                ],
+            },
         ],
     },
     "zh-Hans": {
@@ -131,6 +149,15 @@ const bridgeContent = {
                     "从 Open WebUI 调用 Stage tool，带入 `session_name=demo` 与短文字。",
                     "Stage 应该在同一 target user 与同一 session 下更新字幕。",
                     "再调用 chat tool，确认 EchoBot session history 写入选定的 target user namespace。",
+                ],
+            },
+            {
+                title: "本机 Bridge 验证",
+                body: "在 Open WebUI 注册 tool server 前，先用 repo smoke script 验证 EchoBot 端。",
+                items: [
+                    "设置 `ECHOBOT_OPENWEBUI_BRIDGE_TOKEN` 后执行 `python scripts/openwebui_bridge_smoke.py --base-url http://127.0.0.1:8001 --session-name demo`。",
+                    "脚本会检查 status、窄 tool spec、session list 与 Stage event 发布。",
+                    "只有在模型 provider 已可回复时，才加 `--chat-prompt` 做 chat 工具验证。",
                 ],
             },
         ],
@@ -219,6 +246,20 @@ function renderStatus() {
             tone: statusPayload.default_user_configured ? "ok" : "muted",
         },
         {
+            title: i18n.t("openwebui.allowedTargets"),
+            value: statusPayload.allowed_target_users_configured
+                ? i18n.t("openwebui.configured")
+                : i18n.t("openwebui.notSet"),
+            tone: statusPayload.allowed_target_users_configured ? "ok" : "warn",
+        },
+        {
+            title: i18n.t("openwebui.requireTargetUser"),
+            value: statusPayload.require_target_user
+                ? i18n.t("openwebui.required")
+                : i18n.t("openwebui.optional"),
+            tone: statusPayload.require_target_user ? "ok" : "warn",
+        },
+        {
             title: i18n.t("openwebui.agentMode"),
             value: statusPayload.operator_agent_enabled
                 ? i18n.t("openwebui.enabled")
@@ -250,6 +291,13 @@ function renderStatus() {
             value: statusPayload.model_provider_recommendation || i18n.t("openwebui.providerFallback"),
             tone: "muted",
         },
+        {
+            title: i18n.t("openwebui.security"),
+            value: securityWarningText(statusPayload.security_warnings),
+            tone: Array.isArray(statusPayload.security_warnings) && statusPayload.security_warnings.length > 0
+                ? "warn"
+                : "ok",
+        },
     ];
     statusGrid.replaceChildren(...items.map((item) => buildStatusCard(item.title, item.value, item.tone)));
 }
@@ -276,6 +324,13 @@ function renderContent() {
     contentRoot.replaceChildren(
         ...content.sections.map((section, index) => buildGuideSection(section, index)),
     );
+}
+
+function securityWarningText(warnings) {
+    if (!Array.isArray(warnings) || warnings.length === 0) {
+        return i18n.t("openwebui.securityOk");
+    }
+    return warnings.join(" | ");
 }
 
 function buildGuideSection(section, index) {

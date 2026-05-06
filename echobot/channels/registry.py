@@ -36,7 +36,7 @@ _BUILTIN_CHANNELS: dict[str, ChannelDefinition] = {
     ),
     "discord": ChannelDefinition(
         name="discord",
-        description="Discord bot configuration and smoke-test channel.",
+        description="Discord native bot events, webhook bridge, and smoke-test channel.",
         config_cls=DiscordChannelConfig,
         channel_cls=DiscordChannel,
     ),

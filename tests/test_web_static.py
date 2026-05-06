@@ -487,6 +487,7 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn('"/api/model-profiles"', live2d_js)
         self.assertIn("createProfileFromSelection", live2d_js)
         self.assertIn("deleteSelectedProfile", live2d_js)
+        self.assertIn("statusPayload.security_warnings", openwebui_html + (WEB_ROOT / "openwebui-app.js").read_text(encoding="utf-8"))
 
         for key in (
             "admin.llmModels",
@@ -497,6 +498,9 @@ class WebStaticAssetTests(unittest.TestCase):
             "live2dAdmin.heading",
             "live2dAdmin.description",
             "live2dAdmin.catalog",
+            "openwebui.allowedTargets",
+            "openwebui.requireTargetUser",
+            "openwebui.security",
         ):
             self.assertGreaterEqual(i18n_js.count(f'"{key}"'), 3)
 
@@ -514,6 +518,7 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn("/local-test-message", channels_js)
         self.assertIn("POST /api/channels/discord/webhook", channels_js)
         self.assertIn("X-EchoBot-Discord-Secret", channels_js)
+        self.assertIn("Native bot events require discord.py", channels_js)
         self.assertIn('i18n.t("channels.saveChanges")', channels_js)
         self.assertIn('i18n.t("channels.reload")', channels_js)
         self.assertIn('i18n.t("channels.smokeTest")', channels_js)

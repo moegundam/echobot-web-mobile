@@ -67,7 +67,7 @@ const channelText = {
         descriptions: {
             console: "Local console output channel for smoke testing.",
             telegram: "Telegram bot polling channel.",
-            discord: "Discord webhook bridge and outbound webhook delivery. Direct Discord bot events are still a later adapter.",
+            discord: "Discord native bot events, protected webhook bridge, and outbound webhook delivery.",
             qq: "QQ official bot direct-message channel.",
         },
         channelHints: {
@@ -81,7 +81,8 @@ const channelText = {
                 "Required header: X-EchoBot-Discord-Secret",
                 "Request JSON includes channel_id, user_id, text, and optional session_name.",
                 "Outbound replies use webhook_url when configured.",
-                "Use the local E2E test for session routing and Stage mirroring before wiring native bot events.",
+                "Native bot events require discord.py plus Message Content Intent in the Discord Developer Portal.",
+                "Use the local E2E test for session routing and Stage mirroring before enabling the channel in a shared server.",
             ],
         },
     },
@@ -101,7 +102,7 @@ const channelText = {
         descriptions: {
             console: "本機 console output channel，用於 smoke test。",
             telegram: "Telegram bot polling channel。",
-            discord: "Discord webhook bridge 與 outbound webhook 發送；原生 Discord bot events adapter 仍是後續項目。",
+            discord: "Discord 原生 bot events、受保護 webhook bridge 與 outbound webhook 發送。",
             qq: "QQ 官方 bot direct-message channel。",
         },
         channelHints: {
@@ -115,7 +116,8 @@ const channelText = {
                 "必要 header：X-EchoBot-Discord-Secret",
                 "Request JSON 包含 channel_id、user_id、text，可選 session_name。",
                 "Outbound 回覆在設定 webhook_url 後會透過 Discord webhook 發送。",
-                "接原生 bot events 前，先用本機 E2E 測試驗證 session routing 與 Stage 同步。",
+                "原生 bot events 需要 discord.py，並在 Discord Developer Portal 開啟 Message Content Intent。",
+                "在共享伺服器啟用前，先用本機 E2E 測試驗證 session routing 與 Stage 同步。",
             ],
         },
     },
@@ -135,7 +137,7 @@ const channelText = {
         descriptions: {
             console: "本机 console output channel，用于 smoke test。",
             telegram: "Telegram bot polling channel。",
-            discord: "Discord webhook bridge 与 outbound webhook 发送；原生 Discord bot events adapter 仍是后续项目。",
+            discord: "Discord 原生 bot events、受保护 webhook bridge 与 outbound webhook 发送。",
             qq: "QQ 官方 bot direct-message channel。",
         },
         channelHints: {
@@ -149,7 +151,8 @@ const channelText = {
                 "必要 header：X-EchoBot-Discord-Secret",
                 "Request JSON 包含 channel_id、user_id、text，可选 session_name。",
                 "Outbound 回复在设置 webhook_url 后会通过 Discord webhook 发送。",
-                "接原生 bot events 前，先用本机 E2E 测试验证 session routing 与 Stage 同步。",
+                "原生 bot events 需要 discord.py，并在 Discord Developer Portal 开启 Message Content Intent。",
+                "在共享服务器启用前，先用本机 E2E 测试验证 session routing 与 Stage 同步。",
             ],
         },
     },

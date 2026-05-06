@@ -68,8 +68,8 @@ If you run on another port, replace `8001` in the links below with the actual po
 | Admin | Sessions | http://127.0.0.1:8001/admin/sessions | Session creation, character, route mode, and channel binding |
 | Admin | Characters | http://127.0.0.1:8001/admin/characters | Character prompts, model/voice/Live2D bindings, emotion maps, package import/export |
 | Admin | LLM Models | http://127.0.0.1:8001/admin/models | LLM model profiles, provider/base URL/API key settings |
-| Admin | Voice Models | http://127.0.0.1:8001/admin/voice-models | STT/TTS profile view and future management entry |
-| Admin | Live2D | http://127.0.0.1:8001/admin/live2d | Live2D asset/config view and future management entry |
+| Admin | Voice Models | http://127.0.0.1:8001/admin/voice-models | STT/TTS profile management, naming, provider settings, and smoke checks |
+| Admin | Live2D | http://127.0.0.1:8001/admin/live2d | Live2D asset/profile management, naming, config, and stage binding |
 | Admin | Channels | http://127.0.0.1:8001/admin/channels | Telegram/Discord settings, secret redaction, and smoke readiness |
 | Admin | Open WebUI Bridge | http://127.0.0.1:8001/admin/openwebui | Open WebUI bridge guide, bridge status, and tool spec entry |
 | Admin Docs | Operation Guide | http://127.0.0.1:8001/admin/guide | Operation, setup, expected results, failure signs, and troubleshooting |

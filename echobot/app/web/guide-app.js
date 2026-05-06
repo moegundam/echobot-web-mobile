@@ -31,7 +31,7 @@ const guideContent = {
                 items: [
                     "In `/admin/sessions`, create or select the session to test.",
                     "In `/console`, open the same session and choose the prepared character card.",
-                    "Select an optional channel for the session (if needed): Telegram/Discord is currently smoke-test ready; other channels are planned.",
+                    "Select an optional channel for the session (if needed): Telegram is polling-ready, and Discord supports protected webhook plus native bot events when configured.",
                     "Use `/messenger?session_name=<name>` to send a message and confirm the final assistant reply updates Stage.",
                     "Use `/stage?session_name=<name>` only as result display during verification.",
                 ],
@@ -40,7 +40,7 @@ const guideContent = {
                 title: "Channels and boundaries",
                 body: "Channels are entry points, not the session core. They decide who can send into a session.",
                 items: [
-                    "Telegram/Discord currently support smoke tests in the current workflow.",
+                    "Telegram supports Bot API polling; Discord supports a protected webhook bridge and native bot events with Message Content Intent enabled.",
                     "LINE, WhatsApp, QQ, and others are planned and not part of the regular test path yet.",
                     "Open WebUI bridge is not a chat channel; it is an operator tool API interface.",
                     "Keep session + character controls in Console and keep channels in setup context.",
@@ -53,6 +53,16 @@ const guideContent = {
                     "Open `/admin/openwebui` to configure allowed tool methods and operator-level bridge status.",
                     "Use the bridge for integration testing of tools only after the session flow is stable.",
                     "Validate tool-driven operations from Console context and keep chat verification on Messenger/Stage.",
+                ],
+            },
+            {
+                title: "Before private sharing",
+                body: "Run these checks before pushing changes or exposing the local tunnel to testers.",
+                items: [
+                    "Run `python scripts/check_public_safety.py` and confirm it passes.",
+                    "Run `git status --short` and confirm `.echobot/`, `.env`, bot tokens, and bridge tokens are not tracked.",
+                    "Use `/admin/channels` local E2E first; use real Telegram/Discord only after allow_from is restricted.",
+                    "Use `/admin/openwebui` and `scripts/openwebui_bridge_smoke.py` before enabling Open WebUI tools.",
                 ],
             },
             {
@@ -95,7 +105,7 @@ const guideContent = {
                 items: [
                     "在 `/admin/sessions` 建立或選擇本次測試 session。",
                     "在 `/console` 開啟同 session，選擇事先綁定的角色卡。",
-                    "視需求為 session 選擇通道（Telegram/Discord）並確認能進入測試。",
+                    "視需求為 session 選擇通道；Telegram 可用 polling，Discord 可用受保護 webhook 或原生 bot events。",
                     "在 `/messenger?session_name=<name>` 傳一則訊息，確認 Messenger 最終回覆同步到 Stage。",
                     "用 `/stage?session_name=<name>` 僅檢視結果畫面（字幕/TTS/Live2D）。",
                 ],
@@ -104,7 +114,7 @@ const guideContent = {
                 title: "通道與邊界",
                 body: "通道是進入口，不是核心運行邏輯；核心是 session、角色與 runtime 控制。",
                 items: [
-                    "目前可做 smoke test 的通道為 Telegram / Discord。",
+                    "Telegram 支援 Bot API polling；Discord 支援受保護 webhook bridge，並可在開啟 Message Content Intent 後使用原生 bot events。",
                     "LINE、WhatsApp、QQ 等仍是規劃中，暫不列入常規測試流程。",
                     "Open WebUI bridge 是操作員工具介面，不是對話通道。",
                     "核心驗證都應在 `/console`、`/messenger`、`/stage` 的同 session 流程中完成。",
@@ -117,6 +127,16 @@ const guideContent = {
                     "在 `/admin/openwebui` 設定工具方法白名單與 bridge 狀態。",
                     "先完成 session 流程後，再做 bridge 的工具型驗證。",
                     "聊天室測試仍以 Messenger + Stage + Console 為主。",
+                ],
+            },
+            {
+                title: "內測分享前檢查",
+                body: "推送變更或把 local tunnel 開給測試者前，先完成這些檢查。",
+                items: [
+                    "執行 `python scripts/check_public_safety.py` 並確認通過。",
+                    "執行 `git status --short`，確認 `.echobot/`、`.env`、bot token、bridge token 沒有被追蹤。",
+                    "先用 `/admin/channels` 的本機 E2E 測試；真 Telegram/Discord 測試前要先收斂 allow_from。",
+                    "啟用 Open WebUI tools 前，先用 `/admin/openwebui` 與 `scripts/openwebui_bridge_smoke.py` 驗證。",
                 ],
             },
             {
@@ -159,7 +179,7 @@ const guideContent = {
                 items: [
                     "在 `/admin/sessions` 创建或选择本次测试 session。",
                     "在 `/console` 打开同一 session，并选择预先绑定的角色卡。",
-                    "按需为 session 选通道（Telegram/Discord），并确认可进入测试。",
+                    "按需为 session 选通道；Telegram 可用 polling，Discord 可用受保护 webhook 或原生 bot events。",
                     "在 `/messenger?session_name=<name>` 发一条消息，确认 Assistant 最终回复同步到 Stage。",
                     "用 `/stage?session_name=<name>` 仅验证结果输出（字幕/TTS/Live2D）。",
                 ],
@@ -168,7 +188,7 @@ const guideContent = {
                 title: "通道与边界",
                 body: "通道是入口，不是核心；核心是 session、角色与 runtime 控制。",
                 items: [
-                    "目前可做 smoke test 的通道是 Telegram / Discord。",
+                    "Telegram 支持 Bot API polling；Discord 支持受保护 webhook bridge，并可在开启 Message Content Intent 后使用原生 bot events。",
                     "LINE、WhatsApp、QQ 等仍在规划中，暂不作为常规测试入口。",
                     "Open WebUI bridge 是操作员工具接口，不是对话通道。",
                     "核心验证仍以 `/console`、`/messenger`、`/stage` 的同 session 流程为准。",
@@ -181,6 +201,16 @@ const guideContent = {
                     "在 `/admin/openwebui` 配置允许的工具方法与 bridge 状态。",
                     "先让 session 流程稳定后，再做工具接口验证。",
                     "聊天验证仍以 Messenger + Stage + Console 为主。",
+                ],
+            },
+            {
+                title: "内测分享前检查",
+                body: "推送变更或把 local tunnel 开给测试者前，先完成这些检查。",
+                items: [
+                    "执行 `python scripts/check_public_safety.py` 并确认通过。",
+                    "执行 `git status --short`，确认 `.echobot/`、`.env`、bot token、bridge token 没有被追踪。",
+                    "先用 `/admin/channels` 的本机 E2E 测试；真 Telegram/Discord 测试前要先收敛 allow_from。",
+                    "启用 Open WebUI tools 前，先用 `/admin/openwebui` 与 `scripts/openwebui_bridge_smoke.py` 验证。",
                 ],
             },
             {

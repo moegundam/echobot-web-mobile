@@ -107,6 +107,44 @@ WebSocket ASR route 必須走：
 wss://echobot.example.com/api/web/asr/ws
 ```
 
+### 公開前安全檢查
+
+上傳或設定公開前，先跑：
+
+```shell
+python scripts/check_public_safety.py
+git status --short
+```
+
+檢查重點：
+
+- `.echobot/`、`.env`、真實 bot token、OpenAI key、private key 不可被追蹤。
+- 只有 `.env.*.example` 這類範本可以進 repo。
+- channel token、Open WebUI bridge token、Cloudflare 設定值只留在本機 runtime 或部署 secret。
+
+### Open WebUI Bridge Smoke
+
+EchoBot 只提供窄 OpenAPI tool surface，不要把全站 `/openapi.json` 匯入 Open WebUI。
+
+```shell
+export ECHOBOT_OPENWEBUI_BRIDGE_TOKEN="<same value used by EchoBot>"
+python scripts/openwebui_bridge_smoke.py \
+  --base-url http://127.0.0.1:8000 \
+  --target-user-id tester@example.com \
+  --session-name demo
+```
+
+若 `ECHOBOT_OPENWEBUI_REQUIRE_TARGET_USER=false`，可省略 `--target-user-id`；正式內測建議保留 target user 或設定 `ECHOBOT_OPENWEBUI_BRIDGE_USER_ID`。
+
+### Discord Gateway
+
+Discord 支援兩種模式：
+
+- Protected webhook bridge：設定 `webhook_url` 與 `webhook_secret`，用 `/api/channels/discord/webhook` 做受控 inbound。
+- Native bot events：設定 `bot_token`，安裝 `discord.py`，並在 Discord Developer Portal 開啟 Message Content Intent。
+
+共享伺服器內測前務必設定 `allow_from`，避免任意 Discord 使用者寫入 session。
+
 ### Runtime Data
 
 資料存放於：
@@ -261,6 +299,44 @@ The WebSocket ASR route must use:
 ```text
 wss://echobot.example.com/api/web/asr/ws
 ```
+
+### Pre-public Safety Check
+
+Before pushing or making the repository public, run:
+
+```shell
+python scripts/check_public_safety.py
+git status --short
+```
+
+The check protects against:
+
+- tracked `.echobot/`, `.env`, real bot tokens, OpenAI keys, or private keys
+- tracked env files unless they are `.env.*.example` templates
+- accidentally committing channel tokens, Open WebUI bridge tokens, or Cloudflare deployment values
+
+### Open WebUI Bridge Smoke
+
+EchoBot exposes only a narrow OpenAPI tool surface. Do not import the full site `/openapi.json` into Open WebUI.
+
+```shell
+export ECHOBOT_OPENWEBUI_BRIDGE_TOKEN="<same value used by EchoBot>"
+python scripts/openwebui_bridge_smoke.py \
+  --base-url http://127.0.0.1:8000 \
+  --target-user-id tester@example.com \
+  --session-name demo
+```
+
+If `ECHOBOT_OPENWEBUI_REQUIRE_TARGET_USER=false`, `--target-user-id` can be omitted. For private testing, prefer keeping target-user scoping or setting `ECHOBOT_OPENWEBUI_BRIDGE_USER_ID`.
+
+### Discord Gateway
+
+Discord supports two modes:
+
+- Protected webhook bridge: configure `webhook_url` and `webhook_secret`, then use `/api/channels/discord/webhook` for controlled inbound messages.
+- Native bot events: configure `bot_token`, install `discord.py`, and enable Message Content Intent in the Discord Developer Portal.
+
+Set `allow_from` before testing in shared servers so arbitrary Discord users cannot write into sessions.
 
 ### Runtime Data
 
