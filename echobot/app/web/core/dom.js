@@ -16,6 +16,8 @@ export const DOM = {
     composerImages: document.getElementById("composer-images"),
     composerStatusBanner: document.getElementById("composer-status-banner"),
     connectionBadge: document.getElementById("connection-badge"),
+    consoleNavMessengerLink: document.getElementById("console-nav-messenger-link"),
+    consoleNavStageLink: document.getElementById("console-nav-stage-link"),
     cronJobs: document.getElementById("cron-jobs"),
     cronPanel: document.getElementById("cron-panel"),
     cronRefreshButton: document.getElementById("cron-refresh-button"),

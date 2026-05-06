@@ -270,6 +270,8 @@ export function createSessionsModule(deps) {
         setText(sessionSettingsElement("model"), modelLabel);
         setText(sessionSettingsElement("route"), routeModeLabel(routeMode, t));
         setText(sessionSettingsElement("updated"), updatedLabel);
+        updateSessionLink(DOM.consoleNavStageLink, "/stage", sessionName);
+        updateSessionLink(DOM.consoleNavMessengerLink, "/messenger", sessionName);
         updateSessionLink(sessionSettingsElement("stage-link"), "/stage", sessionName);
         updateSessionLink(sessionSettingsElement("messenger-link"), "/messenger", sessionName);
     }

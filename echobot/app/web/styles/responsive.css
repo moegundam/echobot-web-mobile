@@ -172,6 +172,19 @@
         gap: 8px;
     }
 
+    .console-quick-nav {
+        display: grid;
+        grid-column: 1 / -1;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        width: 100%;
+        gap: 8px;
+    }
+
+    .console-nav-button {
+        min-width: 0;
+        padding: 10px 12px;
+    }
+
     .stage-actions .ghost-button {
         min-width: 0;
         padding: 10px 12px;
@@ -399,6 +412,18 @@ html[data-layout-mode="mobile"] .stage-actions,
 html[data-layout-mode="tablet"]:not([data-viewport-orientation="landscape"]) .stage-actions {
     width: 100%;
     justify-content: space-between;
+}
+
+html[data-layout-mode="mobile"] .console-quick-nav,
+html[data-layout-mode="tablet"]:not([data-viewport-orientation="landscape"]) .console-quick-nav {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+}
+
+html[data-layout-mode="mobile"] .console-nav-button,
+html[data-layout-mode="tablet"]:not([data-viewport-orientation="landscape"]) .console-nav-button {
+    min-width: 0;
 }
 
 html[data-layout-mode="tablet"][data-viewport-orientation="landscape"] body {

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>EchoBot Live2D</title>
     <link rel="icon" href="/favicon.ico" type="image/svg+xml">
-    <link rel="stylesheet" href="/web/assets/styles/index.css?v=console-operation-1">
+    <link rel="stylesheet" href="/web/assets/styles/index.css?v=console-nav-1">
 </head>
 <body data-page-title-key="console.pageTitle">
     <div class="page-shell">
@@ -24,6 +24,12 @@
                     </span>
                 </div>
                 <div class="stage-actions">
+                    <nav class="console-quick-nav" aria-label="Console quick navigation" data-i18n-aria-label-key="console.quickNavAria">
+                        <a id="console-nav-stage-link" class="console-nav-button" href="/stage?session_name=default" data-i18n-key="console.openStage">Stage</a>
+                        <a id="console-nav-messenger-link" class="console-nav-button" href="/messenger?session_name=default" data-i18n-key="console.openMessenger">Messenger</a>
+                        <a class="console-nav-button" href="/admin" data-i18n-key="console.openAdmin">Admin</a>
+                        <a class="console-nav-button" href="/admin/sessions" data-i18n-key="console.openSessions">Sessions</a>
+                    </nav>
                     <div class="console-language-switcher" data-language-switcher></div>
                     <div class="console-display-mode-switcher" data-display-mode-switcher></div>
                     <button
@@ -1041,6 +1047,6 @@
     <script src="/web/assets/vendor/pixi.min.js"></script>
     <script src="/web/assets/vendor/live2dcubismcore.min.js"></script>
     <script src="/web/assets/vendor/cubism4.min.js"></script>
-    <script type="module" src="/web/assets/app.js?v=console-operation-1"></script>
+    <script type="module" src="/web/assets/app.js?v=console-nav-1"></script>
 </body>
 </html>

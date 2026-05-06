@@ -70,6 +70,11 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn('id="session-settings-updated"', html)
         self.assertIn('id="session-settings-stage-link"', html)
         self.assertIn('id="session-settings-messenger-link"', html)
+        self.assertIn('id="console-nav-stage-link"', html)
+        self.assertIn('id="console-nav-messenger-link"', html)
+        self.assertIn('href="/admin"', html)
+        self.assertIn('data-i18n-key="console.openAdmin"', html)
+        self.assertIn('data-i18n-key="console.openSessions"', html)
         self.assertIn('class="console-admin-handoff"', html)
         self.assertIn('href="/admin/voice-models"', html)
         self.assertIn('href="/admin/live2d"', html)
@@ -101,6 +106,8 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn("getUiLanguage: () => i18n.language", app_js)
         self.assertIn('"/api/channels/stage-targets"', sessions_js)
         self.assertIn("renderSessionSettings", sessions_js)
+        self.assertIn("DOM.consoleNavStageLink", sessions_js)
+        self.assertIn("DOM.consoleNavMessengerLink", sessions_js)
         self.assertIn("sessionModelProfileLabel", sessions_js)
         self.assertIn("sessionSourceLabel", sessions_js)
         self.assertIn('value === "agent"', route_mode_js)
@@ -115,8 +122,10 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertNotIn('t("console.delete")', session_sidebar_js)
         self.assertIn(".session-settings-summary-block", panels_css)
         self.assertIn(".console-admin-handoff", panels_css)
+        self.assertIn(".console-quick-nav", (WEB_ROOT / "styles" / "base.css").read_text(encoding="utf-8"))
         self.assertIn(".session-settings-grid", panels_css)
         self.assertIn(".session-settings-grid", responsive_css)
+        self.assertIn(".console-nav-button", responsive_css)
         self.assertIn("@media (max-width: 899px)", responsive_css)
         self.assertIn('html[data-layout-mode="tablet"][data-viewport-orientation="landscape"] .page-shell', responsive_css)
         self.assertIn("grid-template-columns: minmax(0, 1fr) minmax(320px, min(44vw, 420px));", responsive_css)
@@ -141,8 +150,11 @@ class WebStaticAssetTests(unittest.TestCase):
             "console.sessionSettingRoute",
             "console.sessionSettingUpdated",
             "console.sessionSourceManual",
+            "console.quickNavAria",
             "console.openStage",
             "console.openMessenger",
+            "console.openAdmin",
+            "console.openSessions",
             "admin.sessions",
             "console.modelProfileManage",
             "console.modelProfileSwitching",
