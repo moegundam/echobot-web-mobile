@@ -7,6 +7,9 @@ const LANGUAGES = [
     { code: "zh-Hans", label: "简体中文", htmlLang: "zh-Hans" },
 ];
 
+let languageMenuCounter = 0;
+let languageMenuGlobalEventsBound = false;
+
 const TRANSLATIONS = {
     en: {
         "common.language": "Language",
@@ -2855,41 +2858,83 @@ function ensureLanguageSwitcher(controller, onChange) {
         return;
     }
 
+    bindLanguageMenuGlobalEvents();
+
     containers.forEach((container) => {
-        const label = document.createElement("label");
+        const label = document.createElement("div");
         label.className = "shell-language-select-label";
 
         const labelText = document.createElement("span");
         labelText.dataset.i18nKey = "common.language";
 
-        const select = document.createElement("select");
-        select.className = "shell-language-select";
-        select.name = "echobot-language";
-        select.setAttribute("aria-label", "Language");
+        const picker = document.createElement("div");
+        picker.className = "shell-language-picker";
+
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "shell-language-select";
+        button.setAttribute("aria-haspopup", "listbox");
+        button.setAttribute("aria-expanded", "false");
+
+        const value = document.createElement("span");
+        value.className = "shell-language-select-value";
+
+        const chevron = document.createElement("span");
+        chevron.className = "shell-language-select-chevron";
+        chevron.setAttribute("aria-hidden", "true");
+        chevron.textContent = "v";
+
+        const menuId = `shell-language-menu-${++languageMenuCounter}`;
+        const menu = document.createElement("div");
+        menu.id = menuId;
+        menu.className = "shell-language-menu";
+        menu.setAttribute("role", "listbox");
+        menu.hidden = true;
+        button.setAttribute("aria-controls", menuId);
 
         LANGUAGES.forEach((language) => {
-            const option = document.createElement("option");
-            option.value = language.code;
+            const option = document.createElement("button");
+            option.type = "button";
+            option.className = "shell-language-option";
+            option.dataset.languageCode = language.code;
+            option.setAttribute("role", "option");
             option.textContent = language.label;
-            select.appendChild(option);
+            option.addEventListener("click", () => {
+                setShellLanguage(controller, language.code, onChange);
+                closeLanguageMenu(picker);
+                button.focus();
+            });
+            option.addEventListener("keydown", (event) => {
+                handleLanguageOptionKeydown(event, picker, option);
+            });
+            menu.appendChild(option);
         });
 
-        select.value = controller.language;
-        select.addEventListener("change", () => {
-            const nextLanguage = isSupportedLanguage(select.value)
-                ? select.value
-                : DEFAULT_LANGUAGE;
-            controller.language = nextLanguage;
-            writeStoredLanguage(nextLanguage);
-            applyStaticTranslations(controller);
-            if (typeof onChange === "function") {
-                onChange(nextLanguage);
+        button.append(value, chevron);
+        button.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            toggleLanguageMenu(picker);
+        });
+        button.addEventListener("keydown", (event) => {
+            if (event.key === "ArrowDown" || event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                openLanguageMenu(picker);
+            }
+            if (event.key === "Escape") {
+                closeLanguageMenu(picker);
             }
         });
+        menu.addEventListener("click", (event) => {
+            event.stopPropagation();
+        });
 
-        label.append(labelText, select);
+        picker.append(button, menu);
+        label.append(labelText, picker);
         container.replaceChildren(label);
     });
+
+    syncLanguageSwitchers(controller);
 }
 
 function applyStaticTranslations(controller) {
@@ -2916,8 +2961,133 @@ function applyStaticTranslations(controller) {
     document.querySelectorAll("[data-i18n-alt-key]").forEach((node) => {
         node.setAttribute("alt", controller.t(node.dataset.i18nAltKey));
     });
-    document.querySelectorAll(".shell-language-select").forEach((select) => {
-        select.value = controller.language;
-        select.setAttribute("aria-label", controller.t("common.language"));
+    syncLanguageSwitchers(controller);
+}
+
+function setShellLanguage(controller, language, onChange) {
+    const nextLanguage = isSupportedLanguage(language) ? language : DEFAULT_LANGUAGE;
+    controller.language = nextLanguage;
+    writeStoredLanguage(nextLanguage);
+    applyStaticTranslations(controller);
+    if (typeof onChange === "function") {
+        onChange(nextLanguage);
+    }
+}
+
+function bindLanguageMenuGlobalEvents() {
+    if (languageMenuGlobalEventsBound) {
+        return;
+    }
+    languageMenuGlobalEventsBound = true;
+    document.addEventListener("click", () => {
+        closeAllLanguageMenus();
+    });
+    document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+            closeAllLanguageMenus();
+        }
+    });
+}
+
+function toggleLanguageMenu(picker) {
+    const button = picker.querySelector(".shell-language-select");
+    const isOpen = button && button.getAttribute("aria-expanded") === "true";
+    if (isOpen) {
+        closeLanguageMenu(picker);
+        return;
+    }
+    openLanguageMenu(picker);
+}
+
+function openLanguageMenu(picker) {
+    closeAllLanguageMenus(picker);
+    const button = picker.querySelector(".shell-language-select");
+    const menu = picker.querySelector(".shell-language-menu");
+    if (!button || !menu) {
+        return;
+    }
+    picker.classList.add("is-open");
+    button.setAttribute("aria-expanded", "true");
+    menu.hidden = false;
+    queueMicrotask(() => {
+        const selectedOption = menu.querySelector('.shell-language-option[aria-selected="true"]')
+            || menu.querySelector(".shell-language-option");
+        if (selectedOption) {
+            selectedOption.focus();
+        }
+    });
+}
+
+function closeLanguageMenu(picker) {
+    const button = picker.querySelector(".shell-language-select");
+    const menu = picker.querySelector(".shell-language-menu");
+    picker.classList.remove("is-open");
+    if (button) {
+        button.setAttribute("aria-expanded", "false");
+    }
+    if (menu) {
+        menu.hidden = true;
+    }
+}
+
+function closeAllLanguageMenus(exceptPicker = null) {
+    document.querySelectorAll(".shell-language-picker.is-open").forEach((picker) => {
+        if (picker !== exceptPicker) {
+            closeLanguageMenu(picker);
+        }
+    });
+}
+
+function handleLanguageOptionKeydown(event, picker, option) {
+    if (event.key === "Escape") {
+        event.preventDefault();
+        closeLanguageMenu(picker);
+        const button = picker.querySelector(".shell-language-select");
+        if (button) {
+            button.focus();
+        }
+        return;
+    }
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp" && event.key !== "Home" && event.key !== "End") {
+        return;
+    }
+    event.preventDefault();
+    const options = Array.from(picker.querySelectorAll(".shell-language-option"));
+    const currentIndex = options.indexOf(option);
+    let nextIndex = currentIndex;
+    if (event.key === "ArrowDown") {
+        nextIndex = currentIndex >= options.length - 1 ? 0 : currentIndex + 1;
+    }
+    if (event.key === "ArrowUp") {
+        nextIndex = currentIndex <= 0 ? options.length - 1 : currentIndex - 1;
+    }
+    if (event.key === "Home") {
+        nextIndex = 0;
+    }
+    if (event.key === "End") {
+        nextIndex = options.length - 1;
+    }
+    if (options[nextIndex]) {
+        options[nextIndex].focus();
+    }
+}
+
+function syncLanguageSwitchers(controller) {
+    const languageConfig = LANGUAGES.find((item) => item.code === controller.language) || LANGUAGES[0];
+    document.querySelectorAll(".shell-language-picker").forEach((picker) => {
+        const button = picker.querySelector(".shell-language-select");
+        const value = picker.querySelector(".shell-language-select-value");
+        if (value) {
+            value.textContent = languageConfig.label;
+        }
+        if (button) {
+            button.dataset.languageCode = languageConfig.code;
+            button.setAttribute("aria-label", `${controller.t("common.language")}: ${languageConfig.label}`);
+        }
+        picker.querySelectorAll(".shell-language-option").forEach((option) => {
+            const selected = option.dataset.languageCode === languageConfig.code;
+            option.classList.toggle("is-selected", selected);
+            option.setAttribute("aria-selected", selected ? "true" : "false");
+        });
     });
 }

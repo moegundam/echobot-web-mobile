@@ -288,13 +288,78 @@ button {
 
 .console-language-switcher .shell-language-select,
 .console-display-mode-switcher .shell-display-mode-select {
+    display: inline-flex;
+    width: 100%;
     min-height: 38px;
     max-width: 180px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
     padding: 7px 30px 7px 10px;
     border: 1px solid var(--line);
     border-radius: 999px;
     color: var(--text);
     background: rgba(255, 255, 255, 0.72);
+    cursor: pointer;
+    font: inherit;
+    text-align: left;
+}
+
+.console-language-switcher .shell-language-picker {
+    position: relative;
+    min-width: 128px;
+    max-width: 180px;
+}
+
+.console-language-switcher .shell-language-select-value {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.console-language-switcher .shell-language-select-chevron {
+    flex: 0 0 auto;
+    color: var(--muted);
+    font-size: 0.74rem;
+    line-height: 1;
+}
+
+.console-language-switcher .shell-language-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    right: 0;
+    z-index: 80;
+    display: grid;
+    gap: 4px;
+    padding: 6px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.98);
+    box-shadow: 0 16px 38px rgba(31, 36, 48, 0.16);
+}
+
+.console-language-switcher .shell-language-menu[hidden] {
+    display: none;
+}
+
+.console-language-switcher .shell-language-option {
+    min-height: 34px;
+    padding: 7px 10px;
+    border: 0;
+    border-radius: 10px;
+    color: var(--text);
+    background: transparent;
+    cursor: pointer;
+    font: inherit;
+    text-align: left;
+}
+
+.console-language-switcher .shell-language-option:hover,
+.console-language-switcher .shell-language-option:focus-visible,
+.console-language-switcher .shell-language-option.is-selected {
+    outline: none;
+    background: rgba(45, 34, 25, 0.08);
 }
 
 .status-badge {

@@ -90,13 +90,78 @@ textarea {
 }
 
 .shell-language-select {
+    display: inline-flex;
+    width: 100%;
     min-height: 38px;
     max-width: 180px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
     padding: 7px 30px 7px 10px;
     border: 1px solid var(--shell-line);
     border-radius: 8px;
     color: var(--shell-text);
     background: var(--shell-surface-strong);
+    cursor: pointer;
+    font: inherit;
+    text-align: left;
+}
+
+.shell-language-picker {
+    position: relative;
+    min-width: 128px;
+    max-width: 180px;
+}
+
+.shell-language-select-value {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.shell-language-select-chevron {
+    flex: 0 0 auto;
+    color: var(--shell-muted);
+    font-size: 0.74rem;
+    line-height: 1;
+}
+
+.shell-language-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    right: 0;
+    z-index: 80;
+    display: grid;
+    gap: 4px;
+    padding: 6px;
+    border: 1px solid var(--shell-line);
+    border-radius: 10px;
+    background: var(--shell-surface-strong);
+    box-shadow: 0 14px 36px rgba(27, 34, 48, 0.16);
+}
+
+.shell-language-menu[hidden] {
+    display: none;
+}
+
+.shell-language-option {
+    min-height: 34px;
+    padding: 7px 9px;
+    border: 0;
+    border-radius: 8px;
+    color: var(--shell-text);
+    background: transparent;
+    cursor: pointer;
+    font: inherit;
+    text-align: left;
+}
+
+.shell-language-option:hover,
+.shell-language-option:focus-visible,
+.shell-language-option.is-selected {
+    outline: none;
+    background: rgba(58, 92, 167, 0.12);
 }
 
 .display-mode-switcher {

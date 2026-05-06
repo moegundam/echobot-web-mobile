@@ -1,4 +1,4 @@
-import { initShellI18n } from "./shell-i18n.js?v=session-centered-2";
+import { initShellI18n } from "./shell-i18n.js?v=language-menu-1";
 import { initShellDisplayMode } from "./shell-display-mode.js?v=session-centered-2";
 import { initShellSessionLinks } from "./shell-session-links.js?v=site-public-6";
 
