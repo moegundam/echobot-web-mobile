@@ -46,6 +46,7 @@ from .services.character_profiles import CharacterProfileSettingsService
 from .services.channels import ChannelService
 from .services.model_profiles import ModelProfileService
 from .services.roles import RoleService
+from .services.session_runtime_overrides import SessionRuntimeOverrideService
 from .services.stage_events import StageEventBroker, StageEventPublishRequest
 from .services.web_console import WebConsoleService
 
@@ -89,6 +90,7 @@ class AppRuntime:
         self.model_profile_service: ModelProfileService | None = None
         self.channel_service: ChannelService | None = None
         self.stage_event_broker = StageEventBroker()
+        self.session_runtime_override_service = SessionRuntimeOverrideService()
         self.web_console_service: WebConsoleService | None = None
         self.tts_service: TTSService | None = None
         self.asr_service: ASRService | None = None
@@ -594,6 +596,7 @@ class UserScopedRuntime:
         self.model_profile_service: ModelProfileService | None = None
         self.web_console_service: WebConsoleService | None = None
         self.stage_event_broker = parent.stage_event_broker
+        self.session_runtime_override_service = SessionRuntimeOverrideService()
         self.tts_service: TTSService | None = None
         self.asr_service: ASRService | None = None
         self.channel_service: ChannelService | None = None

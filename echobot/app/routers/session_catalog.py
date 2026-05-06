@@ -12,6 +12,7 @@ from ..schemas import (
     LLMModelsResponse,
     Live2DModelsResponse,
     SessionRuntimeContextResponse,
+    UpdateSessionRuntimeOverridesRequest,
     VoiceProfilesResponse,
 )
 from ..services.session_catalog import (
@@ -94,6 +95,62 @@ async def get_session_runtime_context(
     session_name: str,
     runtime=Depends(get_app_runtime),
 ) -> SessionRuntimeContextResponse:
+    return await _session_runtime_context_response(runtime, session_name)
+
+
+@router.put(
+    "/sessions/{session_name}/runtime-overrides",
+    response_model=SessionRuntimeContextResponse,
+)
+async def update_session_runtime_overrides(
+    session_name: str,
+    request: UpdateSessionRuntimeOverridesRequest,
+    runtime=Depends(get_app_runtime),
+    _admin_user: str = Depends(require_admin_user),
+) -> SessionRuntimeContextResponse:
+    _ensure_runtime_services_ready(runtime)
+    if getattr(runtime, "session_runtime_override_service", None) is None:
+        raise HTTPException(status_code=503, detail="Session runtime override service is not ready")
+
+    try:
+        session = await runtime.session_service.load_session(session_name)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    profile_payload = await _profile_payload(runtime)
+    profiles = profile_lookup(profile_payload)
+    override_payload = request.model_dump(
+        mode="json",
+        exclude_none=True,
+        exclude_defaults=True,
+    )
+    _validate_runtime_profile_ids(
+        profiles,
+        [
+            str(override_payload.get("model_profile_id") or "").strip(),
+            str(override_payload.get("llm_model_id") or "").strip(),
+            str(override_payload.get("voice_profile_id") or "").strip(),
+            str(override_payload.get("live2d_model_id") or "").strip(),
+        ],
+    )
+
+    try:
+        await asyncio.to_thread(
+            runtime.session_runtime_override_service.set_override,
+            session.name,
+            override_payload,
+        )
+        await _apply_runtime_override_if_current_session(runtime, session.name)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return await _session_runtime_context_response(runtime, session.name)
+
+
+async def _session_runtime_context_response(
+    runtime,
+    session_name: str,
+) -> SessionRuntimeContextResponse:
     _ensure_runtime_services_ready(runtime)
     try:
         session = await runtime.session_service.load_session(session_name)
@@ -104,23 +161,53 @@ async def get_session_runtime_context(
     route_mode = route_mode_from_metadata(session.metadata)
     profile_payload = await _profile_payload(runtime)
     profiles = profile_lookup(profile_payload)
-    base_profile_id = effective_profile_id(profile_payload, role_name)
+    live_override = await _session_runtime_override(runtime, session.name)
+    base_profile_id = str(
+        live_override.get("model_profile_id")
+        or effective_profile_id(profile_payload, role_name),
+    )
     runtime_bindings = await _runtime_bindings_for_role(runtime, role_name)
-    llm_profile = profiles.get(runtime_bindings.get("llm_model_id") or base_profile_id)
-    voice_profile = profiles.get(runtime_bindings.get("voice_profile_id") or base_profile_id)
-    live2d_profile = profiles.get(runtime_bindings.get("live2d_model_id") or base_profile_id)
+    llm_profile = profiles.get(
+        str(live_override.get("llm_model_id") or "")
+        or runtime_bindings.get("llm_model_id")
+        or base_profile_id,
+    )
+    voice_profile = profiles.get(
+        str(live_override.get("voice_profile_id") or "")
+        or runtime_bindings.get("voice_profile_id")
+        or base_profile_id,
+    )
+    live2d_profile = profiles.get(
+        str(live_override.get("live2d_model_id") or "")
+        or runtime_bindings.get("live2d_model_id")
+        or base_profile_id,
+    )
     catalog = await _live2d_catalog(runtime)
     catalog_by_key = {
         str(item.get("selection_key") or ""): item
         for item in catalog
         if isinstance(item, dict)
     }
-    character = await _character_for_role(runtime, role_name, profile_payload)
+    character = await _character_for_role(
+        runtime,
+        role_name,
+        profile_payload,
+        live_override=live_override,
+    )
     integrations = await _channel_integrations(runtime)
     channel = channel_integration_by_id(
         integrations,
         channel_integration_id_from_metadata(session.metadata),
     ) or channel_integration_for_session(integrations, session.name)
+
+    voice_model = voice_profile_from_profile(voice_profile) if voice_profile else None
+    live2d_model = (
+        live2d_model_from_profile(live2d_profile, catalog_by_key)
+        if live2d_profile
+        else None
+    )
+    voice_model = _apply_voice_override(voice_model, live_override)
+    live2d_model = _apply_live2d_override(live2d_model, live_override, catalog_by_key)
 
     return SessionRuntimeContextResponse(
         session_name=session.name,
@@ -128,10 +215,8 @@ async def get_session_runtime_context(
         route_mode=route_mode,
         character=character,
         llm_model=llm_model_from_profile(llm_profile) if llm_profile else None,
-        voice_profile=voice_profile_from_profile(voice_profile) if voice_profile else None,
-        live2d_model=live2d_model_from_profile(live2d_profile, catalog_by_key)
-        if live2d_profile
-        else None,
+        voice_profile=voice_model,
+        live2d_model=live2d_model,
         channel=channel,
     )
 
@@ -177,6 +262,8 @@ async def _character_for_role(
     runtime,
     role_name: str,
     profile_payload: dict[str, Any],
+    *,
+    live_override: dict[str, Any] | None = None,
 ) -> CharacterProfileModel | None:
     if (
         runtime.role_service is None
@@ -191,14 +278,32 @@ async def _character_for_role(
     bindings = profile_payload.get("role_bindings")
     if not isinstance(bindings, dict):
         bindings = {}
+    live_override = live_override or {}
     bound_profile_id = str(bindings.get(role.name) or "")
-    resolved_profile_id = bound_profile_id or str(profile_payload.get("active_profile_id") or "")
+    resolved_profile_id = str(
+        live_override.get("model_profile_id")
+        or bound_profile_id
+        or profile_payload.get("active_profile_id")
+        or "",
+    )
     runtime_bindings = await _runtime_bindings_for_role(runtime, role.name)
     profiles = profile_lookup(profile_payload)
     resolved_profile = profiles.get(resolved_profile_id, {})
-    llm_model_id = str(runtime_bindings.get("llm_model_id") or "")
-    voice_profile_id = str(runtime_bindings.get("voice_profile_id") or "")
-    live2d_model_id = str(runtime_bindings.get("live2d_model_id") or "")
+    llm_model_id = str(
+        live_override.get("llm_model_id")
+        or runtime_bindings.get("llm_model_id")
+        or "",
+    )
+    voice_profile_id = str(
+        live_override.get("voice_profile_id")
+        or runtime_bindings.get("voice_profile_id")
+        or "",
+    )
+    live2d_model_id = str(
+        live_override.get("live2d_model_id")
+        or runtime_bindings.get("live2d_model_id")
+        or "",
+    )
     llm_profile = profiles.get(llm_model_id or resolved_profile_id, {})
     voice_profile = profiles.get(voice_profile_id or resolved_profile_id, {})
     visual_profile = profiles.get(live2d_model_id or resolved_profile_id, {})
@@ -206,6 +311,9 @@ async def _character_for_role(
     tts = _section(voice_profile, "tts")
     asr = _section(voice_profile, "asr")
     live2d = _section(visual_profile, "live2d")
+    tts = {**tts, **_section(live_override, "tts")}
+    asr = {**asr, **_section(live_override, "asr")}
+    live2d = {**live2d, **_section(live_override, "live2d")}
     emotion_maps = await asyncio.to_thread(
         runtime.character_profile_settings_service.emotion_maps_for_role,
         role.name,
@@ -247,6 +355,146 @@ async def _runtime_bindings_for_role(runtime, role_name: str) -> dict[str, str]:
     return await asyncio.to_thread(
         runtime.character_profile_settings_service.runtime_bindings_for_role,
         role_name,
+    )
+
+
+async def _session_runtime_override(runtime, session_name: str) -> dict[str, Any]:
+    service = getattr(runtime, "session_runtime_override_service", None)
+    if service is None:
+        return {}
+    return await asyncio.to_thread(service.get_override, session_name)
+
+
+def _validate_runtime_profile_ids(
+    profiles: dict[str, dict[str, Any]],
+    profile_ids: list[str],
+) -> None:
+    for profile_id in profile_ids:
+        if profile_id and profile_id not in profiles:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Unknown model profile: {profile_id}",
+            )
+
+
+async def _apply_runtime_override_if_current_session(runtime, session_name: str) -> None:
+    if runtime.session_service is None or runtime.context is None:
+        return
+
+    current_session = await runtime.session_service.load_current_session()
+    if current_session.name != session_name:
+        return
+
+    live_override = await _session_runtime_override(runtime, session_name)
+    if not live_override:
+        return
+
+    profile_payload = await _profile_payload(runtime)
+    role_name = role_name_from_metadata(current_session.metadata)
+    base_profile_id = str(
+        live_override.get("model_profile_id")
+        or effective_profile_id(profile_payload, role_name),
+    )
+    runtime_profile = await _runtime_profile_with_live_override(
+        runtime,
+        base_profile_id=base_profile_id,
+        live_override=live_override,
+    )
+    if runtime_profile:
+        await runtime.apply_model_profile(runtime_profile)
+
+
+async def _runtime_profile_with_live_override(
+    runtime,
+    *,
+    base_profile_id: str,
+    live_override: dict[str, Any],
+) -> dict[str, Any] | None:
+    if runtime.model_profile_service is None:
+        return None
+
+    base_profile_id = str(base_profile_id or "").strip()
+    if not base_profile_id:
+        state = await asyncio.to_thread(runtime.model_profile_service.list_profiles)
+        base_profile_id = str(state.get("active_profile_id") or "a")
+
+    profile = dict(
+        await asyncio.to_thread(
+            runtime.model_profile_service.get_profile_for_runtime,
+            base_profile_id,
+        ),
+    )
+
+    llm_model_id = str(live_override.get("llm_model_id") or "").strip()
+    if llm_model_id:
+        llm_profile = await asyncio.to_thread(
+            runtime.model_profile_service.get_profile_for_runtime,
+            llm_model_id,
+        )
+        profile["chat"] = _section(llm_profile, "chat")
+
+    voice_profile_id = str(live_override.get("voice_profile_id") or "").strip()
+    if voice_profile_id:
+        voice_profile = await asyncio.to_thread(
+            runtime.model_profile_service.get_profile_for_runtime,
+            voice_profile_id,
+        )
+        profile["tts"] = _section(voice_profile, "tts")
+        profile["asr"] = _section(voice_profile, "asr")
+
+    live2d_model_id = str(live_override.get("live2d_model_id") or "").strip()
+    if live2d_model_id:
+        live2d_profile = await asyncio.to_thread(
+            runtime.model_profile_service.get_profile_for_runtime,
+            live2d_model_id,
+        )
+        profile["live2d"] = _section(live2d_profile, "live2d")
+
+    for section_name in ("tts", "asr", "live2d"):
+        section_override = _section(live_override, section_name)
+        if not section_override:
+            continue
+        current_section = dict(_section(profile, section_name))
+        current_section.update(section_override)
+        profile[section_name] = current_section
+
+    return profile
+
+
+def _apply_voice_override(voice_model, live_override: dict[str, Any]):
+    if voice_model is None:
+        return voice_model
+    updates: dict[str, Any] = {}
+    tts_override = _section(live_override, "tts")
+    if tts_override:
+        updates["tts"] = voice_model.tts.model_copy(update=tts_override)
+    asr_override = _section(live_override, "asr")
+    if asr_override:
+        updates["stt"] = voice_model.stt.model_copy(update=asr_override)
+    if not updates:
+        return voice_model
+    return voice_model.model_copy(update=updates)
+
+
+def _apply_live2d_override(
+    live2d_model,
+    live_override: dict[str, Any],
+    catalog_by_key: dict[str, dict[str, Any]],
+):
+    if live2d_model is None:
+        return live2d_model
+    live2d_override = _section(live_override, "live2d")
+    selection_key = str(live2d_override.get("selection_key") or "").strip()
+    if not selection_key:
+        return live2d_model
+    catalog_item = catalog_by_key.get(selection_key, {})
+    return live2d_model.model_copy(
+        update={
+            "selection_key": selection_key,
+            "available": bool(catalog_item),
+            "model_name": str(catalog_item.get("model_name") or ""),
+            "model_url": str(catalog_item.get("model_url") or ""),
+        },
     )
 
 

@@ -2702,6 +2702,106 @@ class AppApiTests(unittest.TestCase):
             self.assertNotIn("session-tts-secret", context_text)
             self.assertNotIn("session-stt-secret", context_text)
 
+    def test_console_runtime_overrides_update_stage_context_without_persisting_admin_profiles(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            app = create_app(
+                runtime_options=RuntimeOptions(
+                    workspace=workspace,
+                    no_tools=True,
+                    no_skills=True,
+                    no_memory=True,
+                    no_heartbeat=True,
+                ),
+                channel_config_path=workspace / ".echobot" / "channels.json",
+                context_builder=build_test_context,
+            )
+
+            with TestClient(app) as client:
+                web_config = client.get("/api/web/config")
+                live2d_key = web_config.json()["live2d"]["models"][0]["selection_key"]
+                profile = client.patch(
+                    "/api/model-profiles/b",
+                    json={
+                        "label": "Console Preview B",
+                        "chat": {
+                            "provider": "litellm",
+                            "model": "admin-profile-chat",
+                            "base_url": "http://admin-profile.test/v1",
+                            "api_key": "admin-profile-secret",
+                        },
+                        "tts": {
+                            "provider": "openai-compatible",
+                            "model": "admin-profile-tts",
+                            "voice": "admin-profile-voice",
+                        },
+                        "asr": {
+                            "provider": "openai-transcriptions",
+                            "model": "admin-profile-asr",
+                        },
+                        "live2d": {
+                            "selection_key": live2d_key,
+                        },
+                    },
+                )
+                applied = client.put(
+                    "/api/sessions/default/runtime-overrides",
+                    json={
+                        "model_profile_id": "b",
+                        "llm_model_id": "b",
+                        "voice_profile_id": "b",
+                        "live2d_model_id": "b",
+                        "tts": {
+                            "provider": "edge",
+                            "voice": "zh-TW-HsiaoChenNeural",
+                        },
+                        "asr": {
+                            "provider": "fake-asr",
+                        },
+                        "live2d": {
+                            "selection_key": live2d_key,
+                        },
+                    },
+                )
+                context = client.get("/api/sessions/default/runtime-context")
+                stored_profile = client.get("/api/model-profiles/b")
+                unknown = client.put(
+                    "/api/sessions/default/runtime-overrides",
+                    json={"model_profile_id": "missing-profile"},
+                )
+
+            self.assertEqual(200, profile.status_code)
+            self.assertEqual(200, applied.status_code)
+            self.assertEqual("admin-profile-chat", applied.json()["llm_model"]["model"])
+            self.assertEqual("edge", applied.json()["voice_profile"]["tts"]["provider"])
+            self.assertEqual(
+                "zh-TW-HsiaoChenNeural",
+                applied.json()["voice_profile"]["tts"]["voice"],
+            )
+            self.assertEqual("fake-asr", applied.json()["voice_profile"]["stt"]["provider"])
+            self.assertEqual(live2d_key, applied.json()["live2d_model"]["selection_key"])
+
+            self.assertEqual(200, context.status_code)
+            self.assertEqual(
+                "zh-TW-HsiaoChenNeural",
+                context.json()["voice_profile"]["tts"]["voice"],
+            )
+
+            self.assertEqual(200, stored_profile.status_code)
+            self.assertEqual("admin-profile-voice", stored_profile.json()["tts"]["voice"])
+            self.assertEqual("openai-compatible", stored_profile.json()["tts"]["provider"])
+            self.assertEqual("openai-transcriptions", stored_profile.json()["asr"]["provider"])
+            self.assertEqual("admin-profile-chat", stored_profile.json()["chat"]["model"])
+            stored_profile_text = json.dumps(stored_profile.json())
+            self.assertNotIn("zh-TW-HsiaoChenNeural", stored_profile_text)
+            self.assertNotIn("fake-asr", stored_profile_text)
+            self.assertNotIn("admin-profile-secret", json.dumps(context.json()))
+
+            self.assertEqual(404, unknown.status_code)
+            self.assertIn("Unknown model profile", unknown.json()["detail"])
+
     def test_llm_model_smoke_uses_openai_compatible_profile_without_returning_secret(
         self,
     ) -> None:

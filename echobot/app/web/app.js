@@ -11,13 +11,14 @@ import {
 } from "./modules/api.js";
 import { wireAppEvents } from "./bootstrap/wire-events.js?v=site-public-6";
 import { createUiStatusController } from "./bootstrap/ui-status.js?v=site-public-6";
-import { appState } from "./core/store.js";
+import { DOM } from "./core/dom.js";
+import { appState, audioState, sessionState } from "./core/store.js";
 import { createAsrModule } from "./features/asr.js?v=site-public-6";
 import { createChatModule } from "./features/chat/index.js?v=response-language-1";
 import { createLayoutModule } from "./features/layout/index.js?v=console-layout-1";
 import { createLive2DModule } from "./features/live2d/index.js?v=site-public-6";
 import { createRolesModule } from "./features/roles.js?v=site-public-6";
-import { createSessionsModule } from "./features/sessions.js?v=console-nav-2";
+import { createSessionsModule } from "./features/sessions.js?v=console-save-1";
 import { createTtsModule } from "./features/tts.js?v=site-public-6";
 import { initShellDisplayMode } from "./shell-display-mode.js?v=display-menu-1";
 import { initShellI18n } from "./shell-i18n.js?v=language-menu-1";
@@ -26,7 +27,6 @@ import {
     activeModelProfileFromConfig,
     applyModelProfileToLocalPreferences,
     modelProfileScopeFromConfig,
-    notifyModelProfileChanged,
 } from "./model-profile-runtime.js?v=model-profile-2";
 import {
     addMessage,
@@ -203,6 +203,7 @@ async function initializePage() {
     layout.initializeLive2DDrawer();
     layout.initializePageSplit();
     initializeModelProfileControls();
+    initializeConsoleSaveControls();
     initializeMessageInteractions();
     wireAppEvents({
         asr,
@@ -304,11 +305,143 @@ function initializeModelProfileControls() {
     }
     select.dataset.bound = "true";
     select.addEventListener("change", () => {
-        void activateConsoleModelProfile(select.value);
+        void selectConsoleModelProfile(select.value);
     });
 }
 
-async function activateConsoleModelProfile(profileId) {
+function initializeConsoleSaveControls() {
+    if (!DOM.sessionSettingsSaveButton || DOM.sessionSettingsSaveButton.dataset.bound === "true") {
+        return;
+    }
+    DOM.sessionSettingsSaveButton.dataset.bound = "true";
+    DOM.sessionSettingsSaveButton.addEventListener("click", () => {
+        void applyConsoleRuntimeForCurrentSession();
+    });
+}
+
+async function applyConsoleRuntimeForCurrentSession() {
+    const sessionName = normalizeSessionName(
+        sessionState.currentSessionName
+        || (appState.config && appState.config.session_name)
+        || "default",
+    );
+    const profileId = currentConsoleModelProfileId();
+    if (!profileId) {
+        status.setRunStatus(
+            i18n.t("console.applyToStageNoProfile"),
+            "console.applyToStageNoProfile",
+        );
+        return;
+    }
+
+    setConsoleSaveBusy(true);
+    status.setRunStatus(
+        i18n.t("console.applyingToStage"),
+        "console.applyingToStage",
+    );
+
+    try {
+        await sessions.updateSessionRuntimeOverrides(sessionName, {
+            model_profile_id: profileId,
+            llm_model_id: profileId,
+            voice_profile_id: profileId,
+            live2d_model_id: profileId,
+            ...buildConsoleRuntimeOverride(),
+        });
+        await sessions.syncCurrentSessionFromServer({
+            force: true,
+            refreshSummaries: true,
+            sessionName: sessionName,
+        });
+        await publishStageRuntimeRefresh(sessionName);
+        status.setRunStatus(
+            i18n.t("console.appliedToStage", { session: sessionName }),
+            "console.appliedToStage",
+            { session: sessionName },
+        );
+    } catch (error) {
+        console.error(error);
+        status.setRunStatus(error.message || i18n.t("console.applyToStageFailed"));
+    } finally {
+        setConsoleSaveBusy(false);
+    }
+}
+
+function currentConsoleModelProfileId() {
+    const selectValue = String(document.getElementById("model-profile-select")?.value || "").trim();
+    if (selectValue) {
+        return selectValue;
+    }
+    const activeProfileId = String(
+        appState.config
+        && appState.config.model_profiles
+        && appState.config.model_profiles.active_profile_id
+        || "",
+    ).trim();
+    if (activeProfileId) {
+        return activeProfileId;
+    }
+    return String(currentActiveModelProfile && currentActiveModelProfile.profile_id || "").trim();
+}
+
+function buildConsoleRuntimeOverride() {
+    const override = {};
+    const ttsProvider = String(DOM.ttsProviderSelect?.value || audioState.selectedTtsProvider || "").trim();
+    const ttsVoice = String(DOM.voiceSelect?.value || audioState.selectedVoice || "").trim();
+    if (ttsProvider || ttsVoice) {
+        override.tts = {};
+        if (ttsProvider) {
+            override.tts.provider = ttsProvider;
+        }
+        if (ttsVoice) {
+            override.tts.voice = ttsVoice;
+        }
+    }
+
+    const asrProvider = String(DOM.asrProviderSelect?.value || "").trim();
+    if (asrProvider) {
+        override.asr = {
+            provider: asrProvider,
+        };
+    }
+
+    const live2dSelectionKey = String(DOM.modelSelect?.value || "").trim();
+    if (live2dSelectionKey) {
+        override.live2d = {
+            selection_key: live2dSelectionKey,
+        };
+    }
+    return override;
+}
+
+async function publishStageRuntimeRefresh(sessionName) {
+    try {
+        await requestJson("/api/stage/events", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                kind: "character_state",
+                session_name: sessionName,
+                source: "console",
+                metadata: {
+                    reason: "runtime_bindings_saved",
+                },
+            }),
+        });
+    } catch (error) {
+        console.warn("Unable to publish stage runtime refresh event", error);
+    }
+}
+
+function setConsoleSaveBusy(isBusy) {
+    if (DOM.sessionSettingsSaveButton) {
+        DOM.sessionSettingsSaveButton.disabled = Boolean(isBusy);
+    }
+}
+
+async function selectConsoleModelProfile(profileId) {
     const nextProfileId = String(profileId || "").trim();
     const currentProfileId = String(
         (currentActiveModelProfile && currentActiveModelProfile.profile_id) || "",
@@ -328,22 +461,23 @@ async function activateConsoleModelProfile(profileId) {
     );
 
     try {
-        const payload = await requestJson(
-            `/api/model-profiles/${encodeURIComponent(nextProfileId)}/activate`,
-            { method: "POST" },
-        );
+        const nextProfile = findConsoleModelProfile(nextProfileId);
+        if (!nextProfile) {
+            throw new Error(i18n.t("console.modelProfileMissing", { profile: nextProfileId }));
+        }
+        const payload = {
+            ...((appState.config && appState.config.model_profiles) || {}),
+            active_profile_id: nextProfileId,
+        };
         appState.config = {
             ...(appState.config || {}),
             model_profiles: payload,
         };
-        const activeProfile = activeModelProfileFromConfig({ model_profiles: payload });
+        const activeProfile = nextProfile;
         currentActiveModelProfile = activeProfile;
         applyModelProfileToLocalPreferences(activeProfile);
         renderActiveModelProfile(activeProfile);
-        if (activeProfile && activeProfile.profile_id) {
-            notifyModelProfileChanged(activeProfile.profile_id, currentModelProfileScope);
-        }
-        await syncModelProfileFromServer();
+        await refreshConsoleControlsFromConfig(appState.config);
         const profileLabel = modelProfileOptionLabel(activeProfile);
         status.setRunStatus(
             i18n.t("console.modelProfileSwitched", { profile: profileLabel }),
@@ -359,6 +493,18 @@ async function activateConsoleModelProfile(profileId) {
             select.disabled = false;
         }
     }
+}
+
+function findConsoleModelProfile(profileId) {
+    const normalizedProfileId = String(profileId || "").trim();
+    const profiles = appState.config
+        && appState.config.model_profiles
+        && Array.isArray(appState.config.model_profiles.profiles)
+        ? appState.config.model_profiles.profiles
+        : [];
+    return profiles.find((item) => {
+        return item && String(item.profile_id || "").trim() === normalizedProfileId;
+    }) || null;
 }
 
 function parseModelProfileUpdateScope(value) {

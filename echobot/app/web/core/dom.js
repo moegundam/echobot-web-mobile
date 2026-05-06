@@ -87,6 +87,7 @@ export const DOM = {
     sessionSettingsModel: document.getElementById("session-settings-model"),
     sessionSettingsRole: document.getElementById("session-settings-role"),
     sessionSettingsRoute: document.getElementById("session-settings-route"),
+    sessionSettingsSaveButton: document.getElementById("session-settings-save-button"),
     sessionSettingsSource: document.getElementById("session-settings-source"),
     sessionSettingsUpdated: document.getElementById("session-settings-updated"),
     sessionSidebar: document.getElementById("session-sidebar"),

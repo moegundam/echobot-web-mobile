@@ -428,6 +428,7 @@ function initStageEvents() {
     source.addEventListener("character_state", (event) => {
         const payload = parseStageEvent(event);
         applyStageVisualState(payload);
+        void refreshStageContext({ reloadLive2D: true });
     });
 }
 
@@ -478,9 +479,7 @@ async function playTts(text) {
             headers: {
                 "Content-Type": "application/json",
             },
-            body: JSON.stringify({
-                text: spokenText,
-            }),
+            body: JSON.stringify(stageTtsRequestBody(spokenText)),
         });
         if (!response.ok) {
             throw await responseToError(response);
@@ -506,6 +505,25 @@ async function playTts(text) {
             updateAudioButtonText();
         }
     }
+}
+
+function stageTtsRequestBody(text) {
+    const body = { text: text };
+    const voiceProfile = stageContext && typeof stageContext.voice_profile === "object"
+        ? stageContext.voice_profile
+        : {};
+    const tts = voiceProfile.tts && typeof voiceProfile.tts === "object"
+        ? voiceProfile.tts
+        : {};
+    const provider = String(tts.provider || "").trim();
+    const voice = String(tts.voice || "").trim();
+    if (provider) {
+        body.provider = provider;
+    }
+    if (voice) {
+        body.voice = voice;
+    }
+    return body;
 }
 
 async function stopCurrentAudio() {

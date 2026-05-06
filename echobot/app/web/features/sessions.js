@@ -420,5 +420,6 @@ export function createSessionsModule(deps) {
         requestSessionDetail: api.requestSessionDetail,
         requestSessionSummaries: api.requestSessionSummaries,
         syncCurrentSessionFromServer: syncCurrentSessionFromServer,
+        updateSessionRuntimeOverrides: api.updateSessionRuntimeOverrides,
     };
 }

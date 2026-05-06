@@ -46,10 +46,24 @@ export function createSessionsApi(deps) {
         );
     }
 
+    async function updateSessionRuntimeOverrides(sessionName, overrides) {
+        return await requestJson(
+            `/api/sessions/${encodeURIComponent(sessionName)}/runtime-overrides`,
+            {
+                method: "PUT",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify(overrides || {}),
+            },
+        );
+    }
+
     return {
         requestSessionDetail: requestSessionDetail,
         requestSessionSummaries: requestSessionSummaries,
         switchCurrentSession: switchCurrentSession,
+        updateSessionRuntimeOverrides: updateSessionRuntimeOverrides,
         updateSessionRole: updateSessionRole,
         updateSessionRouteMode: updateSessionRouteMode,
     };

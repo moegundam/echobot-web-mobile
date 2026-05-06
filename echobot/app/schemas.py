@@ -468,6 +468,16 @@ class SessionRuntimeContextResponse(StrictSchemaModel):
     channel: ChannelIntegrationAdminModel | None = None
 
 
+class UpdateSessionRuntimeOverridesRequest(StrictSchemaModel):
+    model_profile_id: str = ""
+    llm_model_id: str = ""
+    voice_profile_id: str = ""
+    live2d_model_id: str = ""
+    tts: TTSModelProfileConfigModel | None = None
+    asr: ASRModelProfileConfigModel | None = None
+    live2d: Live2DModelProfileConfigModel | None = None
+
+
 class StageContextResponse(StrictSchemaModel):
     session_name: str = "default"
     role_name: str = "default"
