@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title data-i18n-key="admin.pageTitle">EchoBot</title>
-    <link rel="stylesheet" href="/web/assets/styles/shell-pages.css?v=ux-audit-1">
+    <link rel="stylesheet" href="/web/assets/styles/shell-pages.css?v=ux-ia-1">
 </head>
 <body class="admin-page" data-page-title-key="admin.pageTitle">
     <main id="admin-root" class="admin-root">
@@ -18,30 +18,54 @@
                 <div class="display-mode-switcher" data-display-mode-switcher></div>
             </div>
         </header>
-        <section class="admin-grid" aria-label="Admin links" data-i18n-aria-label-key="admin.linksAria">
-            <a href="/api/health" data-i18n-key="admin.health">Health</a>
-            <a href="/docs" data-i18n-key="admin.docs">Swagger Docs</a>
-            <a href="/redoc" data-i18n-key="admin.redoc">ReDoc</a>
-            <a href="/openapi.json" data-i18n-key="admin.openapi">OpenAPI JSON</a>
-            <a href="/api/chat/jobs" data-i18n-key="admin.chatJobs">Chat Jobs</a>
-            <a href="/stage?session_name=default" data-session-link data-i18n-key="guide.openStage">Open Stage</a>
-            <a href="/messenger?session_name=default" data-session-link data-i18n-key="guide.openMessenger">Open Messenger</a>
-            <a href="/console" data-i18n-key="admin.console">Console</a>
-            <a href="/admin/sessions" data-i18n-key="admin.sessions">Sessions</a>
-            <a href="/admin/characters" data-i18n-key="admin.characters">Characters</a>
-            <a href="/admin/models" data-i18n-key="admin.llmModels">LLM Models</a>
-            <a href="/admin/voice-models" data-i18n-key="admin.voiceModels">Voice Models</a>
-            <a href="/admin/live2d" data-i18n-key="admin.live2d">Live2D</a>
-            <a href="/admin/channels" data-i18n-key="admin.channels">Channels</a>
-            <a href="/admin/structure" data-i18n-key="admin.structure">Site Structure</a>
-            <a href="/admin/guide" data-i18n-key="admin.guide">Operation Guide</a>
-            <a href="/admin/openwebui" data-i18n-key="admin.openwebui">Open WebUI Bridge</a>
+        <section class="admin-link-sections" aria-label="Admin links" data-i18n-aria-label-key="admin.linksAria">
+            <section class="admin-link-section" aria-labelledby="admin-workflows-heading">
+                <div class="admin-link-section-header">
+                    <h2 id="admin-workflows-heading" data-i18n-key="admin.workflowsHeading">Daily workflows</h2>
+                    <p data-i18n-key="admin.workflowsHelp">Start from the session, character, and public interaction surfaces.</p>
+                </div>
+                <div class="admin-grid">
+                    <a href="/stage?session_name=default" data-session-link data-i18n-key="guide.openStage">Open Stage</a>
+                    <a href="/messenger?session_name=default" data-session-link data-i18n-key="guide.openMessenger">Open Messenger</a>
+                    <a href="/console" data-i18n-key="admin.console">Console</a>
+                    <a href="/admin/sessions" data-i18n-key="admin.sessions">Sessions</a>
+                    <a href="/admin/characters" data-i18n-key="admin.characters">Characters</a>
+                </div>
+            </section>
+            <section class="admin-link-section" aria-labelledby="admin-configuration-heading">
+                <div class="admin-link-section-header">
+                    <h2 id="admin-configuration-heading" data-i18n-key="admin.configurationHeading">Configuration</h2>
+                    <p data-i18n-key="admin.configurationHelp">Manage reusable model, voice, visual, and gateway profiles.</p>
+                </div>
+                <div class="admin-grid">
+                    <a href="/admin/models" data-i18n-key="admin.llmModels">LLM Models</a>
+                    <a href="/admin/voice-models" data-i18n-key="admin.voiceModels">Voice Models</a>
+                    <a href="/admin/live2d" data-i18n-key="admin.live2d">Live2D</a>
+                    <a href="/admin/channels" data-i18n-key="admin.channels">Channels</a>
+                    <a href="/admin/openwebui" data-i18n-key="admin.openwebui">Open WebUI Bridge</a>
+                </div>
+            </section>
+            <section class="admin-link-section" aria-labelledby="admin-developer-ops-heading">
+                <div class="admin-link-section-header">
+                    <h2 id="admin-developer-ops-heading" data-i18n-key="admin.developerOpsHeading">Developer / Ops</h2>
+                    <p data-i18n-key="admin.developerOpsHelp">Diagnostics, API references, and project documentation.</p>
+                </div>
+                <div class="admin-grid admin-grid-secondary">
+                    <a href="/admin/guide" data-i18n-key="admin.guide">Operation Guide</a>
+                    <a href="/admin/structure" data-i18n-key="admin.structure">Site Structure</a>
+                    <a href="/api/health" data-i18n-key="admin.health">Health</a>
+                    <a href="/docs" data-i18n-key="admin.docs">Swagger Docs</a>
+                    <a href="/redoc" data-i18n-key="admin.redoc">ReDoc</a>
+                    <a href="/openapi.json" data-i18n-key="admin.openapi">OpenAPI JSON</a>
+                    <a href="/api/chat/jobs" data-i18n-key="admin.chatJobs">Chat Jobs</a>
+                </div>
+            </section>
         </section>
         <section class="admin-health">
             <h2 data-i18n-key="admin.healthSnapshot">Health Snapshot</h2>
             <pre id="admin-health-output" data-i18n-key="admin.loading">loading...</pre>
         </section>
     </main>
-    <script type="module" src="/web/assets/admin-app.js?v=language-menu-1"></script>
+    <script type="module" src="/web/assets/admin-app.js?v=ux-ia-1"></script>
 </body>
 </html>

@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title data-i18n-key="stage.pageTitle">EchoBot</title>
-    <link rel="stylesheet" href="/web/assets/styles/shell-pages.css?v=ux-audit-1">
+    <link rel="stylesheet" href="/web/assets/styles/shell-pages.css?v=ux-ia-1">
 </head>
 <body class="stage-page" data-page-title-key="stage.pageTitle">
     <main id="stage-root" class="stage-root">
@@ -17,15 +17,17 @@
                     <span id="stage-status" class="stage-status-pill" data-i18n-key="stage.status.connecting">connecting</span>
                     <span id="stage-session-label" class="stage-session-pill" data-i18n-key="stage.sessionLabel">session: default</span>
                 </div>
-                <button id="stage-audio-enable" class="stage-audio-button" type="button" data-i18n-key="stage.audio.enable">
-                    Audio
-                </button>
-                <button id="stage-subtitle-toggle" class="stage-ghost-button" type="button" aria-pressed="false" data-i18n-key="stage.subtitle.hide">
-                    Hide CC
-                </button>
-                <button id="stage-menu-toggle" class="stage-menu-button" type="button" aria-expanded="false" aria-controls="stage-menu-panel" data-i18n-key="stage.menu.open">
-                    Menu
-                </button>
+                <div class="stage-control-strip" aria-label="Stage controls" data-i18n-aria-label-key="stage.controlsAria">
+                    <button id="stage-audio-enable" class="stage-audio-button" type="button" data-i18n-key="stage.audio.enable">
+                        Audio
+                    </button>
+                    <button id="stage-subtitle-toggle" class="stage-ghost-button" type="button" aria-pressed="false" data-i18n-key="stage.subtitle.hide">
+                        Hide CC
+                    </button>
+                    <button id="stage-menu-toggle" class="stage-menu-button" type="button" aria-expanded="false" aria-controls="stage-menu-panel" data-i18n-key="stage.menu.open">
+                        Menu
+                    </button>
+                </div>
             </div>
             <button id="stage-menu-backdrop" class="stage-menu-backdrop" type="button" aria-label="Close stage menu" data-i18n-aria-label-key="stage.menu.close" hidden></button>
             <aside id="stage-menu-panel" class="stage-menu-panel" aria-hidden="true" aria-labelledby="stage-menu-title">
@@ -86,6 +88,6 @@
     <script src="/web/assets/vendor/pixi.min.js"></script>
     <script src="/web/assets/vendor/live2dcubismcore.min.js"></script>
     <script src="/web/assets/vendor/cubism4.min.js"></script>
-    <script type="module" src="/web/assets/stage-app.js?v=language-menu-1"></script>
+    <script type="module" src="/web/assets/stage-app.js?v=ux-ia-1"></script>
 </body>
 </html>

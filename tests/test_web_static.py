@@ -68,13 +68,13 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn('id="session-settings-model"', html)
         self.assertIn('id="session-settings-route"', html)
         self.assertIn('id="session-settings-updated"', html)
-        self.assertIn('id="session-settings-stage-link"', html)
-        self.assertIn('id="session-settings-messenger-link"', html)
+        self.assertNotIn('id="session-settings-stage-link"', html)
+        self.assertNotIn('id="session-settings-messenger-link"', html)
         self.assertIn('id="console-nav-stage-link"', html)
         self.assertIn('id="console-nav-messenger-link"', html)
         self.assertIn('<h1 class="sr-only" data-i18n-key="console.pageTitle">', html)
         self.assertIn('id="console-nav-stage-link" class="console-nav-button" href="/stage?session_name=default" data-session-link', html)
-        self.assertIn('id="session-settings-stage-link" class="console-control-link" href="/stage?session_name=default" data-session-link', html)
+        self.assertIn('<a class="console-control-link" href="/admin/sessions" data-i18n-key="admin.sessions">', html)
         self.assertIn('href="/admin"', html)
         self.assertIn('data-i18n-key="console.openAdmin"', html)
         self.assertIn('data-i18n-key="console.openSessions"', html)
@@ -100,7 +100,7 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn('id="model-profile-select"', html)
         self.assertIn('id="model-profile-link"', html)
         self.assertIn('data-language-switcher', html)
-        self.assertIn('app.js?v=console-language-2', html)
+        self.assertIn('app.js?v=console-ux-1', html)
         self.assertIn('shell-i18n.js?v=language-menu-1', app_js)
         self.assertIn('shell-display-mode.js?v=console-language-1', app_js)
         self.assertIn('id="console-advanced-overrides-panel"', html)
@@ -169,6 +169,10 @@ class WebStaticAssetTests(unittest.TestCase):
         i18n_js = (WEB_ROOT / "shell-i18n.js").read_text(encoding="utf-8")
 
         self.assertIn('<h1 class="sr-only" data-i18n-key="stage.pageTitle">', stage_html)
+        self.assertIn('class="admin-link-sections"', admin_html)
+        self.assertIn('data-i18n-key="admin.workflowsHeading"', admin_html)
+        self.assertIn('data-i18n-key="admin.configurationHeading"', admin_html)
+        self.assertIn('data-i18n-key="admin.developerOpsHeading"', admin_html)
         self.assertIn('id="admin-health-output" data-i18n-key="admin.loading"', admin_html)
         self.assertIn('id="model-profile-status" data-i18n-key="models.loading"', models_html)
         self.assertIn('id="voice-profile-status" data-i18n-key="models.loading"', voice_html)
@@ -198,6 +202,12 @@ class WebStaticAssetTests(unittest.TestCase):
             "console.openAdmin",
             "console.openSessions",
             "admin.sessions",
+            "admin.workflowsHeading",
+            "admin.workflowsHelp",
+            "admin.configurationHeading",
+            "admin.configurationHelp",
+            "admin.developerOpsHeading",
+            "admin.developerOpsHelp",
             "console.modelProfileManage",
             "console.modelProfileSwitching",
             "console.modelProfileSwitched",
@@ -317,6 +327,7 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn('id="stage-menu-panel"', stage_html)
         self.assertIn('id="stage-subtitle-toggle"', stage_html)
         self.assertIn('id="stage-subtitle-panel"', stage_html)
+        self.assertIn('class="stage-control-strip"', stage_html)
         self.assertIn('class="stage-quick-nav"', stage_html)
         self.assertIn('href="/messenger?session_name=default" data-session-link', stage_html)
         self.assertIn('data-i18n-key="stage.sessionTarget">Session</span>', stage_html)
@@ -411,6 +422,7 @@ class WebStaticAssetTests(unittest.TestCase):
             "stage.sessionTarget",
             "stage.quickNavAria",
             "stage.contextAria",
+            "stage.controlsAria",
             "stage.menu.open",
             "stage.menu.close",
             "stage.menu.eyebrow",

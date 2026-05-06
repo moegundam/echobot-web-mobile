@@ -229,15 +229,15 @@ textarea {
     min-height: 100dvh;
     overflow: hidden;
     background:
-        linear-gradient(180deg, rgba(13, 148, 136, 0.1), rgba(37, 99, 235, 0.07)),
-        linear-gradient(135deg, #172026 0%, #253340 54%, #3b342c 100%);
+        linear-gradient(180deg, rgba(13, 148, 136, 0.06), rgba(37, 99, 235, 0.04)),
+        linear-gradient(135deg, #101820 0%, #1b2732 56%, #2b2a28 100%);
 }
 
 .stage-orbit {
     position: absolute;
     inset: 0;
     pointer-events: none;
-    opacity: 0.28;
+    opacity: 0.16;
 }
 
 .stage-orbit-a {
@@ -274,13 +274,14 @@ textarea {
 .stage-subtitle-panel {
     position: relative;
     z-index: 2;
-    width: min(920px, calc(100% - 32px));
-    margin: 0 auto 18px;
-    padding: 16px 18px;
+    width: min(980px, calc(100% - 32px));
+    margin: 0 auto 22px;
+    padding: 18px 20px;
     border: 1px solid rgba(255, 255, 255, 0.18);
     border-radius: 8px;
-    background: rgba(12, 18, 24, 0.78);
+    background: rgba(7, 11, 16, 0.84);
     box-shadow: var(--shell-shadow);
+    backdrop-filter: blur(18px);
 }
 
 .stage-subtitle-panel[hidden] {
@@ -293,6 +294,7 @@ textarea {
     color: #ffffff;
     font-size: 1.12rem;
     line-height: 1.35;
+    text-align: center;
     overflow-wrap: anywhere;
 }
 
@@ -312,8 +314,9 @@ textarea {
     top: 12px;
     right: 12px;
     left: 12px;
-    display: flex;
-    align-items: center;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
     justify-content: space-between;
     gap: 8px;
     pointer-events: none;
@@ -324,6 +327,16 @@ textarea {
     flex-wrap: wrap;
     align-items: center;
     gap: 6px;
+    min-width: 0;
+    pointer-events: auto;
+}
+
+.stage-control-strip {
+    display: flex;
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+    gap: 6px;
+    justify-content: flex-end;
     min-width: 0;
     pointer-events: auto;
 }
@@ -391,7 +404,6 @@ textarea {
     position: static;
     flex: 0 0 auto;
     min-height: 40px;
-    margin-left: auto;
     padding: 0 12px;
     background: var(--shell-warm);
     pointer-events: auto;
@@ -411,6 +423,13 @@ textarea {
 
 .stage-menu-button {
     min-width: 74px;
+}
+
+.stage-audio-button,
+.stage-ghost-button,
+.stage-menu-button {
+    box-shadow: 0 12px 28px rgba(2, 6, 10, 0.18);
+    backdrop-filter: blur(12px);
 }
 
 .stage-menu-backdrop {
@@ -1353,6 +1372,45 @@ textarea {
     overflow-wrap: anywhere;
 }
 
+.admin-link-sections {
+    display: grid;
+    gap: 16px;
+    min-width: 0;
+}
+
+.admin-link-section {
+    display: grid;
+    gap: 10px;
+    min-width: 0;
+}
+
+.admin-link-section-header {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+    padding: 0 2px;
+}
+
+.admin-link-section-header h2 {
+    margin: 0;
+    color: var(--shell-text);
+    font-size: 1rem;
+    line-height: 1.2;
+}
+
+.admin-link-section-header p {
+    margin: 0;
+    color: var(--shell-muted);
+    font-size: 0.9rem;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+}
+
+.admin-grid-secondary a {
+    color: var(--shell-text);
+    background: rgba(255, 253, 248, 0.72);
+}
+
 .admin-health h2 {
     margin: 0 0 10px;
     font-size: 1rem;
@@ -1588,7 +1646,7 @@ textarea {
 }
 
 html[data-layout-mode="mobile"] .stage-canvas-host {
-    padding-top: 76px;
+    padding-top: 114px;
 }
 
 html[data-layout-mode="mobile"] .stage-subtitle-panel {
@@ -1598,6 +1656,15 @@ html[data-layout-mode="mobile"] .stage-subtitle-panel {
 
 html[data-layout-mode="mobile"] .stage-session-pill {
     display: none;
+}
+
+html[data-layout-mode="mobile"] .stage-toolbar {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+}
+
+html[data-layout-mode="mobile"] .stage-control-strip {
+    justify-content: flex-end;
 }
 
 html[data-layout-mode="mobile"] .stage-audio-button,
@@ -1624,10 +1691,15 @@ html[data-layout-mode="mobile"] .character-emotion-map-row {
         right: 10px;
         left: 10px;
         gap: 6px;
+        grid-template-columns: minmax(0, 1fr);
     }
 
     .stage-session-pill {
         display: none;
+    }
+
+    .stage-control-strip {
+        justify-content: flex-end;
     }
 
     .stage-audio-button,
