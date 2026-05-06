@@ -48,7 +48,7 @@
 }
 
 .settings-panel[open] {
-    max-height: min(48vh, 540px);
+    max-height: min(58vh, 620px);
     overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior: contain;
@@ -286,7 +286,7 @@
 
 html[data-layout-mode="desktop"] .settings-panel[open],
 html[data-layout-mode="tablet"][data-viewport-orientation="landscape"] .settings-panel[open] {
-    max-height: min(46vh, 500px);
+    max-height: min(66vh, 640px);
 }
 
 .session-sidebar,
