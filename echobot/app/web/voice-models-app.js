@@ -69,7 +69,7 @@ DOM.remove.addEventListener("click", () => {
 
 void load();
 
-async function load() {
+async function load(options = {}) {
     setBusy(true);
     state.loaded = false;
     state.loadError = "";
@@ -83,7 +83,13 @@ async function load() {
         state.payload = payload;
         state.voicePayload = voicePayload;
         state.webConfig = webConfig;
-        state.selectedProfileId = voicePayload.active_voice_profile_id || payload.active_profile_id || "a";
+        state.selectedProfileId = resolveExistingProfileId(
+            options.selectedProfileId,
+            voicePayload,
+        ) || resolveExistingProfileId(
+            state.selectedProfileId,
+            voicePayload,
+        ) || voicePayload.active_voice_profile_id || payload.active_profile_id || "a";
         state.loaded = true;
         render();
         setStatusKey("models.ready");
@@ -197,8 +203,7 @@ async function createProfileFromSelection() {
                 source_profile_id: selectedProfile().id,
             }),
         });
-        state.selectedProfileId = created.profile_id;
-        await load();
+        await load({ selectedProfileId: created.profile_id });
         setStatusKey("models.created");
     } catch (error) {
         console.error(error);
@@ -243,7 +248,7 @@ async function saveSelectedProfile() {
             applyModelProfileToLocalPreferences(updated);
             notifyModelProfileChanged(updated.profile_id, modelProfileScope());
         }
-        await load();
+        await load({ selectedProfileId: updated.profile_id });
         setStatusKey("models.saved");
     } catch (error) {
         console.error(error);
@@ -270,7 +275,7 @@ async function activateSelectedProfile() {
             applyModelProfileToLocalPreferences(activeProfile);
             notifyModelProfileChanged(activeProfile.profile_id, modelProfileScope());
         }
-        await load();
+        await load({ selectedProfileId: payload.active_profile_id || profile.id });
         setStatusKey("models.activated");
     } catch (error) {
         console.error(error);
@@ -296,8 +301,7 @@ async function deleteSelectedProfile() {
     setStatusKey("models.deleting");
     try {
         await requestJson(`/api/model-profiles/${profile.id}`, { method: "DELETE" });
-        state.selectedProfileId = activeProfileId() || "a";
-        await load();
+        await load({ selectedProfileId: activeProfileId() || "a" });
         setStatusKey("models.deleted");
     } catch (error) {
         console.error(error);
@@ -311,6 +315,17 @@ function selectedProfile() {
     return voiceProfiles().find((item) => item.id === state.selectedProfileId)
         || voiceProfiles()[0]
         || emptyProfile();
+}
+
+function resolveExistingProfileId(profileId, voicePayload = state.voicePayload) {
+    const normalizedId = String(profileId || "").trim();
+    if (!normalizedId) {
+        return "";
+    }
+    const profiles = voicePayload && Array.isArray(voicePayload.profiles)
+        ? voicePayload.profiles
+        : [];
+    return profiles.some((item) => item.id === normalizedId) ? normalizedId : "";
 }
 
 function voiceProfiles() {

@@ -1,6 +1,9 @@
 import { initShellI18n } from "./shell-i18n.js?v=session-centered-2";
 import { initShellDisplayMode } from "./shell-display-mode.js?v=session-centered-2";
-import { rememberShellSessionName } from "./shell-session-links.js?v=site-public-6";
+import {
+    initShellSessionLinks,
+    rememberShellSessionName,
+} from "./shell-session-links.js?v=site-public-6";
 import {
     fetchSessionRuntimeContext,
     runtimeContextValue,
@@ -22,6 +25,7 @@ const DEFAULT_LIP_SYNC_IDS = ["ParamMouthOpenY", "PARAM_MOUTH_OPEN_Y", "MouthOpe
 const STAGE_CONTEXT_REFRESH_INTERVAL_MS = 5000;
 let sessionName = resolveSessionName();
 rememberShellSessionName(sessionName);
+initShellSessionLinks();
 let subtitleText = "";
 let audioUnlocked = false;
 let currentStatusKey = "stage.status.connecting";
@@ -104,6 +108,7 @@ async function setActiveSessionName(value, options = {}) {
         sessionSelect.value = sessionName;
     }
     updateSessionUrl(sessionName);
+    initShellSessionLinks();
     const live2dChanged = await loadStageContext();
     if (live2dChanged) {
         await reloadLive2DFromContext();

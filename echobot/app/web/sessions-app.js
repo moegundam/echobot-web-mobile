@@ -4,6 +4,7 @@ import {
     initShellSessionLinks,
     rememberShellSessionName,
 } from "./shell-session-links.js?v=admin-sessions-1";
+import { routeModeLabel } from "./features/sessions/route-mode.js?v=admin-boundary-1";
 
 const state = {
     sessions: [],
@@ -266,7 +267,7 @@ function buildSessionCard(session) {
             role: String(session.role_name || "default"),
         }),
         i18n.t("sessions.routeMeta", {
-            route: String(session.route_mode || "chat_only"),
+            route: routeModeLabel(normalizeRouteMode(session.route_mode), i18n.t),
         }),
         i18n.t("sessions.channelMeta", {
             channel: sessionChannelLabel(session),

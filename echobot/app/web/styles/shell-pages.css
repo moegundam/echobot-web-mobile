@@ -247,6 +247,38 @@ textarea {
     min-width: 0;
 }
 
+.stage-quick-nav,
+.messenger-quick-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    min-width: 0;
+}
+
+.stage-quick-nav a,
+.messenger-quick-nav a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 38px;
+    padding: 7px 10px;
+    border: 1px solid var(--shell-line);
+    border-radius: 8px;
+    color: var(--shell-text);
+    background: rgba(255, 253, 248, 0.9);
+    font-size: 0.86rem;
+    text-decoration: none;
+}
+
+.messenger-quick-nav {
+    grid-column: 1 / -1;
+}
+
+.stage-quick-nav a {
+    border-color: rgba(255, 255, 255, 0.18);
+    color: rgba(255, 255, 255, 0.88);
+    background: rgba(12, 18, 24, 0.72);
+}
+
 .stage-audio-button {
     position: static;
     flex: 0 0 auto;

@@ -58,7 +58,7 @@ DOM.remove.addEventListener("click", () => {
 
 void load();
 
-async function load() {
+async function load(options = {}) {
     setBusy(true);
     state.loaded = false;
     state.loadError = "";
@@ -72,7 +72,13 @@ async function load() {
         state.payload = payload;
         state.live2dPayload = live2dPayload;
         state.webConfig = webConfig;
-        state.selectedProfileId = live2dPayload.active_live2d_model_id || payload.active_profile_id || "a";
+        state.selectedProfileId = resolveExistingProfileId(
+            options.selectedProfileId,
+            live2dPayload,
+        ) || resolveExistingProfileId(
+            state.selectedProfileId,
+            live2dPayload,
+        ) || live2dPayload.active_live2d_model_id || payload.active_profile_id || "a";
         state.loaded = true;
         render();
         setStatusKey("models.ready");
@@ -185,7 +191,7 @@ async function saveSelectedProfile() {
             applyModelProfileToLocalPreferences(updated);
             notifyModelProfileChanged(updated.profile_id, modelProfileScope());
         }
-        await load();
+        await load({ selectedProfileId: updated.profile_id });
         setStatusKey("models.saved");
     } catch (error) {
         console.error(error);
@@ -224,10 +230,7 @@ async function createProfileFromSelection() {
                 source_profile_id: sourceProfile.id,
             }),
         });
-        state.selectedProfileId = created.profile_id;
-        await load();
-        state.selectedProfileId = created.profile_id;
-        render();
+        await load({ selectedProfileId: created.profile_id });
         setStatusKey("models.created");
     } catch (error) {
         console.error(error);
@@ -253,7 +256,7 @@ async function activateSelectedProfile() {
             applyModelProfileToLocalPreferences(activeProfile);
             notifyModelProfileChanged(activeProfile.profile_id, modelProfileScope());
         }
-        await load();
+        await load({ selectedProfileId: payload.active_profile_id || profile.id });
         setStatusKey("models.activated");
     } catch (error) {
         console.error(error);
@@ -285,9 +288,7 @@ async function deleteSelectedProfile() {
         state.selectedProfileId = payload.active_profile_id
             || (Array.isArray(payload.profiles) && payload.profiles[0] && payload.profiles[0].profile_id)
             || "a";
-        await load();
-        state.selectedProfileId = activeProfileId() || state.selectedProfileId;
-        render();
+        await load({ selectedProfileId: payload.active_profile_id || state.selectedProfileId });
         setStatusKey("models.deleted");
     } catch (error) {
         console.error(error);
@@ -311,6 +312,17 @@ function live2dProfiles() {
     return state.live2dPayload && Array.isArray(state.live2dPayload.models)
         ? state.live2dPayload.models
         : [];
+}
+
+function resolveExistingProfileId(profileId, live2dPayload = state.live2dPayload) {
+    const normalizedId = String(profileId || "").trim();
+    if (!normalizedId) {
+        return "";
+    }
+    const models = live2dPayload && Array.isArray(live2dPayload.models)
+        ? live2dPayload.models
+        : [];
+    return models.some((item) => item.id === normalizedId) ? normalizedId : "";
 }
 
 function catalog() {

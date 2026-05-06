@@ -1,6 +1,10 @@
 import { initShellI18n } from "./shell-i18n.js?v=session-centered-2";
 import { initShellDisplayMode } from "./shell-display-mode.js?v=session-centered-2";
-import { rememberShellSessionName } from "./shell-session-links.js?v=site-public-6";
+import {
+    initShellSessionLinks,
+    rememberShellSessionName,
+} from "./shell-session-links.js?v=site-public-6";
+import { normalizeRouteMode } from "./features/sessions/route-mode.js?v=admin-boundary-1";
 import {
     fetchSessionRuntimeContext,
     runtimeContextSummaryItems,
@@ -19,7 +23,7 @@ const urlInput = document.getElementById("messenger-url");
 const attachmentsElement = document.getElementById("messenger-attachments");
 const runtimeContextElement = document.getElementById("messenger-runtime-context");
 
-const DEFAULT_ROUTE_MODE = "chat_only";
+const FALLBACK_ROUTE_MODE = "chat_only";
 const stageDirectivePattern = /^\s*\[(emotion|expression|motion)\s*[:=]\s*([^\]\r\n]{1,256})\]\s*/i;
 let currentStatusKey = "messenger.status.ready";
 let messengerSessions = [];
@@ -35,6 +39,7 @@ const i18n = initShellI18n({
     },
 });
 const displayMode = initShellDisplayMode({ t: i18n.t });
+initShellSessionLinks();
 
 initMessengerSessionControls();
 refreshLocalizedMessengerText();
@@ -104,8 +109,10 @@ function setActiveSessionName(value, options = {}) {
     }
     if (options.updateUrl) {
         updateSessionUrl(nextSessionName);
+        initShellSessionLinks();
         void loadMessengerRuntimeContext(nextSessionName);
     } else if (messengerRuntimeContext?.session_name !== nextSessionName) {
+        initShellSessionLinks();
         void loadMessengerRuntimeContext(nextSessionName);
     }
     return nextSessionName;
@@ -299,7 +306,7 @@ async function submitMessage() {
             {
                 prompt: messagePrompt,
                 session_name: sessionName,
-                route_mode: DEFAULT_ROUTE_MODE,
+                route_mode: activeRouteMode(sessionName),
                 response_language: i18n.language,
                 images: attachments
                     .filter((item) => item.kind === "image")
@@ -335,6 +342,18 @@ async function submitMessage() {
     } finally {
         setBusy(false);
     }
+}
+
+function activeRouteMode(sessionName) {
+    const contextSession = String(messengerRuntimeContext?.session_name || "").trim();
+    const contextRouteMode = String(messengerRuntimeContext?.route_mode || "").trim();
+    if (contextSession === sessionName && contextRouteMode) {
+        return normalizeRouteMode(contextRouteMode);
+    }
+    const session = messengerSessions.find((item) => {
+        return String((item && item.name) || "").trim() === sessionName;
+    });
+    return normalizeRouteMode(session?.route_mode || FALLBACK_ROUTE_MODE);
 }
 
 function promptWithUrl(rawPrompt) {

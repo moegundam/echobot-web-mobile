@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>EchoBot Stage</title>
+    <title data-i18n-key="stage.pageTitle">EchoBot</title>
     <link rel="stylesheet" href="/web/assets/styles/shell-pages.css?v=stage-session-context-1">
 </head>
 <body class="stage-page" data-page-title-key="stage.pageTitle">
@@ -19,6 +19,12 @@
                         <span data-i18n-key="stage.sessionTarget">Session</span>
                         <select id="stage-session-select" autocomplete="off"></select>
                     </label>
+                    <nav class="stage-quick-nav" aria-label="Stage quick navigation" data-i18n-aria-label-key="stage.quickNavAria">
+                        <a href="/console" data-i18n-key="admin.console">Console</a>
+                        <a href="/messenger?session_name=default" data-session-link data-i18n-key="console.openMessenger">Messenger</a>
+                        <a href="/admin/sessions" data-i18n-key="admin.sessions">Sessions</a>
+                        <a href="/admin" data-i18n-key="console.openAdmin">Admin</a>
+                    </nav>
                 </div>
                 <button id="stage-audio-enable" class="stage-audio-button" type="button" data-i18n-key="stage.audio.enable">
                     Enable audio

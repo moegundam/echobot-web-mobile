@@ -75,6 +75,10 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn('href="/admin"', html)
         self.assertIn('data-i18n-key="console.openAdmin"', html)
         self.assertIn('data-i18n-key="console.openSessions"', html)
+        self.assertIn('data-i18n-key="console.shellSafetyFullAccess"', html)
+        self.assertIn('data-i18n-key="console.shellSafetyWorkspaceWrite"', html)
+        self.assertIn('data-i18n-key="console.shellSafetyReadOnly"', html)
+        self.assertIn('data-i18n-key="console.runtimeScopeHelp"', html)
         self.assertIn('class="console-admin-handoff"', html)
         self.assertIn('href="/admin/voice-models"', html)
         self.assertIn('href="/admin/live2d"', html)
@@ -132,6 +136,8 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn("html[data-layout-mode=\"tablet\"] .page-resizer", responsive_css)
         self.assertIn("max-height: min(46vh, 500px)", panels_css)
         self.assertIn("response_language: getUiLanguage()", chat_runner_js)
+        self.assertIn("SHELL_SAFETY_MODE_LABEL_KEYS", (WEB_ROOT / "features" / "layout" / "runtime.js").read_text(encoding="utf-8"))
+        self.assertNotIn('"danger-full-access": "full access"', (WEB_ROOT / "features" / "layout" / "runtime.js").read_text(encoding="utf-8"))
         self.assertIn("renderRoleModelProfileCard", roles_js)
         self.assertIn('window.location.pathname === "/console"', app_js)
         self.assertIn("document.body.dataset.shellMode = shellMode", app_js)
@@ -168,6 +174,10 @@ class WebStaticAssetTests(unittest.TestCase):
             "console.groupVoice",
             "console.groupLive2dStage",
             "console.groupRuntimeJobs",
+            "console.runtimeScopeHelp",
+            "console.shellSafetyFullAccess",
+            "console.shellSafetyWorkspaceWrite",
+            "console.shellSafetyReadOnly",
         ):
             self.assertIn(f'"{key}"', i18n_js)
 
@@ -191,6 +201,11 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn('id="sessions-create-route-mode"', sessions_html)
         self.assertIn('value="force_agent"', sessions_html)
         self.assertNotIn('value="agent"', sessions_html)
+        self.assertIn('value="chat_only" data-i18n-key="console.routeChatOnly"', sessions_html)
+        self.assertIn('value="auto" data-i18n-key="console.routeAuto"', sessions_html)
+        self.assertIn('value="force_agent" data-i18n-key="console.routeForceAgent"', sessions_html)
+        self.assertNotIn(">chat_only</option>", sessions_html)
+        self.assertNotIn(">force_agent</option>", sessions_html)
         self.assertIn('id="sessions-create-channel-type"', sessions_html)
         self.assertIn('id="sessions-create-channel-integration"', sessions_html)
         self.assertIn('id="sessions-edit-form"', sessions_html)
@@ -211,6 +226,7 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn("saveSessionBinding", sessions_js)
         self.assertIn("renameSession", sessions_js)
         self.assertIn("deleteSession", sessions_js)
+        self.assertIn("routeModeLabel(normalizeRouteMode(session.route_mode), i18n.t)", sessions_js)
         self.assertIn("syncChannelTypeFromIntegration", sessions_js)
         self.assertIn("/admin/sessions", structure_js)
 
@@ -253,12 +269,16 @@ class WebStaticAssetTests(unittest.TestCase):
         i18n_js = (WEB_ROOT / "shell-i18n.js").read_text(encoding="utf-8")
 
         self.assertIn('id="messenger-session-select"', messenger_html)
+        self.assertIn('class="messenger-quick-nav"', messenger_html)
+        self.assertIn('href="/stage?session_name=default" data-session-link', messenger_html)
         self.assertIn('id="messenger-runtime-context"', messenger_html)
         self.assertIn('id="messenger-record"', messenger_html)
         self.assertIn('id="messenger-url"', messenger_html)
         self.assertIn('id="messenger-file-input"', messenger_html)
         self.assertIn('id="messenger-attachments"', messenger_html)
         self.assertIn('id="stage-session-select"', stage_html)
+        self.assertIn('class="stage-quick-nav"', stage_html)
+        self.assertIn('href="/messenger?session_name=default" data-session-link', stage_html)
         self.assertIn('data-i18n-key="stage.sessionTarget">Session</span>', stage_html)
         self.assertIn('id="stage-role-label"', stage_html)
         self.assertIn('id="stage-model-profile-label"', stage_html)
@@ -270,6 +290,9 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn('"/api/channels/stage-targets"', stage_js)
         self.assertIn("/runtime-context", runtime_context_js)
         self.assertIn("fetchSessionRuntimeContext", messenger_js)
+        self.assertIn("activeRouteMode(sessionName)", messenger_js)
+        self.assertIn("const contextRouteMode = String(messengerRuntimeContext?.route_mode", messenger_js)
+        self.assertNotIn("route_mode: DEFAULT_ROUTE_MODE", messenger_js)
         self.assertIn("fetchSessionRuntimeContext", stage_js)
         self.assertIn("runtimeContextSummaryItems", messenger_js)
         self.assertIn("runtimeContextValue", stage_js)
@@ -288,9 +311,9 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertNotIn("/api/stage/context?session_name=", stage_js)
         self.assertIn("loadStageContext", stage_js)
         self.assertIn("renderStageContext", stage_js)
-        self.assertIn('route_mode: DEFAULT_ROUTE_MODE', messenger_js)
+        self.assertIn('const FALLBACK_ROUTE_MODE = "chat_only";', messenger_js)
         self.assertIn("response_language: i18n.language", messenger_js)
-        self.assertIn('const DEFAULT_ROUTE_MODE = "chat_only";', messenger_js)
+        self.assertNotIn('const DEFAULT_ROUTE_MODE = "chat_only";', messenger_js)
         self.assertIn("extractStageDirectives", messenger_js)
         self.assertIn("stageDirectivePattern", messenger_js)
         self.assertIn('await publishStageEvent("subtitle", sessionName, ""', messenger_js)
@@ -343,6 +366,7 @@ class WebStaticAssetTests(unittest.TestCase):
 
         for key in (
             "stage.sessionTarget",
+            "stage.quickNavAria",
             "stage.sessionFallback",
             "stage.sessionTargetLoadFailed",
             "stage.roleLabel",
@@ -360,6 +384,7 @@ class WebStaticAssetTests(unittest.TestCase):
             "runtimeContext.notSet",
             "runtimeContext.internalWeb",
             "messenger.session",
+            "messenger.quickNavAria",
             "messenger.sessionFallback",
             "messenger.channelTargetOption",
             "messenger.sessionLoadFailed",
@@ -497,13 +522,21 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn('id="live2d-selection"', live2d_html)
         self.assertIn('label: DOM.label.value', voice_js)
         self.assertIn('label: DOM.label.value', live2d_js)
+        self.assertIn("load({ selectedProfileId: updated.profile_id })", voice_js)
+        self.assertIn("load({ selectedProfileId: updated.profile_id })", live2d_js)
+        self.assertIn("function resolveExistingProfileId", voice_js)
+        self.assertIn("function resolveExistingProfileId", live2d_js)
         self.assertIn('"/api/voice-models"', voice_js)
         self.assertIn('"/api/live2d-models"', live2d_js)
         self.assertIn('"/api/model-profiles"', voice_js)
         self.assertIn('"/api/model-profiles"', live2d_js)
+        self.assertIn('<title data-i18n-key="console.pageTitle">EchoBot</title>', (WEB_ROOT / "index.html").read_text(encoding="utf-8"))
+        self.assertIn('"console.sessionSettingSource": "Entry point"', i18n_js)
+        self.assertIn('"sessions.channelType": "Entry point type"', i18n_js)
         self.assertIn("createProfileFromSelection", live2d_js)
         self.assertIn("deleteSelectedProfile", live2d_js)
         self.assertIn("statusPayload.security_warnings", openwebui_html + (WEB_ROOT / "openwebui-app.js").read_text(encoding="utf-8"))
+        self.assertIn("scripts/echobot_entrypoint.py", (WEB_ROOT / "openwebui-app.js").read_text(encoding="utf-8"))
 
         for key in (
             "admin.llmModels",
@@ -530,6 +563,9 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn('/api/channels/${encodeURIComponent(channelName)}/smoke', channels_js)
         self.assertIn("buildChannelHints", channels_js)
         self.assertIn("buildLocalTestControls", channels_js)
+        self.assertIn("buildVerificationSection", channels_js)
+        self.assertIn("Telegram: real bot E2E verified", channels_js)
+        self.assertIn("LINE / WhatsApp: planning entries only", channels_js)
         self.assertIn('requestJson("/api/sessions").catch(() => [])', channels_js)
         self.assertIn("buildSessionDatalist", channels_js)
         self.assertIn("sessionDatalistId", channels_js)

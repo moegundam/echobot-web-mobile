@@ -176,6 +176,7 @@ Completed so far:
 - Mobile/tablet/desktop display modes have been added, with 360x800, 390x844, 430x932, and 768x1024 viewport checks expected to avoid horizontal overflow.
 - First-version interfaces and documentation exist for Cloudflare Local Tunnel, trusted-user isolation, Stage Event Broker, Open WebUI bridge APIs, Model Profiles, Character Packages, and Channels setup/smoke checks.
 - Real Telegram / Discord platform E2E, Voice TTS/ASR smoke, and Open WebUI bridge smoke from both local EchoBot and the GB10 host over a reverse tunnel have passed.
+- Console/Admin UX has been tightened: route mode no longer shows raw enum values, Messenger uses the Session route mode, Stage/Messenger include cross-surface navigation, and Open WebUI/Channels show repeatable entrypoint and verified-platform status.
 - The public-facing safety default is now `ECHOBOT_SHELL_SAFETY_MODE=workspace-write`.
 
 Not finished or still planned:
@@ -250,7 +251,7 @@ This branch has been verified with:
 - API route/auth tests.
 - Browser smoke: `scripts/browser_smoke.py --base-url http://127.0.0.1:8001`.
 - Public safety scan: `scripts/check_public_safety.py`.
-- Full pytest: `349 passed, 2 warnings, 16 subtests passed`.
+- Full pytest: `352 passed, 2 warnings, 16 subtests passed`.
 
 ## Project Rules
 

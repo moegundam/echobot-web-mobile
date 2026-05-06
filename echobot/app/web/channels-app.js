@@ -54,6 +54,14 @@ const channelText = {
     en: {
         builtInTitle: "Available runtime channels",
         builtInBody: "Telegram and Discord are editable here for configuration and smoke testing. Other channels remain in a read-only state on this page.",
+        verificationTitle: "Verified platform status",
+        verificationBody: "This is the current tested state, so the page does not imply that every listed platform is production-ready.",
+        verificationItems: [
+            "Telegram: real bot E2E verified with inbound reply and Stage mirror.",
+            "Discord: real bot E2E verified with inbound reply and Stage mirror.",
+            "QQ: runtime adapter exists, but no long-running real-platform check has been completed.",
+            "LINE / WhatsApp: planning entries only; runtime adapters are not wired yet.",
+        ],
         plannedTitle: "Planned messaging integrations",
         plannedBody: "These gateways should be added here before they are wired to runtime adapters.",
         rulesTitle: "Integration rules",
@@ -89,6 +97,14 @@ const channelText = {
     "zh-Hant": {
         builtInTitle: "目前可用通訊入口",
         builtInBody: "Telegram 與 Discord 在此頁可編輯並可做連線檢查；其他通訊入口目前仍維持唯讀。",
+        verificationTitle: "平台實測狀態",
+        verificationBody: "這裡列的是目前已驗證狀態，避免頁面讓人誤以為每個平台都已 production-ready。",
+        verificationItems: [
+            "Telegram：真實 bot E2E 已驗證 inbound 回覆與 Stage 同步。",
+            "Discord：真實 bot E2E 已驗證 inbound 回覆與 Stage 同步。",
+            "QQ：已有 runtime adapter，但尚未完成真實平台長跑檢查。",
+            "LINE / WhatsApp：目前只是規劃入口，runtime adapter 尚未接線。",
+        ],
         plannedTitle: "規劃中的通訊平台整合",
         plannedBody: "這些通訊入口應先在此頁建立設定邊界，再接 runtime adapter。",
         rulesTitle: "整合規則",
@@ -103,7 +119,7 @@ const channelText = {
             console: "本機 console 輸出入口，用於連線檢查。",
             telegram: "Telegram bot polling 通訊入口。",
             discord: "Discord 原生 bot events、受保護 webhook bridge 與 outbound webhook 發送。",
-            qq: "QQ 官方 bot 私訊入口。",
+            qq: "QQ 官方 bot 私訊入口；adapter 已存在，但尚未完成真實平台長跑驗證。",
         },
         channelHints: {
             telegram: [
@@ -124,6 +140,14 @@ const channelText = {
     "zh-Hans": {
         builtInTitle: "当前可用通讯入口",
         builtInBody: "Telegram 与 Discord 在此页可编辑并可做连线检查；其他通讯入口目前仍保持只读。",
+        verificationTitle: "平台实测状态",
+        verificationBody: "这里列的是当前已验证状态，避免页面让人误以为每个平台都已 production-ready。",
+        verificationItems: [
+            "Telegram：真实 bot E2E 已验证 inbound 回复与 Stage 同步。",
+            "Discord：真实 bot E2E 已验证 inbound 回复与 Stage 同步。",
+            "QQ：已有 runtime adapter，但尚未完成真实平台长跑检查。",
+            "LINE / WhatsApp：目前只是规划入口，runtime adapter 尚未接线。",
+        ],
         plannedTitle: "规划中的通讯平台整合",
         plannedBody: "这些通讯入口应先在此页建立设置边界，再接 runtime adapter。",
         rulesTitle: "整合规则",
@@ -138,7 +162,7 @@ const channelText = {
             console: "本机 console 输出入口，用于连线检查。",
             telegram: "Telegram bot polling 通讯入口。",
             discord: "Discord 原生 bot events、受保护 webhook bridge 与 outbound webhook 发送。",
-            qq: "QQ 官方 bot 私信入口。",
+            qq: "QQ 官方 bot 私信入口；adapter 已存在，但尚未完成真实平台长跑验证。",
         },
         channelHints: {
             telegram: [
@@ -272,6 +296,7 @@ function renderContent() {
             builtInText.builtInBody,
             builtInCards,
         ),
+        buildVerificationSection(builtInText),
         buildChannelSection(
             builtInText.plannedTitle,
             builtInText.plannedBody,
@@ -279,6 +304,27 @@ function renderContent() {
         ),
         buildRuleSection(builtInText),
     );
+}
+
+function buildVerificationSection(content) {
+    const section = document.createElement("section");
+    section.className = "structure-section";
+
+    const title = document.createElement("h2");
+    title.textContent = content.verificationTitle;
+    const body = document.createElement("p");
+    body.className = "structure-section-body";
+    body.textContent = content.verificationBody;
+    const list = document.createElement("ul");
+    list.className = "structure-rule-list";
+    (content.verificationItems || []).forEach((itemText) => {
+        const item = document.createElement("li");
+        item.textContent = itemText;
+        list.appendChild(item);
+    });
+
+    section.append(title, body, list);
+    return section;
 }
 
 function buildChannelCardFromDefinition(definition) {

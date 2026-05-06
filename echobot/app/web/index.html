@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>EchoBot Live2D</title>
+    <title data-i18n-key="console.pageTitle">EchoBot</title>
     <link rel="icon" href="/favicon.ico" type="image/svg+xml">
     <link rel="stylesheet" href="/web/assets/styles/index.css?v=console-nav-1">
 </head>
@@ -405,12 +405,15 @@
                                 <label class="field field-span-full">
                                     <span data-i18n-key="console.shellSafetyMode">Shell safety mode</span>
                                     <select id="shell-safety-mode-select">
-                                        <option value="danger-full-access">danger-full-access</option>
-                                        <option value="workspace-write">workspace-write</option>
-                                        <option value="read-only">read-only</option>
+                                        <option value="danger-full-access" data-i18n-key="console.shellSafetyFullAccess">Full access</option>
+                                        <option value="workspace-write" data-i18n-key="console.shellSafetyWorkspaceWrite">Workspace write</option>
+                                        <option value="read-only" data-i18n-key="console.shellSafetyReadOnly">Read only</option>
                                     </select>
                                 </label>
                             </div>
+                            <p class="muted-text runtime-scope-note" data-i18n-key="console.runtimeScopeHelp">
+                                These runtime overrides are global for this EchoBot runtime, not only the selected session.
+                            </p>
                             <div class="toggle-row">
                                 <label class="toggle-item">
                                     <input id="delegated-ack-checkbox" type="checkbox" checked>

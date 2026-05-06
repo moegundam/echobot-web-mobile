@@ -176,6 +176,7 @@ python -m echobot app --host 127.0.0.1 --port 8001
 - 手機/平板/桌面顯示模式已加入，並驗證 360x800、390x844、430x932、768x1024 viewport 不應水平溢出。
 - Cloudflare Local Tunnel、trusted-user、Stage Event Broker、Open WebUI bridge API、Model Profiles、Character Packages 與 Channels 設定/smoke 的第一版接口與文件已建立。
 - Telegram / Discord 真實平台 E2E、Voice TTS/ASR smoke、Open WebUI bridge 本機與 GB10 reverse tunnel smoke 已完成。
+- Console/Admin UX 已補強：route mode 不再顯示 raw enum、Messenger 讀取場次 route mode、Stage/Messenger 補跨頁導覽、Open WebUI/Channels 顯示可重跑入口與平台實測狀態。
 - 公開前安全預設已調整為 `ECHOBOT_SHELL_SAFETY_MODE=workspace-write`。
 
 尚未完成或仍屬規劃中的部分：
@@ -250,7 +251,7 @@ python -m pytest
 - API route/auth tests。
 - browser smoke：`scripts/browser_smoke.py --base-url http://127.0.0.1:8001`。
 - public safety scan：`scripts/check_public_safety.py`。
-- full pytest：`349 passed, 2 warnings, 16 subtests passed`。
+- full pytest：`352 passed, 2 warnings, 16 subtests passed`。
 
 ## 專案規矩
 

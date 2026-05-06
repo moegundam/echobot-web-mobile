@@ -54,6 +54,16 @@ const bridgeContent = {
                     "Use `--chat-prompt` only when the selected model provider is ready to answer.",
                 ],
             },
+            {
+                title: "Stable local entrypoint",
+                body: "The repeatable local service path is managed by `scripts/echobot_entrypoint.py`; it keeps EchoBot and the GB10 reverse bridge from depending on one-off terminal commands.",
+                items: [
+                    "`python scripts/echobot_entrypoint.py doctor` checks local tools, runtime files, SSH, Cloudflare CLI presence, and reachable health endpoints.",
+                    "`python scripts/echobot_entrypoint.py --env-file .env.launchd.local status` shows the launchd app and GB10 reverse-tunnel status.",
+                    "`python scripts/echobot_entrypoint.py --env-file .env.launchd.local smoke-openwebui --target local --session-name demo` verifies the local bridge.",
+                    "`python scripts/echobot_entrypoint.py --env-file .env.launchd.local smoke-openwebui --target gb10 --session-name demo` verifies the bridge from the Open WebUI host side.",
+                ],
+            },
         ],
     },
     "zh-Hant": {
@@ -107,6 +117,16 @@ const bridgeContent = {
                     "只有在模型 provider 已可回覆時，才加 `--chat-prompt` 做 chat 工具驗證。",
                 ],
             },
+            {
+                title: "穩定本機入口",
+                body: "可重跑的本機服務入口由 `scripts/echobot_entrypoint.py` 管理，避免 EchoBot 與 GB10 reverse bridge 依賴一次性的 terminal 指令。",
+                items: [
+                    "`python scripts/echobot_entrypoint.py doctor` 檢查本機工具、runtime 檔案、SSH、Cloudflare CLI 是否存在，以及 health endpoint 是否可達。",
+                    "`python scripts/echobot_entrypoint.py --env-file .env.launchd.local status` 顯示 launchd app 與 GB10 reverse tunnel 狀態。",
+                    "`python scripts/echobot_entrypoint.py --env-file .env.launchd.local smoke-openwebui --target local --session-name demo` 驗證本機 bridge。",
+                    "`python scripts/echobot_entrypoint.py --env-file .env.launchd.local smoke-openwebui --target gb10 --session-name demo` 從 Open WebUI 主機視角驗證 bridge。",
+                ],
+            },
         ],
     },
     "zh-Hans": {
@@ -158,6 +178,16 @@ const bridgeContent = {
                     "设置 `ECHOBOT_OPENWEBUI_BRIDGE_TOKEN` 后执行 `python scripts/openwebui_bridge_smoke.py --base-url http://127.0.0.1:8001 --session-name demo`。",
                     "脚本会检查 status、窄 tool spec、session list 与 Stage event 发布。",
                     "只有在模型 provider 已可回复时，才加 `--chat-prompt` 做 chat 工具验证。",
+                ],
+            },
+            {
+                title: "稳定本机入口",
+                body: "可重跑的本机服务入口由 `scripts/echobot_entrypoint.py` 管理，避免 EchoBot 与 GB10 reverse bridge 依赖一次性的 terminal 指令。",
+                items: [
+                    "`python scripts/echobot_entrypoint.py doctor` 检查本机工具、runtime 文件、SSH、Cloudflare CLI 是否存在，以及 health endpoint 是否可达。",
+                    "`python scripts/echobot_entrypoint.py --env-file .env.launchd.local status` 显示 launchd app 与 GB10 reverse tunnel 状态。",
+                    "`python scripts/echobot_entrypoint.py --env-file .env.launchd.local smoke-openwebui --target local --session-name demo` 验证本机 bridge。",
+                    "`python scripts/echobot_entrypoint.py --env-file .env.launchd.local smoke-openwebui --target gb10 --session-name demo` 从 Open WebUI 主机视角验证 bridge。",
                 ],
             },
         ],

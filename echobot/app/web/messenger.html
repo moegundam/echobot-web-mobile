@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>EchoBot Messenger</title>
+    <title data-i18n-key="messenger.pageTitle">EchoBot</title>
     <link rel="stylesheet" href="/web/assets/styles/shell-pages.css?v=session-targets-2">
 </head>
 <body class="messenger-page" data-page-title-key="messenger.pageTitle">
@@ -20,6 +20,12 @@
                 <select id="messenger-session-select" autocomplete="off"></select>
                 <input id="messenger-session" type="hidden" value="default" autocomplete="off">
             </label>
+            <nav class="messenger-quick-nav" aria-label="Messenger quick navigation" data-i18n-aria-label-key="messenger.quickNavAria">
+                <a href="/console" data-i18n-key="admin.console">Console</a>
+                <a href="/stage?session_name=default" data-session-link data-i18n-key="console.openStage">Stage</a>
+                <a href="/admin/sessions" data-i18n-key="admin.sessions">Sessions</a>
+                <a href="/admin" data-i18n-key="console.openAdmin">Admin</a>
+            </nav>
         </header>
         <section id="messenger-runtime-context" class="runtime-context-strip" aria-live="polite"></section>
         <section id="messenger-messages" class="messenger-messages" aria-live="polite"></section>

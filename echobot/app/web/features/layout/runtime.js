@@ -10,10 +10,10 @@ const DEFAULT_RUNTIME_CONFIG = Object.freeze({
     web_private_network_enabled: false,
 });
 
-const SHELL_SAFETY_MODE_LABELS = {
-    "danger-full-access": "full access",
-    "workspace-write": "workspace write",
-    "read-only": "read only",
+const SHELL_SAFETY_MODE_LABEL_KEYS = {
+    "danger-full-access": "console.shellSafetyFullAccess",
+    "workspace-write": "console.shellSafetyWorkspaceWrite",
+    "read-only": "console.shellSafetyReadOnly",
 };
 
 export function createRuntimeController(deps) {
@@ -248,7 +248,8 @@ export function createRuntimeController(deps) {
     }
 
     function formatShellSafetyModeLabel(mode) {
-        return SHELL_SAFETY_MODE_LABELS[mode] || mode;
+        const labelKey = SHELL_SAFETY_MODE_LABEL_KEYS[mode];
+        return labelKey ? t(labelKey) : mode;
     }
 
     function updateRuntimeControls() {
