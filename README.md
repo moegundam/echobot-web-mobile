@@ -152,8 +152,9 @@ python -m echobot app --host 127.0.0.1 --port 8001
 - `POST /api/channels/{channel}/smoke` 提供安全的本機 readiness check，不會把 token 回傳到 response。
 - `GET /api/channels/stage-targets` 提供無 secret 的通訊 target 清單，讓 `/stage` 與 `/messenger` 直接選擇已設定平台綁定的前台 session。
 - Telegram token、Bot API `getMe`、poller 啟動、Bot API outbound、session 綁定與 Stage target projection 已做過本機驗證；測試 token 只放在 repo 外的 ignored runtime config，不寫入版本庫。
-- 正式通訊 gateway 可設定 `mirror_to_stage` 與 `stage_session_name`；Telegram 使用者 inbound 訊息到 EchoBot 回覆再同步 `/stage` 的真實 E2E 仍需用新 Telegram 使用者訊息驗收。
-- Discord webhook bridge 可接收受 secret 保護的本機/反向代理 inbound request；原生 Discord bot events adapter 已完成，正式接 Discord Gateway events 需要 repo 外 bot token、Discord Developer Portal Message Content Intent，並重啟 EchoBot。
+- 正式通訊 gateway 可設定 `mirror_to_stage` 與 `stage_session_name`；Telegram 真實平台 inbound 已用 Telegram Desktop `/ping TG_OK` 驗證，EchoBot 回覆與 `/stage` 同步皆成功。
+- Discord webhook bridge 可接收受 secret 保護的本機/反向代理 inbound request；原生 Discord bot events adapter 已完成，且 Discord 真 bot 已用 `/ping DISCORD_OK` 驗證 gateway 回覆與 `/stage` 同步。正式環境仍需 repo 外 bot token、Discord Developer Portal Message Content Intent，並重啟 EchoBot。
+- 通訊 gateway 內建 `/ping <text>` / `/smoke <text>` deterministic smoke command，避免平台 E2E 測試依賴 LLM 是否剛好遵守「精確回覆」提示。
 
 ### 11. 部署與架構文件
 
@@ -173,12 +174,13 @@ python -m echobot app --host 127.0.0.1 --port 8001
 - 英文、繁體中文、簡體中文語言切換已套用到靜態頁面與主要動態 UI。
 - 手機/平板/桌面顯示模式已加入，並驗證 360x800、390x844、430x932、768x1024 viewport 不應水平溢出。
 - Cloudflare Local Tunnel、trusted-user、Stage Event Broker、Open WebUI bridge API、Model Profiles、Character Packages 與 Channels 設定/smoke 的第一版接口與文件已建立。
+- Telegram / Discord 真實平台 E2E、Voice TTS/ASR smoke、Open WebUI bridge 本機與 GB10 reverse tunnel smoke 已完成。
 - 公開前安全預設已調整為 `ECHOBOT_SHELL_SAFETY_MODE=workspace-write`。
 
 尚未完成或仍屬規劃中的部分：
 
-- Telegram 與 QQ 已有 built-in runtime adapter；`/admin/channels` 已可保存 Telegram / Discord 設定並做 smoke readiness。Telegram token、poller、Bot API outbound、session 綁定與 Stage target projection 已通過本機驗證，但 Telegram 使用者 inbound 訊息到 EchoBot 回覆再同步 `/stage` 的真實 E2E 仍未完成。Discord 已有受 secret 保護的 webhook bridge、outbound webhook 發送與原生 Discord bot events adapter；真實 Discord server 啟用需填入 repo 外 bot token、開啟 Message Content Intent 並重啟服務。LINE、WhatsApp 正式 runtime adapter 仍屬規劃中。
-- Open WebUI bridge 已有 EchoBot 端 narrow API、說明頁與本機 smoke script；若要讓 GB10 Open WebUI 實際呼叫 EchoBot，仍需設定 bridge token，並讓 Open WebUI 能透過 Tunnel/Tailscale/可信反向代理連到 EchoBot。
+- LINE、WhatsApp 正式 runtime adapter 仍屬規劃中；QQ adapter 已保留 built-in 入口但尚未做真實平台長跑驗證。
+- Open WebUI bridge 已有 EchoBot 端 narrow API、說明頁、本機 smoke script，並已從 GB10 host 透過 SSH reverse tunnel 驗證 tool spec、stage event 與 chat。若要長期使用，仍需改成 Cloudflare Tunnel、Tailscale、VPS 或可信 reverse proxy，不建議把本機 `127.0.0.1` 服務匿名公開。
 - `/admin` 第一版偏向索引、說明與狀態檢視，還不是完整 production SaaS 管理後台。
 - Stage / Live2D / ASR / TTS 已有 v1 整合與本機 smoke；真機麥克風與長時間語音互動仍需在 HTTPS + 真機環境逐項驗收。
 - 多使用者內測建議使用 Cloudflare Access 或可信 reverse proxy；不要把本地服務匿名直接暴露到公開網路。
@@ -245,7 +247,9 @@ python -m pytest
 - 全站 10 個 route × 手機/桌面 × 3 語言瀏覽器檢查。
 - i18n key coverage。
 - API route/auth tests。
-- full pytest：`337 passed, 1 warning, 16 subtests passed`。
+- browser smoke：`scripts/browser_smoke.py --base-url http://127.0.0.1:8001`。
+- public safety scan：`scripts/check_public_safety.py`。
+- full pytest：`349 passed, 2 warnings, 16 subtests passed`。
 
 ## 專案規矩
 

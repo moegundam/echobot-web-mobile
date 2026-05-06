@@ -152,8 +152,9 @@ A model profile management page was added:
 - `POST /api/channels/{channel}/smoke` provides safe local readiness checks without echoing tokens in responses.
 - `GET /api/channels/stage-targets` exposes a secret-free messaging target list so `/stage` and `/messenger` can select the Stage session bound to a configured platform.
 - Telegram token validation, Bot API `getMe`, poller startup, Bot API outbound, session binding, and Stage target projection have passed local checks; the test token is stored only in repo-external ignored runtime config and is not committed.
-- Production messaging gateways can set `mirror_to_stage` and `stage_session_name`; the real Telegram user inbound message to EchoBot reply to `/stage` mirror E2E still needs validation with a fresh Telegram user message.
-- The Discord webhook bridge can receive secret-protected local or reverse-proxy inbound requests. The native Discord bot events adapter is implemented; real Discord Gateway events require a repo-external bot token, Discord Developer Portal Message Content Intent, and an EchoBot restart.
+- Production messaging gateways can set `mirror_to_stage` and `stage_session_name`; real Telegram platform inbound has been verified with Telegram Desktop `/ping TG_OK`, including the EchoBot reply and `/stage` mirror.
+- The Discord webhook bridge can receive secret-protected local or reverse-proxy inbound requests. The native Discord bot events adapter is implemented, and the real Discord bot has been verified with `/ping DISCORD_OK`, including the gateway reply and `/stage` mirror. Production still requires a repo-external bot token, Discord Developer Portal Message Content Intent, and an EchoBot restart.
+- Messaging gateways include deterministic `/ping <text>` / `/smoke <text>` smoke commands so platform E2E tests do not depend on LLM exact-output obedience.
 
 ### 11. Deployment And Architecture Documentation
 
@@ -173,12 +174,13 @@ Completed so far:
 - English, Traditional Chinese, and Simplified Chinese switching is applied to static pages and the main dynamic UI.
 - Mobile/tablet/desktop display modes have been added, with 360x800, 390x844, 430x932, and 768x1024 viewport checks expected to avoid horizontal overflow.
 - First-version interfaces and documentation exist for Cloudflare Local Tunnel, trusted-user isolation, Stage Event Broker, Open WebUI bridge APIs, Model Profiles, Character Packages, and Channels setup/smoke checks.
+- Real Telegram / Discord platform E2E, Voice TTS/ASR smoke, and Open WebUI bridge smoke from both local EchoBot and the GB10 host over a reverse tunnel have passed.
 - The public-facing safety default is now `ECHOBOT_SHELL_SAFETY_MODE=workspace-write`.
 
 Not finished or still planned:
 
-- Telegram and QQ already have built-in runtime adapters. `/admin/channels` can now save Telegram / Discord settings and run smoke readiness checks. Telegram token validation, poller startup, Bot API outbound, session binding, and Stage target projection have passed local checks, but the real Telegram user inbound message to EchoBot reply to `/stage` mirror E2E is still not complete. Discord has a secret-protected webhook bridge, outbound webhook delivery, and a native Discord bot events adapter; real Discord server enablement requires a repo-external bot token, Message Content Intent, and a service restart. LINE and WhatsApp production runtime adapters remain planned.
-- The EchoBot-side narrow Open WebUI bridge API, documentation page, and local smoke script exist. For GB10 Open WebUI to call EchoBot, configure the bridge token and make EchoBot reachable through Tunnel, Tailscale, or a trusted reverse proxy.
+- LINE and WhatsApp production runtime adapters remain planned; the QQ adapter still has a built-in entry but has not had a long-running real-platform check.
+- The EchoBot-side narrow Open WebUI bridge API, documentation page, and local smoke script exist. GB10 host calls have been verified through an SSH reverse tunnel for tool spec, stage events, and chat. For long-running use, replace the dev tunnel with Cloudflare Tunnel, Tailscale, a VPS, or a trusted reverse proxy rather than exposing the local `127.0.0.1` service anonymously.
 - `/admin` v1 is mostly an index, guide, and status surface. It is not a complete production SaaS admin console.
 - Stage / Live2D / ASR / TTS have v1 integration and local smoke coverage. Real-device microphone and long-running voice interaction checks still need HTTPS plus real-device validation.
 - Multi-user private testing should use Cloudflare Access or a trusted reverse proxy. Do not expose the local service anonymously to the public internet.
@@ -245,7 +247,9 @@ This branch has been verified with:
 - 10 routes × mobile/desktop × 3 languages browser checks.
 - i18n key coverage.
 - API route/auth tests.
-- Full pytest: `337 passed, 1 warning, 16 subtests passed`.
+- Browser smoke: `scripts/browser_smoke.py --base-url http://127.0.0.1:8001`.
+- Public safety scan: `scripts/check_public_safety.py`.
+- Full pytest: `349 passed, 2 warnings, 16 subtests passed`.
 
 ## Project Rules
 

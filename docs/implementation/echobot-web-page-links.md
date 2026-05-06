@@ -48,6 +48,20 @@ curl -H "Authorization: Bearer $ECHOBOT_OPENWEBUI_BRIDGE_TOKEN" \
   http://127.0.0.1:8001/api/openwebui/tools/openapi.json
 ```
 
+GB10 Open WebUI 開發接線已驗證過的方式：
+
+```text
+GB10 127.0.0.1:18001 -> SSH reverse tunnel -> Mac 127.0.0.1:8001
+```
+
+在 GB10/Open WebUI 端測工具 spec 時，URL 可用：
+
+```text
+http://127.0.0.1:18001/api/openwebui/tools/openapi.json
+```
+
+這是開發用 tunnel；長期內測應改用 Cloudflare Tunnel、Tailscale、VPS 或可信 reverse proxy。
+
 ## English version
 
 This document lists the main pages currently available in the EchoBot Web/Mobile management edition. The default local development service is:
@@ -95,3 +109,17 @@ Open WebUI bridge tool spec verification:
 curl -H "Authorization: Bearer $ECHOBOT_OPENWEBUI_BRIDGE_TOKEN" \
   http://127.0.0.1:8001/api/openwebui/tools/openapi.json
 ```
+
+The verified GB10 Open WebUI development wiring is:
+
+```text
+GB10 127.0.0.1:18001 -> SSH reverse tunnel -> Mac 127.0.0.1:8001
+```
+
+From GB10/Open WebUI, the tool spec URL can be:
+
+```text
+http://127.0.0.1:18001/api/openwebui/tools/openapi.json
+```
+
+This is a development tunnel. For long-running private testing, use Cloudflare Tunnel, Tailscale, a VPS, or a trusted reverse proxy.
