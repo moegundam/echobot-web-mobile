@@ -335,35 +335,46 @@
                             <a class="console-control-link" href="/admin/live2d" data-i18n-key="admin.live2d">Live2D</a>
                         </div>
                     </section>
-                    <div class="console-control-section-heading">
-                        <div>
-                            <p class="section-title" data-i18n-key="console.groupModelRouting">Model / Voice / Routing</p>
-                            <span class="muted-text" data-i18n-key="console.groupModelRoutingHelp">Model profiles, speech providers, and session route mode.</span>
-                        </div>
-                        <a class="console-control-link" href="/admin/models" data-i18n-key="admin.modelProfiles">Model Profiles</a>
-                    </div>
-                    <div class="field-grid">
-                        <label class="field">
-                            <span data-i18n-key="console.ttsProvider">TTS provider</span>
-                            <select id="tts-provider-select"></select>
-                        </label>
-                        <label class="field">
-                            <span data-i18n-key="console.voiceSelect">TTS voice</span>
-                            <select id="voice-select"></select>
-                        </label>
-                        <label class="field">
-                            <span data-i18n-key="console.asrProvider">ASR provider</span>
-                            <select id="asr-provider-select"></select>
-                        </label>
-                        <label class="field field-span-full">
-                            <span data-i18n-key="console.routeMode">Route mode</span>
-                            <select id="route-mode-select">
-                                <option value="auto" data-i18n-key="console.routeAuto">Auto decision</option>
-                                <option value="chat_only" data-i18n-key="console.routeChatOnly">Chat only</option>
-                                <option value="force_agent" data-i18n-key="console.routeForceAgent">Force Agent</option>
-                            </select>
-                        </label>
-                    </div>
+                    <details id="console-advanced-overrides-panel" class="console-advanced-overrides-panel">
+                        <summary class="console-advanced-overrides-summary">
+                            <div>
+                                <p class="section-title" data-i18n-key="console.advancedOverrides">Advanced live overrides</p>
+                                <span class="muted-text" data-i18n-key="console.advancedOverridesHelp">
+                                    Temporary testing controls. Save persistent models, characters, voice, and Live2D setup in Admin.
+                                </span>
+                            </div>
+                            <span class="settings-summary-icon" aria-hidden="true"></span>
+                        </summary>
+                        <div class="console-advanced-overrides-body">
+                            <div class="console-control-section-heading">
+                                <div>
+                                    <p class="section-title" data-i18n-key="console.groupModelRouting">Model / Voice / Routing</p>
+                                    <span class="muted-text" data-i18n-key="console.groupModelRoutingHelp">Model profiles, speech providers, and session route mode.</span>
+                                </div>
+                                <a class="console-control-link" href="/admin/models" data-i18n-key="admin.modelProfiles">Model Profiles</a>
+                            </div>
+                            <div class="field-grid">
+                                <label class="field">
+                                    <span data-i18n-key="console.ttsProvider">TTS provider</span>
+                                    <select id="tts-provider-select"></select>
+                                </label>
+                                <label class="field">
+                                    <span data-i18n-key="console.voiceSelect">TTS voice</span>
+                                    <select id="voice-select"></select>
+                                </label>
+                                <label class="field">
+                                    <span data-i18n-key="console.asrProvider">ASR provider</span>
+                                    <select id="asr-provider-select"></select>
+                                </label>
+                                <label class="field field-span-full">
+                                    <span data-i18n-key="console.routeMode">Route mode</span>
+                                    <select id="route-mode-select">
+                                        <option value="auto" data-i18n-key="console.routeAuto">Auto decision</option>
+                                        <option value="chat_only" data-i18n-key="console.routeChatOnly">Chat only</option>
+                                        <option value="force_agent" data-i18n-key="console.routeForceAgent">Force Agent</option>
+                                    </select>
+                                </label>
+                            </div>
                     <div class="console-control-section-heading">
                         <div>
                             <p class="section-title" data-i18n-key="console.groupRuntimeJobs">Runtime / Jobs</p>
@@ -867,6 +878,8 @@
                                     data-i18n-placeholder-key="console.heartbeatPlaceholder"
                                 ></textarea>
                             </label>
+                        </div>
+                    </details>
                         </div>
                     </details>
                 </div>

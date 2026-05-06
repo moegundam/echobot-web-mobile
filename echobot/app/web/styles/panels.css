@@ -187,6 +187,51 @@
     gap: 8px;
 }
 
+.console-advanced-overrides-panel {
+    margin-top: 16px;
+    border: 1px solid rgba(87, 57, 34, 0.1);
+    border-radius: 16px;
+    overflow: hidden;
+    background: rgba(255, 251, 246, 0.54);
+}
+
+.console-advanced-overrides-summary {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px;
+    cursor: pointer;
+    list-style: none;
+}
+
+.console-advanced-overrides-summary::-webkit-details-marker {
+    display: none;
+}
+
+.console-advanced-overrides-summary > div:first-child {
+    display: grid;
+    gap: 5px;
+    min-width: 0;
+}
+
+.console-advanced-overrides-panel[open] .settings-summary-icon {
+    transform: rotate(225deg);
+    margin-top: 6px;
+}
+
+.console-advanced-overrides-body {
+    border-top: 1px solid rgba(87, 57, 34, 0.1);
+    padding: 14px;
+    background: rgba(255, 252, 248, 0.72);
+}
+
+.console-advanced-overrides-body > .console-control-section-heading:first-child {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: 0;
+}
+
 .session-settings-header {
     display: flex;
     align-items: flex-start;
@@ -234,8 +279,8 @@
     overflow-wrap: anywhere;
 }
 
-.settings-panel-body > .cron-panel,
-.settings-panel-body > .heartbeat-panel {
+.console-advanced-overrides-body > .cron-panel,
+.console-advanced-overrides-body > .heartbeat-panel {
     margin-top: 18px;
 }
 

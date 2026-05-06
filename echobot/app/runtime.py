@@ -682,13 +682,24 @@ class UserScopedRuntime:
         session_name: str,
         outbound: OutboundMessage,
     ) -> None:
+        from .auth import TrustedUserConfig
+
+        scope_key = _user_stage_scope_key(self.user_id)
         await _publish_gateway_stage_event(
             channels_config=self.parent.channels_config,
             stage_event_broker=self.stage_event_broker,
-            scope_key=_user_stage_scope_key(self.user_id),
+            scope_key=scope_key,
             session_name=session_name,
             outbound=outbound,
         )
+        if not TrustedUserConfig.from_env().enabled and scope_key != "default":
+            await _publish_gateway_stage_event(
+                channels_config=self.parent.channels_config,
+                stage_event_broker=self.stage_event_broker,
+                scope_key="default",
+                session_name=session_name,
+                outbound=outbound,
+            )
 
     async def reload_channels(
         self,

@@ -447,6 +447,88 @@ class GatewayRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual("event-stage", session_store.load_session("event-stage").name)
             self.assertFalse(route_session_store.path.exists())
 
+    async def test_inbound_message_with_requested_session_creates_session(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            context, session_store = build_test_runtime(workspace)
+            bus = MessageBus()
+            delivery_store = DeliveryStore(workspace / "delivery.json")
+            route_session_store = RouteSessionStore(workspace / "route_sessions.json")
+            session_service = GatewaySessionService(
+                SessionLifecycleService(
+                    context.session_store,
+                    context.agent_session_store,
+                    coordinator=context.coordinator,
+                ),
+                route_session_store=route_session_store,
+                delivery_store=delivery_store,
+            )
+            captured_events: list[tuple[str, OutboundMessage]] = []
+
+            async def publish_stage_event(
+                session_name: str,
+                outbound: OutboundMessage,
+            ) -> None:
+                captured_events.append((session_name, outbound))
+
+            gateway = GatewayRuntime(
+                context,
+                bus,
+                session_service=session_service,
+                stage_event_publisher=publish_stage_event,
+            )
+            inbound = make_inbound("ping", message_id=17, user_id="u1")
+            inbound.metadata["session_name"] = "front-stage"
+
+            await gateway.handle_inbound_message(inbound)
+            outbound = await bus.consume_outbound()
+
+            self.assertEqual("pong", outbound.text)
+            self.assertEqual("front-stage", captured_events[0][0])
+            stored_session = session_store.load_session("front-stage")
+            self.assertEqual("front-stage", stored_session.name)
+            self.assertEqual("chat_only", stored_session.metadata["route_mode"])
+            self.assertFalse(route_session_store.path.exists())
+            target = delivery_store.get_session_target("front-stage")
+            self.assertIsNotNone(target)
+            assert target is not None
+            self.assertEqual(17, target.metadata["message_id"])
+
+    async def test_gateway_timeout_publishes_failure_instead_of_dropping_message(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            context, _session_store = build_test_runtime(workspace)
+            bus = MessageBus()
+            delivery_store = DeliveryStore(workspace / "delivery.json")
+            route_session_store = RouteSessionStore(workspace / "route_sessions.json")
+            captured_events: list[tuple[str, OutboundMessage]] = []
+
+            async def fail_turn(*args, **kwargs):
+                del args, kwargs
+                raise TimeoutError("timed out")
+
+            async def publish_stage_event(
+                session_name: str,
+                outbound: OutboundMessage,
+            ) -> None:
+                captured_events.append((session_name, outbound))
+
+            context.coordinator.handle_user_turn = fail_turn  # type: ignore[method-assign]
+            gateway = GatewayRuntime(
+                context,
+                bus,
+                delivery_store=delivery_store,
+                route_session_store=route_session_store,
+                stage_event_publisher=publish_stage_event,
+            )
+
+            await gateway.handle_inbound_message(make_inbound("ping", message_id=19))
+            outbound = await bus.consume_outbound()
+
+            self.assertEqual("Request failed: timed out", outbound.text)
+            self.assertEqual(1, len(captured_events))
+            self.assertEqual("Request failed: timed out", captured_events[0][1].text)
+
     async def test_handle_inbound_message_supports_image_only_payloads(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             workspace = Path(temp_dir)

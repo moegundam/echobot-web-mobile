@@ -50,6 +50,7 @@ import {
 
 const status = createUiStatusController();
 let currentActiveModelProfile = null;
+const shellMode = window.location.pathname === "/console" ? "console" : "web";
 const i18n = initShellI18n({
     onChange: () => {
         displayMode.refresh();
@@ -196,6 +197,8 @@ roles.bindSessionHooks({
 document.addEventListener("DOMContentLoaded", initializePage);
 
 async function initializePage() {
+    document.documentElement.dataset.shellMode = shellMode;
+    document.body.dataset.shellMode = shellMode;
     layout.ensureSidebarToggleButtons();
     layout.initializeLive2DDrawer();
     layout.initializePageSplit();

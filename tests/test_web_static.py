@@ -87,6 +87,9 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertNotIn('id="role-cancel-button"', html)
         self.assertIn('id="model-profile-select"', html)
         self.assertIn('id="model-profile-link"', html)
+        self.assertIn('id="console-advanced-overrides-panel"', html)
+        self.assertIn('data-i18n-key="console.advancedOverrides"', html)
+        self.assertIn('data-i18n-key="console.advancedOverridesHelp"', html)
         self.assertIn('data-i18n-key="console.groupModelRouting"', html)
         self.assertIn('data-i18n-key="console.groupVoice"', html)
         self.assertIn('data-i18n-key="console.groupLive2dStage"', html)
@@ -121,12 +124,16 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn("max-height: min(46vh, 500px)", panels_css)
         self.assertIn("response_language: getUiLanguage()", chat_runner_js)
         self.assertIn("renderRoleModelProfileCard", roles_js)
+        self.assertIn('window.location.pathname === "/console"', app_js)
+        self.assertIn("document.body.dataset.shellMode = shellMode", app_js)
 
         for key in (
             "console.sessionSettings",
             "console.sessionSettingsHelp",
             "console.adminHandoff",
             "console.adminHandoffHelp",
+            "console.advancedOverrides",
+            "console.advancedOverridesHelp",
             "console.sessionSettingCurrent",
             "console.sessionSettingSource",
             "console.sessionSettingRole",

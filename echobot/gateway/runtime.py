@@ -152,7 +152,16 @@ class GatewayRuntime:
                     requested_session_name,
                 )
             except ValueError:
-                bound_session = None
+                try:
+                    bound_session = await self._session_service.load_or_create_session(
+                        requested_session_name,
+                    )
+                    bound_session = await self._context.coordinator.set_session_route_mode(
+                        bound_session.name,
+                        "chat_only",
+                    )
+                except ValueError:
+                    bound_session = None
         if bound_session is None:
             bound_session = await self._session_service.bound_session_for_channel(
                 channel_type=message.address.channel,
@@ -234,6 +243,10 @@ class GatewayRuntime:
         except RuntimeError as exc:
             immediate_response_sent.set()
             content = f"Request failed: {exc}"
+        except Exception as exc:
+            immediate_response_sent.set()
+            logger.exception("Gateway request failed for session %s", session_name)
+            content = f"Request failed: {exc or type(exc).__name__}"
         await self._publish_assistant_outbound(
             session_name,
             OutboundMessage(

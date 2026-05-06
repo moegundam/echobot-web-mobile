@@ -1499,6 +1499,147 @@ class AppApiTests(unittest.TestCase):
             self.assertEqual("telegram", events[0].source)
             self.assertEqual("telegram__12345__session", events[0].metadata["gateway_session_name"])
 
+    def test_user_scoped_gateway_stage_event_is_visible_without_trusted_header_mode(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            config_path = workspace / ".echobot" / "channels.json"
+            app = create_app(
+                runtime_options=RuntimeOptions(
+                    workspace=workspace,
+                    no_tools=True,
+                    no_skills=True,
+                    no_memory=True,
+                    no_heartbeat=True,
+                ),
+                channel_config_path=config_path,
+                context_builder=build_test_context,
+            )
+            raw_config = {
+                "console": {"enabled": False, "allow_from": []},
+                "telegram": {
+                    "enabled": False,
+                    "allow_from": ["12345"],
+                    "mirror_to_stage": True,
+                    "stage_session_name": "front",
+                    "bot_token": "telegram-secret-token",
+                    "proxy": "",
+                    "reply_to_message": False,
+                },
+                "discord": {"enabled": False, "allow_from": []},
+                "qq": {"enabled": False, "allow_from": []},
+            }
+
+            with patch.dict(
+                os.environ,
+                {
+                    "ECHOBOT_TRUSTED_USER_HEADER_ENABLED": "false",
+                    "ECHOBOT_TRUSTED_USER_REQUIRED": "false",
+                },
+                clear=False,
+            ):
+                with TestClient(app) as client:
+                    client.put("/api/channels/config", json=raw_config)
+                    runtime = app.state.runtime
+                    user_runtime = asyncio.run(runtime.for_user("viewer@example.com"))
+                    outbound = ChannelAddress(
+                        channel="telegram",
+                        chat_id="12345",
+                        user_id="viewer@example.com",
+                    )
+                    asyncio.run(
+                        user_runtime.publish_gateway_stage_event(
+                            "front",
+                            SimpleNamespace(
+                                address=outbound,
+                                text="visible local stage",
+                                content="visible local stage",
+                            ),
+                        )
+                    )
+                    default_events = runtime.stage_event_broker.history(
+                        "default",
+                        "front",
+                    )
+                    scoped_events = runtime.stage_event_broker.history(
+                        user_storage_key("viewer@example.com"),
+                        "front",
+                    )
+
+            self.assertEqual(1, len(default_events))
+            self.assertEqual(1, len(scoped_events))
+            self.assertEqual("visible local stage", default_events[0].text)
+            self.assertEqual("visible local stage", scoped_events[0].text)
+
+    def test_user_scoped_gateway_stage_event_stays_scoped_when_trusted_header_mode_enabled(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            config_path = workspace / ".echobot" / "channels.json"
+            app = create_app(
+                runtime_options=RuntimeOptions(
+                    workspace=workspace,
+                    no_tools=True,
+                    no_skills=True,
+                    no_memory=True,
+                    no_heartbeat=True,
+                ),
+                channel_config_path=config_path,
+                context_builder=build_test_context,
+            )
+            raw_config = {
+                "console": {"enabled": False, "allow_from": []},
+                "telegram": {
+                    "enabled": False,
+                    "allow_from": ["12345"],
+                    "mirror_to_stage": True,
+                    "stage_session_name": "front",
+                    "bot_token": "telegram-secret-token",
+                    "proxy": "",
+                    "reply_to_message": False,
+                },
+                "discord": {"enabled": False, "allow_from": []},
+                "qq": {"enabled": False, "allow_from": []},
+            }
+
+            with patch.dict(
+                os.environ,
+                {
+                    "ECHOBOT_TRUSTED_USER_HEADER_ENABLED": "true",
+                    "ECHOBOT_TRUSTED_USER_REQUIRED": "true",
+                },
+                clear=False,
+            ):
+                with TestClient(app) as client:
+                    client.put("/api/channels/config", json=raw_config)
+                    runtime = app.state.runtime
+                    user_runtime = asyncio.run(runtime.for_user("viewer@example.com"))
+                    outbound = ChannelAddress(
+                        channel="telegram",
+                        chat_id="12345",
+                        user_id="viewer@example.com",
+                    )
+                    asyncio.run(
+                        user_runtime.publish_gateway_stage_event(
+                            "front",
+                            SimpleNamespace(
+                                address=outbound,
+                                text="scoped only",
+                                content="scoped only",
+                            ),
+                        )
+                    )
+                    default_events = runtime.stage_event_broker.history(
+                        "default",
+                        "front",
+                    )
+                    scoped_events = runtime.stage_event_broker.history(
+                        user_storage_key("viewer@example.com"),
+                        "front",
+                    )
+
+            self.assertEqual([], default_events)
+            self.assertEqual(1, len(scoped_events))
+            self.assertEqual("scoped only", scoped_events[0].text)
+
     def test_trusted_user_header_is_required_when_enabled(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             workspace = Path(temp_dir)
@@ -5230,6 +5371,7 @@ class AppApiTests(unittest.TestCase):
                 self.assertIn('id="asr-provider-select"', page.text)
                 self.assertIn('id="route-mode-select"', page.text)
                 self.assertIn('class="console-admin-handoff"', page.text)
+                self.assertIn('id="console-advanced-overrides-panel"', page.text)
                 self.assertIn('href="/admin/sessions"', page.text)
                 self.assertIn('href="/admin/characters"', page.text)
                 self.assertIn('href="/admin/models"', page.text)
