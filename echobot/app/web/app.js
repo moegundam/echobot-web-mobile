@@ -19,7 +19,7 @@ import { createLive2DModule } from "./features/live2d/index.js?v=site-public-6";
 import { createRolesModule } from "./features/roles.js?v=site-public-6";
 import { createSessionsModule } from "./features/sessions.js?v=console-nav-2";
 import { createTtsModule } from "./features/tts.js?v=site-public-6";
-import { initShellDisplayMode } from "./shell-display-mode.js?v=console-language-1";
+import { initShellDisplayMode } from "./shell-display-mode.js?v=display-menu-1";
 import { initShellI18n } from "./shell-i18n.js?v=language-menu-1";
 import {
     MODEL_PROFILE_UPDATE_STORAGE_KEY,

@@ -91,7 +91,8 @@ textarea {
     justify-self: start;
 }
 
-.shell-language-select-label {
+.shell-language-select-label,
+.shell-display-mode-select-label {
     display: inline-grid;
     grid-template-columns: auto minmax(128px, 1fr);
     align-items: center;
@@ -100,7 +101,8 @@ textarea {
     font-size: 0.86rem;
 }
 
-.shell-language-select {
+.shell-language-select,
+.shell-display-mode-select {
     display: inline-flex;
     width: 100%;
     min-height: 38px;
@@ -118,26 +120,30 @@ textarea {
     text-align: left;
 }
 
-.shell-language-picker {
+.shell-language-picker,
+.shell-display-mode-picker {
     position: relative;
     min-width: 128px;
     max-width: 180px;
 }
 
-.shell-language-select-value {
+.shell-language-select-value,
+.shell-display-mode-select-value {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
-.shell-language-select-chevron {
+.shell-language-select-chevron,
+.shell-display-mode-select-chevron {
     flex: 0 0 auto;
     color: var(--shell-muted);
     font-size: 0.74rem;
     line-height: 1;
 }
 
-.shell-language-menu {
+.shell-language-menu,
+.shell-display-mode-menu {
     position: absolute;
     top: calc(100% + 6px);
     left: 0;
@@ -152,11 +158,13 @@ textarea {
     box-shadow: 0 14px 36px rgba(27, 34, 48, 0.16);
 }
 
-.shell-language-menu[hidden] {
+.shell-language-menu[hidden],
+.shell-display-mode-menu[hidden] {
     display: none;
 }
 
-.shell-language-option {
+.shell-language-option,
+.shell-display-mode-option {
     min-height: 34px;
     padding: 7px 9px;
     border: 0;
@@ -170,7 +178,10 @@ textarea {
 
 .shell-language-option:hover,
 .shell-language-option:focus-visible,
-.shell-language-option.is-selected {
+.shell-language-option.is-selected,
+.shell-display-mode-option:hover,
+.shell-display-mode-option:focus-visible,
+.shell-display-mode-option.is-selected {
     outline: none;
     background: rgba(58, 92, 167, 0.12);
 }
@@ -179,23 +190,12 @@ textarea {
     justify-self: start;
 }
 
-.shell-display-mode-select-label {
-    display: inline-grid;
-    grid-template-columns: auto minmax(136px, 1fr);
-    align-items: center;
-    gap: 8px;
-    color: var(--shell-muted);
-    font-size: 0.86rem;
+.shell-display-mode-select {
+    max-width: 190px;
 }
 
-.shell-display-mode-select {
-    min-height: 38px;
+.shell-display-mode-picker {
     max-width: 190px;
-    padding: 7px 30px 7px 10px;
-    border: 1px solid var(--shell-line);
-    border-radius: 8px;
-    color: var(--shell-text);
-    background: var(--shell-surface-strong);
 }
 
 .stage-root,

@@ -166,7 +166,8 @@
         max-width: none;
     }
 
-    .console-language-switcher .shell-language-picker {
+    .console-language-switcher .shell-language-picker,
+    .console-display-mode-switcher .shell-display-mode-picker {
         width: 100%;
         max-width: none;
     }
@@ -573,7 +574,8 @@ html[data-device-class="desktop"][data-layout-mode="desktop"] .console-display-m
     max-width: 180px;
 }
 
-html[data-device-class="desktop"][data-layout-mode="desktop"] .console-language-switcher .shell-language-picker {
+html[data-device-class="desktop"][data-layout-mode="desktop"] .console-language-switcher .shell-language-picker,
+html[data-device-class="desktop"][data-layout-mode="desktop"] .console-display-mode-switcher .shell-display-mode-picker {
     width: auto;
     max-width: 180px;
 }
