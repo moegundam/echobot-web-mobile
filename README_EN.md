@@ -107,7 +107,7 @@ A user/session scoped Stage event flow was added:
 
 ### 7. Open WebUI Bridge Interface
 
-The bridge interface is implemented, but Open WebUI does not need to be connected yet:
+The EchoBot-side narrow bridge and local smoke path are implemented. External Open WebUI usage still needs a bridge token and a trusted network entrypoint:
 
 - `GET /api/openwebui/tools/openapi.json`
 - `GET /api/openwebui/sessions`
@@ -147,13 +147,13 @@ A model profile management page was added:
 `/admin/channels` has been upgraded from a read-only planning page into a messaging-platform setup entry:
 
 - Telegram can store enabled state, allow list, bot token, proxy, reply-to-message behavior, and whether pending updates are dropped on startup.
-- Discord can store enabled state, allow list, bot token, webhook URL, webhook secret, application/guild/channel ids. It currently supports the secret-protected `POST /api/channels/discord/webhook` inbound bridge and outbound webhook delivery; the native Discord bot events adapter is still a later slice.
+- Discord can store enabled state, allow list, bot token, webhook URL, webhook secret, application/guild/channel ids. It currently supports the secret-protected `POST /api/channels/discord/webhook` inbound bridge, outbound webhook delivery, and native Discord bot events after `discord.py` is installed and Message Content Intent is enabled.
 - Secret fields only expose configured status in the API and UI; plaintext values are never returned.
 - `POST /api/channels/{channel}/smoke` provides safe local readiness checks without echoing tokens in responses.
 - `GET /api/channels/stage-targets` exposes a secret-free messaging target list so `/stage` and `/messenger` can select the Stage session bound to a configured platform.
 - Telegram token validation, Bot API `getMe`, poller startup, Bot API outbound, session binding, and Stage target projection have passed local checks; the test token is stored only in repo-external ignored runtime config and is not committed.
 - Production messaging gateways can set `mirror_to_stage` and `stage_session_name`; the real Telegram user inbound message to EchoBot reply to `/stage` mirror E2E still needs validation with a fresh Telegram user message.
-- The Discord webhook bridge can currently receive secret-protected local or reverse-proxy inbound requests. The native Discord bot events adapter is still a later slice for real Discord Gateway events.
+- The Discord webhook bridge can receive secret-protected local or reverse-proxy inbound requests. The native Discord bot events adapter is implemented; real Discord Gateway events require a repo-external bot token, Discord Developer Portal Message Content Intent, and an EchoBot restart.
 
 ### 11. Deployment And Architecture Documentation
 
@@ -177,8 +177,8 @@ Completed so far:
 
 Not finished or still planned:
 
-- Telegram and QQ already have built-in runtime adapters. `/admin/channels` can now save Telegram / Discord settings and run smoke readiness checks. Telegram token validation, poller startup, Bot API outbound, session binding, and Stage target projection have passed local checks, but the real Telegram user inbound message to EchoBot reply to `/stage` mirror E2E is still not complete. Discord has a secret-protected webhook bridge and outbound webhook delivery; the native Discord bot events adapter, LINE, and WhatsApp production runtime adapters remain planned.
-- The EchoBot-side narrow Open WebUI bridge API and documentation page exist, but Open WebUI does not need to be connected yet.
+- Telegram and QQ already have built-in runtime adapters. `/admin/channels` can now save Telegram / Discord settings and run smoke readiness checks. Telegram token validation, poller startup, Bot API outbound, session binding, and Stage target projection have passed local checks, but the real Telegram user inbound message to EchoBot reply to `/stage` mirror E2E is still not complete. Discord has a secret-protected webhook bridge, outbound webhook delivery, and a native Discord bot events adapter; real Discord server enablement requires a repo-external bot token, Message Content Intent, and a service restart. LINE and WhatsApp production runtime adapters remain planned.
+- The EchoBot-side narrow Open WebUI bridge API, documentation page, and local smoke script exist. For GB10 Open WebUI to call EchoBot, configure the bridge token and make EchoBot reachable through Tunnel, Tailscale, or a trusted reverse proxy.
 - `/admin` v1 is mostly an index, guide, and status surface. It is not a complete production SaaS admin console.
 - Stage / Live2D / ASR / TTS have v1 integration and local smoke coverage. Real-device microphone and long-running voice interaction checks still need HTTPS plus real-device validation.
 - Multi-user private testing should use Cloudflare Access or a trusted reverse proxy. Do not expose the local service anonymously to the public internet.

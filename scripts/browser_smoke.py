@@ -55,9 +55,10 @@ def main() -> int:
         description="Run EchoBot browser smoke checks with Playwright.",
     )
     parser.add_argument("--base-url", default="http://127.0.0.1:8001")
-    parser.add_argument("--page", action="append", dest="pages")
+    parser.add_argument("--page", "--pages", action="append", dest="pages")
     parser.add_argument(
         "--viewport",
+        "--viewports",
         action="append",
         type=Viewport.parse,
         default=None,

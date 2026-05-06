@@ -679,8 +679,7 @@ function findLive2DMotion(motionName) {
         return null;
     }
     return motions.find((item) => (
-        item.group
-        && directiveMatchesLive2DItem(item, normalizedName)
+        directiveMatchesLive2DItem(item, normalizedName)
     )) || null;
 }
 

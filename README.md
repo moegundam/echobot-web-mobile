@@ -107,7 +107,7 @@ python -m echobot app --host 127.0.0.1 --port 8001
 
 ### 7. Open WebUI Bridge 接口
 
-本版本先做好接口，不直接把 Open WebUI 接進來：
+本版本已做好 EchoBot 端窄化接口與本機 smoke；要讓外部 Open WebUI 呼叫，需另外設定 bridge token 與可信網路入口：
 
 - `GET /api/openwebui/tools/openapi.json`
 - `GET /api/openwebui/sessions`
@@ -147,13 +147,13 @@ python -m echobot app --host 127.0.0.1 --port 8001
 `/admin/channels` 已從只讀規劃頁升級為通訊平台設定入口：
 
 - Telegram 可設定 enabled、allow list、bot token、proxy、reply-to-message 與啟動時是否丟棄 pending updates。
-- Discord 可設定 enabled、allow list、bot token、webhook URL、webhook secret、application/guild/channel id；目前支援受 secret 保護的 `POST /api/channels/discord/webhook` inbound bridge 與 outbound webhook 發送，原生 Discord bot events adapter 仍待後續切片。
+- Discord 可設定 enabled、allow list、bot token、webhook URL、webhook secret、application/guild/channel id；目前支援受 secret 保護的 `POST /api/channels/discord/webhook` inbound bridge、outbound webhook 發送，以及安裝 `discord.py` 並開啟 Message Content Intent 後的原生 Discord bot events。
 - Secret 欄位在 API 與 UI 中只顯示 configured 狀態，不回傳明文。
 - `POST /api/channels/{channel}/smoke` 提供安全的本機 readiness check，不會把 token 回傳到 response。
 - `GET /api/channels/stage-targets` 提供無 secret 的通訊 target 清單，讓 `/stage` 與 `/messenger` 直接選擇已設定平台綁定的前台 session。
 - Telegram token、Bot API `getMe`、poller 啟動、Bot API outbound、session 綁定與 Stage target projection 已做過本機驗證；測試 token 只放在 repo 外的 ignored runtime config，不寫入版本庫。
 - 正式通訊 gateway 可設定 `mirror_to_stage` 與 `stage_session_name`；Telegram 使用者 inbound 訊息到 EchoBot 回覆再同步 `/stage` 的真實 E2E 仍需用新 Telegram 使用者訊息驗收。
-- Discord webhook bridge 目前可接收受 secret 保護的本機/反向代理 inbound request；原生 Discord bot events adapter 仍需後續切片才會正式接 Discord Gateway events。
+- Discord webhook bridge 可接收受 secret 保護的本機/反向代理 inbound request；原生 Discord bot events adapter 已完成，正式接 Discord Gateway events 需要 repo 外 bot token、Discord Developer Portal Message Content Intent，並重啟 EchoBot。
 
 ### 11. 部署與架構文件
 
@@ -177,8 +177,8 @@ python -m echobot app --host 127.0.0.1 --port 8001
 
 尚未完成或仍屬規劃中的部分：
 
-- Telegram 與 QQ 已有 built-in runtime adapter；`/admin/channels` 已可保存 Telegram / Discord 設定並做 smoke readiness。Telegram token、poller、Bot API outbound、session 綁定與 Stage target projection 已通過本機驗證，但 Telegram 使用者 inbound 訊息到 EchoBot 回覆再同步 `/stage` 的真實 E2E 仍未完成。Discord 已有受 secret 保護的 webhook bridge 與 outbound webhook 發送；原生 Discord bot events adapter、LINE、WhatsApp 正式 runtime adapter 仍屬規劃中。
-- Open WebUI bridge 已有 EchoBot 端 narrow API 與說明頁，但尚未要求使用者實際接入 Open WebUI。
+- Telegram 與 QQ 已有 built-in runtime adapter；`/admin/channels` 已可保存 Telegram / Discord 設定並做 smoke readiness。Telegram token、poller、Bot API outbound、session 綁定與 Stage target projection 已通過本機驗證，但 Telegram 使用者 inbound 訊息到 EchoBot 回覆再同步 `/stage` 的真實 E2E 仍未完成。Discord 已有受 secret 保護的 webhook bridge、outbound webhook 發送與原生 Discord bot events adapter；真實 Discord server 啟用需填入 repo 外 bot token、開啟 Message Content Intent 並重啟服務。LINE、WhatsApp 正式 runtime adapter 仍屬規劃中。
+- Open WebUI bridge 已有 EchoBot 端 narrow API、說明頁與本機 smoke script；若要讓 GB10 Open WebUI 實際呼叫 EchoBot，仍需設定 bridge token，並讓 Open WebUI 能透過 Tunnel/Tailscale/可信反向代理連到 EchoBot。
 - `/admin` 第一版偏向索引、說明與狀態檢視，還不是完整 production SaaS 管理後台。
 - Stage / Live2D / ASR / TTS 已有 v1 整合與本機 smoke；真機麥克風與長時間語音互動仍需在 HTTPS + 真機環境逐項驗收。
 - 多使用者內測建議使用 Cloudflare Access 或可信 reverse proxy；不要把本地服務匿名直接暴露到公開網路。

@@ -134,7 +134,7 @@ function normalizeLive2DMotions(items) {
                 group: String(item.group || ""),
                 index: Number.isInteger(item.index) ? item.index : 0,
             }))
-            .filter((item) => item.file && item.url && item.group)
+            .filter((item) => item.file && item.url)
         : [];
 }
 

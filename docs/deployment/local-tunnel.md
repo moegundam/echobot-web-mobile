@@ -109,7 +109,7 @@ wss://echobot.example.com/api/web/asr/ws
 
 ### 公開前安全檢查
 
-上傳或設定公開前，先跑：
+後續每次上傳或設定公開前，先跑：
 
 ```shell
 python scripts/check_public_safety.py
@@ -302,7 +302,7 @@ wss://echobot.example.com/api/web/asr/ws
 
 ### Pre-public Safety Check
 
-Before pushing or making the repository public, run:
+For future pushes or before making the repository public, run:
 
 ```shell
 python scripts/check_public_safety.py
