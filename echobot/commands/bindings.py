@@ -32,6 +32,7 @@ from .saved_sessions import (
     execute_saved_session_command,
     parse_saved_session_command,
 )
+from .smoke import SmokeCommand, execute_smoke_command, parse_smoke_command
 
 if TYPE_CHECKING:
     from ..gateway.session_service import GatewaySessionService
@@ -55,6 +56,7 @@ class GatewayCommandContext:
     route_key: str
     address: ChannelAddress
     metadata: dict[str, object]
+    session_name: str = ""
 
 
 async def dispatch_cli_command(
@@ -213,7 +215,22 @@ async def _execute_gateway_route_session(
     )
 
 
+async def _execute_gateway_smoke(
+    _context: GatewayCommandContext,
+    command_obj: object,
+) -> CommandResult:
+    command = cast(SmokeCommand, command_obj)
+    return CommandResult(text=execute_smoke_command(command))
+
+
 async def _gateway_session_name(context: GatewayCommandContext) -> str:
+    if context.session_name:
+        await context.session_service.remember_delivery_target(
+            context.session_name,
+            context.address,
+            context.metadata,
+        )
+        return context.session_name
     current = await context.session_service.current_route_session(context.route_key)
     await context.session_service.remember_delivery_target(
         current.session_name,
@@ -251,6 +268,10 @@ _GATEWAY_COMMAND_HANDLERS: tuple[BoundTextCommand[GatewayCommandContext], ...] =
     BoundTextCommand(
         parse=parse_help_command,
         execute=_execute_gateway_help,
+    ),
+    BoundTextCommand(
+        parse=parse_smoke_command,
+        execute=_execute_gateway_smoke,
     ),
     BoundTextCommand(
         parse=parse_role_command,

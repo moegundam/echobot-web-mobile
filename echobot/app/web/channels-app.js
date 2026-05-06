@@ -87,29 +87,29 @@ const channelText = {
         },
     },
     "zh-Hant": {
-        builtInTitle: "目前可用 runtime channels",
-        builtInBody: "Telegram 與 Discord 在此頁可編輯並可做 smoke test；其他 channel 目前仍維持唯讀。",
+        builtInTitle: "目前可用通訊入口",
+        builtInBody: "Telegram 與 Discord 在此頁可編輯並可做連線檢查；其他通訊入口目前仍維持唯讀。",
         plannedTitle: "規劃中的通訊平台整合",
-        plannedBody: "這些 gateway 應先在此頁建立設定邊界，再接 runtime adapter。",
+        plannedBody: "這些通訊入口應先在此頁建立設定邊界，再接 runtime adapter。",
         rulesTitle: "整合規則",
-        rulesBody: "公開通訊平台要和 Open WebUI 分開。Open WebUI 是操作員工作台；channels 是公開或半公開 gateway。",
+        rulesBody: "公開通訊平台要和 Open WebUI 分開。Open WebUI 是操作員工作台；通訊入口是公開或半公開入口。",
         rules: [
-            "每個新平台先在此頁補狀態、設定欄位與 smoke-test checklist。",
+            "每個新平台先在此頁補狀態、設定欄位與連線檢查清單。",
             "Bot token 與 secrets 放 repo 外；UI 必須遮罩，不回顯明文 token。",
             "外部使用者流量預設 chat-only，等 approval gate 完成後才開工具型 Agent。",
-            "接收 inbound message 前必須驗證 webhook 簽章或 polling 身分。",
+            "接收外部訊息前必須驗證 webhook 簽章或 polling 身分。",
         ],
         descriptions: {
-            console: "本機 console output channel，用於 smoke test。",
-            telegram: "Telegram bot polling channel。",
+            console: "本機 console 輸出入口，用於連線檢查。",
+            telegram: "Telegram bot polling 通訊入口。",
             discord: "Discord 原生 bot events、受保護 webhook bridge 與 outbound webhook 發送。",
-            qq: "QQ 官方 bot direct-message channel。",
+            qq: "QQ 官方 bot 私訊入口。",
         },
         channelHints: {
             telegram: [
                 "Inbound 使用 Bot API polling；同一個 bot token 同時間只能跑一個 EchoBot poller。",
-                "乾淨 smoke test 建議維持啟動時丟棄 pending updates；只有刻意要吃 Telegram 佇列訊息時才關閉。",
-                "可先用本機 E2E 測試送一則受控 inbound message，不必等待真實平台事件。",
+                "乾淨連線檢查建議維持啟動時丟棄 pending updates；只有刻意要吃 Telegram 佇列訊息時才關閉。",
+                "可先用本機 E2E 測試送一則受控訊息，不必等待真實平台事件。",
             ],
             discord: [
                 "Inbound bridge endpoint：POST /api/channels/discord/webhook",
@@ -117,34 +117,34 @@ const channelText = {
                 "Request JSON 包含 channel_id、user_id、text，可選 session_name。",
                 "Outbound 回覆在設定 webhook_url 後會透過 Discord webhook 發送。",
                 "原生 bot events 需要 discord.py，並在 Discord Developer Portal 開啟 Message Content Intent。",
-                "在共享伺服器啟用前，先用本機 E2E 測試驗證 session routing 與 Stage 同步。",
+                "在共享伺服器啟用前，先用本機 E2E 測試驗證場次路由與 Stage 同步。",
             ],
         },
     },
     "zh-Hans": {
-        builtInTitle: "当前可用 runtime channels",
-        builtInBody: "Telegram 与 Discord 在此页可编辑并可做 smoke test；其他 channel 目前仍保持只读。",
+        builtInTitle: "当前可用通讯入口",
+        builtInBody: "Telegram 与 Discord 在此页可编辑并可做连线检查；其他通讯入口目前仍保持只读。",
         plannedTitle: "规划中的通讯平台整合",
-        plannedBody: "这些 gateway 应先在此页建立设置边界，再接 runtime adapter。",
+        plannedBody: "这些通讯入口应先在此页建立设置边界，再接 runtime adapter。",
         rulesTitle: "整合规则",
-        rulesBody: "公开通讯平台要和 Open WebUI 分开。Open WebUI 是操作员工作台；channels 是公开或半公开 gateway。",
+        rulesBody: "公开通讯平台要和 Open WebUI 分开。Open WebUI 是操作员工作台；通讯入口是公开或半公开入口。",
         rules: [
-            "每个新平台先在此页补状态、设置字段与 smoke-test checklist。",
+            "每个新平台先在此页补状态、设置字段与连线检查清单。",
             "Bot token 与 secrets 放 repo 外；UI 必须遮罩，不回显明文 token。",
             "外部用户流量默认 chat-only，等 approval gate 完成后才开工具型 Agent。",
-            "接收 inbound message 前必须验证 webhook 签章或 polling 身份。",
+            "接收外部消息前必须验证 webhook 签章或 polling 身份。",
         ],
         descriptions: {
-            console: "本机 console output channel，用于 smoke test。",
-            telegram: "Telegram bot polling channel。",
+            console: "本机 console 输出入口，用于连线检查。",
+            telegram: "Telegram bot polling 通讯入口。",
             discord: "Discord 原生 bot events、受保护 webhook bridge 与 outbound webhook 发送。",
-            qq: "QQ 官方 bot direct-message channel。",
+            qq: "QQ 官方 bot 私信入口。",
         },
         channelHints: {
             telegram: [
                 "Inbound 使用 Bot API polling；同一个 bot token 同时间只能跑一个 EchoBot poller。",
-                "干净 smoke test 建议维持启动时丢弃 pending updates；只有刻意要吃 Telegram 队列消息时才关闭。",
-                "可先用本机 E2E 测试发送一则受控 inbound message，不必等待真实平台事件。",
+                "干净连线检查建议维持启动时丢弃 pending updates；只有刻意要吃 Telegram 队列消息时才关闭。",
+                "可先用本机 E2E 测试发送一则受控消息，不必等待真实平台事件。",
             ],
             discord: [
                 "Inbound bridge endpoint：POST /api/channels/discord/webhook",
@@ -152,7 +152,7 @@ const channelText = {
                 "Request JSON 包含 channel_id、user_id、text，可选 session_name。",
                 "Outbound 回复在设置 webhook_url 后会通过 Discord webhook 发送。",
                 "原生 bot events 需要 discord.py，并在 Discord Developer Portal 开启 Message Content Intent。",
-                "在共享服务器启用前，先用本机 E2E 测试验证 session routing 与 Stage 同步。",
+                "在共享服务器启用前，先用本机 E2E 测试验证场次路由与 Stage 同步。",
             ],
         },
     },
@@ -161,6 +161,7 @@ const channelText = {
 const state = {
     definitions: [],
     config: {},
+    sessions: [],
     status: {},
     error: "",
     loaded: false,
@@ -190,14 +191,16 @@ async function loadChannels() {
     state.error = "";
     renderAll();
     try {
-        const [definitions, config, status] = await Promise.all([
+        const [definitions, config, status, sessions] = await Promise.all([
             requestJson("/api/channels/definitions"),
             requestJson("/api/channels/config"),
             requestJson("/api/channels/status"),
+            requestJson("/api/sessions").catch(() => []),
         ]);
         state.definitions = Array.isArray(definitions) ? definitions : [];
         state.config = config && typeof config === "object" ? config : {};
         state.status = status && typeof status === "object" ? status : {};
+        state.sessions = Array.isArray(sessions) ? sessions : [];
         state.loaded = true;
     } catch (error) {
         state.error = error.message || String(error);
@@ -352,6 +355,20 @@ function buildEditableChannelCard(definition) {
                 isSecret: false,
                 isTextArea: true,
                 placeholder: i18n.t("channels.fieldAllowFromPlaceholder"),
+            });
+            form.appendChild(row);
+            return;
+        }
+        if (fieldName === "stage_session_name") {
+            const row = buildFieldRow({
+                fieldName,
+                label: fieldLabel(fieldName),
+                configValue: String(config[fieldName] || ""),
+                fieldType: "text",
+                isSecret: false,
+                isTextArea: false,
+                placeholder: defaultSessionName(),
+                listId: sessionDatalistId(channelName, "stage"),
             });
             form.appendChild(row);
             return;
@@ -521,6 +538,7 @@ function buildFieldRow({
     isSecret,
     isTextArea,
     placeholder,
+    listId,
 }) {
     const field = document.createElement("label");
     field.className = "channels-field-row";
@@ -548,12 +566,41 @@ function buildFieldRow({
     control.dataset.channelField = fieldName;
     if (isTextArea || isSecret) {
         control.setAttribute("placeholder", placeholder || "");
+    } else if (placeholder) {
+        control.setAttribute("placeholder", placeholder);
     }
     if (!isTextArea && !isSecret && control.type !== "checkbox") {
         control.autocomplete = "off";
     }
+    if (listId && control.type !== "checkbox") {
+        control.setAttribute("list", listId);
+    }
     field.appendChild(control);
+    if (listId) {
+        field.appendChild(buildSessionDatalist(listId));
+    }
     return field;
+}
+
+function sessionDatalistId(channelName, suffix) {
+    return `channels-session-options-${channelName}-${suffix}`;
+}
+
+function buildSessionDatalist(listId) {
+    const datalist = document.createElement("datalist");
+    datalist.id = listId;
+    sessionNames().forEach((name) => {
+        const option = document.createElement("option");
+        option.value = name;
+        datalist.appendChild(option);
+    });
+    return datalist;
+}
+
+function sessionNames() {
+    return state.sessions
+        .map((session) => String(session?.name || "").trim())
+        .filter(Boolean);
 }
 
 function buildFeedbackMessage(channelName) {
@@ -624,7 +671,12 @@ function buildLocalTestControls(channelName, config) {
     grid.append(
         buildLocalTestField("sender_id", i18n.t("channels.localSender"), defaultSenderId(config)),
         buildLocalTestField("chat_id", i18n.t("channels.localChat"), defaultChatId(channelName, config)),
-        buildLocalTestField("session_name", i18n.t("channels.localSession"), defaultStageSession(config)),
+        buildLocalTestField(
+            "session_name",
+            i18n.t("channels.localSession"),
+            defaultStageSession(config),
+            sessionDatalistId(channelName, "local-test"),
+        ),
         buildLocalTestField("text", i18n.t("channels.localText"), "ping"),
     );
 
@@ -640,7 +692,7 @@ function buildLocalTestControls(channelName, config) {
     return block;
 }
 
-function buildLocalTestField(fieldName, labelText, value) {
+function buildLocalTestField(fieldName, labelText, value, listId = "") {
     const label = document.createElement("label");
     label.className = "channels-field-row";
     const title = document.createElement("span");
@@ -650,6 +702,11 @@ function buildLocalTestField(fieldName, labelText, value) {
     input.autocomplete = "off";
     input.value = String(value || "");
     input.dataset.localTestField = fieldName;
+    if (listId) {
+        input.setAttribute("list", listId);
+        label.append(title, input, buildSessionDatalist(listId));
+        return label;
+    }
     label.append(title, input);
     return label;
 }
@@ -671,6 +728,10 @@ function defaultChatId(channelName, config) {
 
 function defaultStageSession(config) {
     return String(config.stage_session_name || "default").trim() || "default";
+}
+
+function defaultSessionName() {
+    return sessionNames()[0] || "default";
 }
 
 function buildChannelSection(titleText, bodyText, cards) {

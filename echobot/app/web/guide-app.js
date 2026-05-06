@@ -80,18 +80,18 @@ const guideContent = {
     "zh-Hant": {
         sections: [
             {
-                title: "以 Session 為核心的頁面",
-                body: "建議用固定順序測試：先設定資源，完成角色綁定，建立/選擇 Session，最後用 Console、Messenger、Stage 驗證。",
+                title: "以場次為核心的頁面",
+                body: "建議用固定順序測試：先設定資源，完成角色綁定，建立/選擇場次，最後用 Console、Messenger、Stage 驗證。",
                 items: [
-                    "前台 Stage 是單一 session 的呈現面，顯示角色、字幕、TTS 與 Live2D。",
-                    "通訊 Messenger 是輕量聊天入口，會依 session 驗證並將最終文字回傳到 Stage。",
-                    "中台 Console 是即時操作主控台，用來切換角色、角色卡與 session 的 runtime。",
+                    "前台 Stage 是單一場次的呈現面，顯示角色、字幕、TTS 與 Live2D。",
+                    "通訊 Messenger 是輕量聊天入口，會依場次驗證並將最終文字回傳到 Stage。",
+                    "中台 Console 是即時操作主控台，用來切換角色、角色卡與場次 runtime。",
                     "後台 Admin 是設定中樞，負責模型、角色、通道與文件頁面。",
                 ],
             },
             {
                 title: "推薦設定順序",
-                body: "先完成設定可降低測試變因，讓問題回溯只跟 session 有關。",
+                body: "先完成設定可降低測試變因，讓問題回溯只跟場次有關。",
                 items: [
                     "後台流程第一步：在 `/admin/models` 設定可用的 LLM profile。",
                     "第二步：在 `/admin/voice-models` 設定 STT/TTS 相關語音設定。",
@@ -100,24 +100,24 @@ const guideContent = {
                 ],
             },
             {
-                title: "Session 測試順序",
-                body: "完成設定後，建立一個測試 session 並用同一 session name 完成前後端驗證。",
+                title: "場次測試順序",
+                body: "完成設定後，建立一個測試場次並用同一場次名稱完成前後端驗證。",
                 items: [
-                    "在 `/admin/sessions` 建立或選擇本次測試 session。",
-                    "在 `/console` 開啟同 session，選擇事先綁定的角色卡。",
-                    "視需求為 session 選擇通道；Telegram 可用 polling，Discord 可用受保護 webhook 或原生 bot events。",
+                    "在 `/admin/sessions` 建立或選擇本次測試場次。",
+                    "在 `/console` 開啟同一場次，選擇事先綁定的角色卡。",
+                    "視需求為場次選擇通訊入口；Telegram 可用 polling，Discord 可用受保護 webhook 或原生 bot events。",
                     "在 `/messenger?session_name=<name>` 傳一則訊息，確認 Messenger 最終回覆同步到 Stage。",
                     "用 `/stage?session_name=<name>` 僅檢視結果畫面（字幕/TTS/Live2D）。",
                 ],
             },
             {
                 title: "通道與邊界",
-                body: "通道是進入口，不是核心運行邏輯；核心是 session、角色與 runtime 控制。",
+                body: "通訊入口不是核心運行邏輯；核心是場次、角色與 runtime 控制。",
                 items: [
                     "Telegram 支援 Bot API polling；Discord 支援受保護 webhook bridge，並可在開啟 Message Content Intent 後使用原生 bot events。",
                     "LINE、WhatsApp、QQ 等仍是規劃中，暫不列入常規測試流程。",
                     "Open WebUI bridge 是操作員工具介面，不是對話通道。",
-                    "核心驗證都應在 `/console`、`/messenger`、`/stage` 的同 session 流程中完成。",
+                    "核心驗證都應在 `/console`、`/messenger`、`/stage` 的同場次流程中完成。",
                 ],
             },
             {
@@ -125,7 +125,7 @@ const guideContent = {
                 body: "Open WebUI 只用來做操作員工具串接與驗證，與日常對話測試分開。",
                 items: [
                     "在 `/admin/openwebui` 設定工具方法白名單與 bridge 狀態。",
-                    "先完成 session 流程後，再做 bridge 的工具型驗證。",
+                    "先完成場次流程後，再做 bridge 的工具型驗證。",
                     "聊天室測試仍以 Messenger + Stage + Console 為主。",
                 ],
             },
@@ -141,11 +141,11 @@ const guideContent = {
             },
             {
                 title: "健康檢核",
-                body: "以下都成立時，代表 Session-centered 操作流程已順暢。",
+                body: "以下都成立時，代表 場次中心操作流程已順暢。",
                 items: [
-                    "Console、Messenger、Stage 使用同一個 session_name。",
+                    "Console、Messenger、Stage 使用同一個場次名稱。",
                     "Messenger 回覆在 Stage 上有一致字幕與輸出。",
-                    "角色與模型變更只影響到該 session 上下文。",
+                    "角色與模型變更只影響到該場次上下文。",
                     "Open WebUI 僅留在操作員工具路徑，不改變一般通道驗證結果。",
                 ],
             },
@@ -154,18 +154,18 @@ const guideContent = {
     "zh-Hans": {
         sections: [
             {
-                title: "以 Session 为核心的页面",
-                body: "建议固定顺序：先配置资源，完成角色绑定，建立/选择 Session，最后用 Console、Messenger、Stage 做联动验证。",
+                title: "以场次为核心的页面",
+                body: "建议固定顺序：先配置资源，完成角色绑定，建立/选择场次，最后用 Console、Messenger、Stage 做联动验证。",
                 items: [
-                    "前台 Stage 是单一 session 的显示面，展示角色、字幕、TTS 与 Live2D。",
-                    "通讯 Messenger 是轻量聊天入口，按 session 验证并将最终文本回传到 Stage。",
-                    "中台 Console 是实时操作主控台，用于切换角色、角色卡与 session 的运行参数。",
+                    "前台 Stage 是单一场次的显示面，展示角色、字幕、TTS 与 Live2D。",
+                    "通讯 Messenger 是轻量聊天入口，按场次验证并将最终文本回传到 Stage。",
+                    "中台 Console 是实时操作主控台，用于切换角色、角色卡与场次运行参数。",
                     "后台 Admin 是设置中枢，负责模型、角色、通道和文档页。",
                 ],
             },
             {
                 title: "推荐设置顺序",
-                body: "先完成设置可减少测试波动，故障回溯也只围绕 session。",
+                body: "先完成设置可减少测试波动，故障回溯也只围绕场次。",
                 items: [
                     "第一步：在 `/admin/models` 配置可用的 LLM profile。",
                     "第二步：在 `/admin/voice-models` 配置 STT/TTS 语音设置。",
@@ -174,24 +174,24 @@ const guideContent = {
                 ],
             },
             {
-                title: "Session 测试顺序",
-                body: "完成设置后，创建一个测试 session，并通过同一 session_name 做端到端验证。",
+                title: "场次测试顺序",
+                body: "完成设置后，创建一个测试场次，并通过同一场次名称做端到端验证。",
                 items: [
-                    "在 `/admin/sessions` 创建或选择本次测试 session。",
-                    "在 `/console` 打开同一 session，并选择预先绑定的角色卡。",
-                    "按需为 session 选通道；Telegram 可用 polling，Discord 可用受保护 webhook 或原生 bot events。",
+                    "在 `/admin/sessions` 创建或选择本次测试场次。",
+                    "在 `/console` 打开同一场次，并选择预先绑定的角色卡。",
+                    "按需为场次选择通讯入口；Telegram 可用 polling，Discord 可用受保护 webhook 或原生 bot events。",
                     "在 `/messenger?session_name=<name>` 发一条消息，确认 Assistant 最终回复同步到 Stage。",
                     "用 `/stage?session_name=<name>` 仅验证结果输出（字幕/TTS/Live2D）。",
                 ],
             },
             {
                 title: "通道与边界",
-                body: "通道是入口，不是核心；核心是 session、角色与 runtime 控制。",
+                body: "通讯入口不是核心；核心是场次、角色与 runtime 控制。",
                 items: [
                     "Telegram 支持 Bot API polling；Discord 支持受保护 webhook bridge，并可在开启 Message Content Intent 后使用原生 bot events。",
                     "LINE、WhatsApp、QQ 等仍在规划中，暂不作为常规测试入口。",
                     "Open WebUI bridge 是操作员工具接口，不是对话通道。",
-                    "核心验证仍以 `/console`、`/messenger`、`/stage` 的同 session 流程为准。",
+                    "核心验证仍以 `/console`、`/messenger`、`/stage` 的同场次流程为准。",
                 ],
             },
             {
@@ -199,7 +199,7 @@ const guideContent = {
                 body: "Open WebUI 仅用于操作员工具对接和验证，和普通对话测试路径分离。",
                 items: [
                     "在 `/admin/openwebui` 配置允许的工具方法与 bridge 状态。",
-                    "先让 session 流程稳定后，再做工具接口验证。",
+                    "先让场次流程稳定后，再做工具接口验证。",
                     "聊天验证仍以 Messenger + Stage + Console 为主。",
                 ],
             },
@@ -215,11 +215,11 @@ const guideContent = {
             },
             {
                 title: "健康检核",
-                body: "以下都满足时，Session-centered 操作流程可视为正常。",
+                body: "以下都满足时，场次中心操作流程可视为正常。",
                 items: [
-                    "Console、Messenger、Stage 的 session_name 一致。",
+                    "Console、Messenger、Stage 的场次名称一致。",
                     "Messenger 回答在 Stage 上有一致字幕与输出。",
-                    "角色、模型变更仅影响当前 session 上下文。",
+                    "角色、模型变更仅影响当前场次上下文。",
                     "Open WebUI 只留在操作员工具路径，不改变普通通道验证结论。",
                 ],
             },

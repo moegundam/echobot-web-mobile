@@ -117,6 +117,9 @@ class GatewayRuntime:
     async def _handle_inbound_message(self, message: InboundMessage) -> None:
         route_key = message.route_key
         delete_session_name = await self._route_delete_session_name(message)
+        resolved_session_name, resolved_route_session = await self._resolve_inbound_session(
+            message,
+        )
         command_result = await dispatch_gateway_command(
             GatewayCommandContext(
                 coordinator=self._context.coordinator,
@@ -126,6 +129,7 @@ class GatewayRuntime:
                 route_key=route_key,
                 address=message.address,
                 metadata=message.metadata,
+                session_name=resolved_session_name,
             ),
             message.text,
         )
@@ -135,47 +139,32 @@ class GatewayRuntime:
                     message,
                     delete_session_name,
                 )
-            await self._bus.publish_outbound(
+            if parse_route_session_command(message.text) is not None:
+                await self._bus.publish_outbound(
+                    OutboundMessage(
+                        address=message.address,
+                        text=command_result.text,
+                        metadata=dict(message.metadata),
+                    )
+                )
+                return
+            await self._session_service.remember_delivery_target(
+                resolved_session_name,
+                message.address,
+                message.metadata,
+            )
+            await self._publish_assistant_outbound(
+                resolved_session_name,
                 OutboundMessage(
                     address=message.address,
                     text=command_result.text,
                     metadata=dict(message.metadata),
-                )
+                ),
             )
             return
 
-        requested_session_name = str(message.metadata.get("session_name") or "").strip()
-        bound_session = None
-        if requested_session_name:
-            try:
-                bound_session = await self._session_service.load_session(
-                    requested_session_name,
-                )
-            except ValueError:
-                try:
-                    bound_session = await self._session_service.load_or_create_session(
-                        requested_session_name,
-                    )
-                    bound_session = await self._context.coordinator.set_session_route_mode(
-                        bound_session.name,
-                        "chat_only",
-                    )
-                except ValueError:
-                    bound_session = None
-        if bound_session is None:
-            bound_session = await self._session_service.bound_session_for_channel(
-                channel_type=message.address.channel,
-                channel_integration_id=message.address.channel,
-            )
-        route_session = None
-        session_name = ""
-        if bound_session is not None:
-            session_name = bound_session.name
-        else:
-            route_session = await self._session_service.current_route_session(
-                route_key,
-            )
-            session_name = route_session.session_name
+        route_session = resolved_route_session
+        session_name = resolved_session_name
         await self._session_service.remember_delivery_target(
             session_name,
             message.address,
@@ -255,6 +244,48 @@ class GatewayRuntime:
                 metadata=dict(message.metadata),
             ),
         )
+
+    async def _load_requested_session(self, session_name: str):
+        requested_session_name = str(session_name or "").strip()
+        if not requested_session_name:
+            return None
+        try:
+            return await self._session_service.load_session(requested_session_name)
+        except ValueError:
+            try:
+                session = await self._session_service.load_or_create_session(
+                    requested_session_name,
+                )
+                return await self._context.coordinator.set_session_route_mode(
+                    session.name,
+                    "chat_only",
+                )
+            except ValueError:
+                return None
+
+    async def _resolve_inbound_session(self, message: InboundMessage):
+        requested_session_name = str(message.metadata.get("session_name") or "").strip()
+        channel_default_session_name = str(
+            message.metadata.get("channel_default_session_name") or "",
+        ).strip()
+        bound_session = None
+        if requested_session_name:
+            bound_session = await self._load_requested_session(requested_session_name)
+        if bound_session is None:
+            bound_session = await self._session_service.bound_session_for_channel(
+                channel_type=message.address.channel,
+                channel_integration_id=message.address.channel,
+            )
+        if bound_session is None and channel_default_session_name:
+            bound_session = await self._load_requested_session(
+                channel_default_session_name,
+            )
+        if bound_session is not None:
+            return bound_session.name, None
+        route_session = await self._session_service.current_route_session(
+            message.route_key,
+        )
+        return route_session.session_name, route_session
 
     def _completion_callback_for_session(
         self,
@@ -476,6 +507,8 @@ class GatewayRuntime:
         user_id = str(message.address.user_id or "").strip()
         if not user_id:
             return None
+        if await self._message_targets_shared_session(message):
+            return None
 
         async with self._scoped_gateways_guard:
             gateway = self._scoped_gateways.get(user_id)
@@ -501,6 +534,17 @@ class GatewayRuntime:
             )
             self._scoped_gateways[user_id] = gateway
             return gateway
+
+    async def _message_targets_shared_session(self, message: InboundMessage) -> bool:
+        if str(message.metadata.get("session_name") or "").strip():
+            return True
+        if str(message.metadata.get("channel_default_session_name") or "").strip():
+            return True
+        bound_session = await self._session_service.bound_session_for_channel(
+            channel_type=message.address.channel,
+            channel_integration_id=message.address.channel,
+        )
+        return bound_session is not None
 
 
 async def _resolve_gateway_files(

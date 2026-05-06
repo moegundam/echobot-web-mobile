@@ -48,7 +48,7 @@ const structureContent = {
                     {
                         label: "Control drawers",
                         route: "Console side panels",
-                        owner: "Session control",
+                        owner: "場次控制",
                         purpose: "Session list and character card selection for the active session.",
                     },
                     {
@@ -171,26 +171,26 @@ const structureContent = {
     "zh-Hant": {
         sections: [
             {
-                title: "以 Session 為中心的入口",
-                body: "固定用 session 走同一流程：Admin 先準備資源，Console 執行會話操作，Messenger 與 Stage 做輸入與結果驗證。",
+                title: "以場次為中心的入口",
+                body: "固定用同一場次走同一流程：Admin 先準備資源，Console 執行場次操作，Messenger 與 Stage 做輸入與結果驗證。",
                 cards: [
                     {
                         label: "前台 Stage",
                         route: "/stage?session_name=<name>",
                         owner: "純顯示畫面",
-                        purpose: "單一 session 的顯示結果面：角色、字幕、TTS 與 Live2D。",
+                        purpose: "單一場次的顯示結果面：角色、字幕、TTS 與 Live2D。",
                     },
                     {
                         label: "通訊 Messenger",
                         route: "/messenger?session_name=<name>",
-                        owner: "會話輸入",
+                        owner: "場次輸入",
                         purpose: "輕量輸入，最終訊息可在 Stage 上同步顯示。",
                     },
                     {
                         label: "中台 Console",
                         route: "/console",
                         owner: "操作員工作台",
-                        purpose: "以 session 為核心進行角色卡、模型、語音、Live2D 與運行參數切換。",
+                        purpose: "以場次為核心進行角色卡、模型、語音、Live2D 與運行參數切換。",
                     },
                     {
                         label: "後台 Admin",
@@ -205,16 +205,16 @@ const structureContent = {
                 body: "Console 是該流程中的即時工作台，不在 Stage 放操作控制。",
                 cards: [
                     {
-                        label: "Session 面板",
+                        label: "場次面板",
                         route: "/console 左側",
                         owner: "視覺 runtime",
-                        purpose: "連線狀態、session 狀態、目前角色模型、語言與 Live2D 顯示。",
+                        purpose: "連線狀態、場次狀態、目前角色模型、語言與 Live2D 顯示。",
                     },
                     {
                         label: "控制抽屜",
                         route: "Console side panels",
-                        owner: "Session control",
-                        purpose: "顯示 session 清單與目前 session 的角色卡。",
+                        owner: "場次控制",
+                        purpose: "顯示場次清單與目前場次的角色卡。",
                     },
                     {
                         label: "設定群組",
@@ -226,13 +226,13 @@ const structureContent = {
                         label: "對話區",
                         route: "/api/chat* + /api/sessions*",
                         owner: "即時操作",
-                        purpose: "會話訊息、附件、麥克風輸入與送出控制。",
+                        purpose: "場次訊息、附件、麥克風輸入與送出控制。",
                     },
                 ],
             },
             {
                 title: "Admin 子頁面",
-                body: "Admin 是設定與參考入口，會話運行仍在 Console 裡完成。",
+                body: "Admin 是設定與參考入口，場次運行仍在 Console 裡完成。",
                 cards: [
                     {
                         label: "網站結構",
@@ -244,12 +244,12 @@ const structureContent = {
                         label: "操作說明",
                         route: "/admin/guide",
                         owner: "操作指南",
-                        purpose: "Session 流程與操作參考。",
+                        purpose: "場次流程與操作參考。",
                     },
                     {
-                        label: "會話管理",
+                        label: "場次管理",
                         route: "/admin/sessions",
-                        owner: "Session 維運",
+                        owner: "場次維運",
                         purpose: "建立、重命名、刪除及進入 Console 前的檢查。",
                     },
                     {
@@ -280,7 +280,7 @@ const structureContent = {
                         label: "通訊平台",
                         route: "/admin/channels",
                         owner: "Messaging gateways",
-                        purpose: "通道進入點設定。Telegram/Discord 可做 smoke，LINE/WhatsApp/QQ 為規劃中。",
+                        purpose: "通訊入口設定。Telegram/Discord 可做連線檢查，LINE/WhatsApp/QQ 為規劃中。",
                     },
                     {
                         label: "Open WebUI Bridge",
@@ -292,7 +292,7 @@ const structureContent = {
             },
             {
                 title: "API namespace 邊界",
-                body: "按 session 流程分 admin 與對話 API，避免控制與設定耦合。",
+                body: "按場次流程分 admin 與對話 API，避免控制與設定耦合。",
                 cards: [
                     {
                         label: "Console API",
@@ -304,13 +304,13 @@ const structureContent = {
                         label: "Conversation API",
                         route: "/api/chat*, /api/sessions*, /api/roles*, /api/attachments*",
                         owner: "對話 runtime",
-                        purpose: "訊息、jobs、session 儲存、角色卡與檔案上傳下載。",
+                        purpose: "訊息、jobs、場次儲存、角色卡與檔案上傳下載。",
                     },
                     {
                         label: "Stage API",
                         route: "/api/stage/events",
                         owner: "Stage event broker",
-                        purpose: "以 user/session scope 做字幕與舞台狀態 publish/SSE 訂閱。",
+                        purpose: "以使用者/場次 scope 做字幕與舞台狀態 publish/SSE 訂閱。",
                     },
                     {
                         label: "Admin/Bridge API",
@@ -324,9 +324,9 @@ const structureContent = {
                 title: "路由增長規則",
                 body: "後續擴充請維持以下順序與邊界。",
                 items: [
-                    "Session 流程為 Admin 設定 -> Console 會話操作 -> Messenger + Stage 驗證。",
-                    "通道是入口，不是核心控台；Telegram/Discord 已可測，LINE、WhatsApp、QQ 規劃中。",
-                    "Stage 只顯示指定 session 的結果。",
+                    "場次流程為 Admin 設定 -> Console 場次操作 -> Messenger + Stage 驗證。",
+                    "通訊入口不是核心控台；Telegram/Discord 已可測，LINE、WhatsApp、QQ 規劃中。",
+                    "Stage 只顯示指定場次的結果。",
                     "Open WebUI Bridge 為操作員工具接線，不作為一般對話路由。",
                 ],
             },
@@ -335,26 +335,26 @@ const structureContent = {
     "zh-Hans": {
         sections: [
             {
-                title: "以 Session 为核心的入口",
-                body: "固定用同一个 session 流程：Admin 先准备资源，Console 做会话操作，Messenger 与 Stage 做输入和结果验证。",
+                title: "以场次为核心的入口",
+                body: "固定用同一个场次流程：Admin 先准备资源，Console 做场次操作，Messenger 与 Stage 做输入和结果验证。",
                 cards: [
                     {
                         label: "前台 Stage",
                         route: "/stage?session_name=<name>",
                         owner: "纯显示画面",
-                        purpose: "单一 session 的显示结果面：角色、字幕、TTS 与 Live2D。",
+                        purpose: "单一场次的显示结果面：角色、字幕、TTS 与 Live2D。",
                     },
                     {
                         label: "通讯 Messenger",
                         route: "/messenger?session_name=<name>",
-                        owner: "会话输入",
+                        owner: "场次输入",
                         purpose: "轻量输入，最终消息可在 Stage 上同步显示。",
                     },
                     {
                         label: "中台 Console",
                         route: "/console",
                         owner: "操作员工作台",
-                        purpose: "以 session 为核心切换角色卡、模型、语音、Live2D 与运行参数。",
+                        purpose: "以场次为核心切换角色卡、模型、语音、Live2D 与运行参数。",
                     },
                     {
                         label: "后台 Admin",
@@ -369,16 +369,16 @@ const structureContent = {
                 body: "Console 是实时工作台，Stage 不承载即时控制。",
                 cards: [
                     {
-                        label: "Session 面板",
+                        label: "場次面板",
                         route: "/console 左侧",
                         owner: "Visual runtime",
-                        purpose: "连接状态、session 状态、当前角色模型、语言与 Live2D 显示。",
+                        purpose: "连接状态、场次状态、当前角色模型、语言与 Live2D 显示。",
                     },
                     {
                         label: "控制抽屉",
                         route: "Console side panels",
-                        owner: "Session control",
-                        purpose: "显示 session 列表与当前 session 的角色卡。",
+                        owner: "場次控制",
+                        purpose: "显示场次列表与当前场次的角色卡。",
                     },
                     {
                         label: "设置群组",
@@ -390,13 +390,13 @@ const structureContent = {
                         label: "对话区",
                         route: "/api/chat* + /api/sessions*",
                         owner: "即时操作",
-                        purpose: "会话消息、附件、麦克风输入与发送控制。",
+                        purpose: "场次消息、附件、麦克风输入与发送控制。",
                     },
                 ],
             },
             {
                 title: "Admin 子页面",
-                body: "Admin 是设置与参考入口，session 运行仍在 Console 内完成。",
+                body: "Admin 是设置与参考入口，场次运行仍在 Console 内完成。",
                 cards: [
                     {
                         label: "网站结构",
@@ -408,12 +408,12 @@ const structureContent = {
                         label: "操作说明",
                         route: "/admin/guide",
                         owner: "操作指南",
-                        purpose: "Session 流程与操作参考。",
+                        purpose: "场次流程与操作参考。",
                     },
                     {
-                        label: "会话管理",
+                        label: "场次管理",
                         route: "/admin/sessions",
-                        owner: "Session 维护",
+                        owner: "场次维护",
                         purpose: "创建、重命名、删除并准备进入 Console。",
                     },
                     {
@@ -443,8 +443,8 @@ const structureContent = {
                     {
                         label: "通讯平台",
                         route: "/admin/channels",
-                        owner: "Messaging gateways",
-                        purpose: "通道入口设置。Telegram/Discord 可做 smoke，LINE/WhatsApp/QQ 为规划中。",
+                        owner: "通讯入口",
+                        purpose: "通讯入口设置。Telegram/Discord 可做连线检查，LINE/WhatsApp/QQ 为规划中。",
                     },
                     {
                         label: "Open WebUI Bridge",
@@ -456,7 +456,7 @@ const structureContent = {
             },
             {
                 title: "API namespace 边界",
-                body: "按 session 流程区分 admin 与对话 API，避免控制与设置混用。",
+                body: "按场次流程区分 admin 与对话 API，避免控制与设置混用。",
                 cards: [
                     {
                         label: "Console API",
@@ -468,13 +468,13 @@ const structureContent = {
                         label: "Conversation API",
                         route: "/api/chat*, /api/sessions*, /api/roles*, /api/attachments*",
                         owner: "聊天 runtime",
-                        purpose: "消息、jobs、session 存储、角色卡与文件上传下载。",
+                        purpose: "消息、jobs、场次存储、角色卡与文件上传下载。",
                     },
                     {
                         label: "Stage API",
                         route: "/api/stage/events",
                         owner: "Stage event broker",
-                        purpose: "以 user/session scope 做字幕与舞台状态 publish/SSE 订阅。",
+                        purpose: "以用户/场次 scope 做字幕与舞台状态 publish/SSE 订阅。",
                     },
                     {
                         label: "Admin/Bridge API",
@@ -488,9 +488,9 @@ const structureContent = {
                 title: "Route 增长规则",
                 body: "后续扩展请保持以下顺序与边界。",
                 items: [
-                    "Session 流程固定为 Admin 设置 -> Console 会话操作 -> Messenger + Stage 验证。",
-                    "通道是入口，不是核心；Telegram/Discord 已可测试，LINE、WhatsApp、QQ 规划中。",
-                    "Stage 只展示指定 session 的结果。",
+                    "场次流程固定为 Admin 设置 -> Console 场次操作 -> Messenger + Stage 验证。",
+                    "通讯入口不是核心；Telegram/Discord 已可测试，LINE、WhatsApp、QQ 规划中。",
+                    "Stage 只展示指定场次的结果。",
                     "Open WebUI Bridge 作为操作员工具接口，不作为一般对话路由。",
                 ],
             },

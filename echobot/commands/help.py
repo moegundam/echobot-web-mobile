@@ -9,6 +9,7 @@ from .route_mode import format_route_mode_help
 from .route_sessions import format_route_session_help
 from .runtime import format_runtime_help
 from .saved_sessions import format_saved_session_help_lines
+from .smoke import format_smoke_help
 
 
 @dataclass(slots=True)
@@ -47,6 +48,7 @@ def format_gateway_help() -> str:
                 "Available commands:",
                 "/help - Show this help",
             ],
+            format_smoke_help(),
             format_route_session_help().splitlines(),
             format_role_help().splitlines(),
             format_route_mode_help().splitlines(),

@@ -91,6 +91,12 @@ class BaseChannel(ABC):
                 cleaned_files.append(normalized_item)
         if not cleaned_text and not cleaned_image_urls and not cleaned_files:
             return
+        next_metadata = dict(metadata or {})
+        default_session_name = str(
+            getattr(self.config, "stage_session_name", "") or "",
+        ).strip()
+        if default_session_name and not next_metadata.get("channel_default_session_name"):
+            next_metadata["channel_default_session_name"] = default_session_name
         address = ChannelAddress(
             channel=self.name,
             chat_id=str(chat_id),
@@ -104,7 +110,7 @@ class BaseChannel(ABC):
                 text=cleaned_text,
                 image_urls=cleaned_image_urls,
                 files=cleaned_files,
-                metadata=dict(metadata or {}),
+                metadata=next_metadata,
             )
         )
 

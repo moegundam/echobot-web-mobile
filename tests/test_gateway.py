@@ -338,6 +338,84 @@ class GatewayRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(1, len(list(alpha_session_store.base_dir.glob("*.jsonl"))))
             self.assertEqual(1, len(list(beta_session_store.base_dir.glob("*.jsonl"))))
 
+    async def test_inbound_user_id_with_bound_channel_uses_shared_session(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            parent_context, parent_session_store = build_test_runtime(workspace / "parent")
+            alpha_scope, alpha_session_store = _gateway_scope(workspace / "alpha")
+            bus = MessageBus()
+            bound = parent_session_store.create_session("event-stage")
+            bound.metadata["channel_type"] = "discord"
+            bound.metadata["channel_integration_id"] = "discord"
+            parent_session_store.save_session(bound)
+
+            async def runtime_for_user(_user_id: str):
+                return alpha_scope
+
+            gateway = GatewayRuntime(
+                parent_context,
+                bus,
+                runtime_for_user=runtime_for_user,
+            )
+
+            try:
+                await gateway.handle_inbound_message(
+                    make_inbound(
+                        "hello stage",
+                        channel="discord",
+                        chat_id="shared-chat",
+                        user_id="alpha@example.test",
+                    ),
+                )
+                outbound = await asyncio.wait_for(
+                    bus.consume_outbound(),
+                    timeout=0.2,
+                )
+            finally:
+                await parent_context.coordinator.close()
+                await alpha_scope.context.coordinator.close()
+
+            self.assertEqual("pong", outbound.text)
+            self.assertEqual([], list(alpha_session_store.base_dir.glob("*.jsonl")))
+            self.assertEqual(2, len(parent_session_store.load_session("event-stage").history))
+
+    async def test_inbound_user_id_with_channel_default_session_uses_shared_session(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            parent_context, parent_session_store = build_test_runtime(workspace / "parent")
+            alpha_scope, alpha_session_store = _gateway_scope(workspace / "alpha")
+            bus = MessageBus()
+
+            async def runtime_for_user(_user_id: str):
+                return alpha_scope
+
+            gateway = GatewayRuntime(
+                parent_context,
+                bus,
+                runtime_for_user=runtime_for_user,
+            )
+            inbound = make_inbound(
+                "hello stage",
+                channel="discord",
+                chat_id="shared-chat",
+                user_id="alpha@example.test",
+            )
+            inbound.metadata["channel_default_session_name"] = "event-stage"
+
+            try:
+                await gateway.handle_inbound_message(inbound)
+                outbound = await asyncio.wait_for(
+                    bus.consume_outbound(),
+                    timeout=0.2,
+                )
+            finally:
+                await parent_context.coordinator.close()
+                await alpha_scope.context.coordinator.close()
+
+            self.assertEqual("pong", outbound.text)
+            self.assertEqual([], list(alpha_session_store.base_dir.glob("*.jsonl")))
+            self.assertEqual(2, len(parent_session_store.load_session("event-stage").history))
+
     async def test_handle_inbound_message_routes_response_and_remembers_delivery(
         self,
     ) -> None:
@@ -773,6 +851,35 @@ class GatewayRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("Available roles:", listed.text)
             self.assertIn("* default", listed.text)
             self.assertEqual("Switched role to: default", switched.text)
+
+    async def test_gateway_smoke_command_replies_exactly(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            context, _session_store = build_test_runtime(workspace)
+            bus = MessageBus()
+            captured_events: list[tuple[str, OutboundMessage]] = []
+
+            async def publish_stage_event(
+                session_name: str,
+                outbound: OutboundMessage,
+            ) -> None:
+                captured_events.append((session_name, outbound))
+
+            gateway = GatewayRuntime(
+                context,
+                bus,
+                delivery_store=DeliveryStore(workspace / "delivery.json"),
+                route_session_store=RouteSessionStore(workspace / "route_sessions.json"),
+                stage_event_publisher=publish_stage_event,
+            )
+
+            await gateway.handle_inbound_message(
+                make_inbound("/ping DISCORD_OK", message_id=2401),
+            )
+            outbound = await bus.consume_outbound()
+
+            self.assertEqual("DISCORD_OK", outbound.text)
+            self.assertEqual("DISCORD_OK", captured_events[0][1].text)
 
     async def test_runtime_command_can_toggle_task_start_tip(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
