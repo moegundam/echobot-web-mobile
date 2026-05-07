@@ -457,6 +457,26 @@ class ChannelIntegrationsResponse(StrictSchemaModel):
     integrations: list[ChannelIntegrationAdminModel] = Field(default_factory=list)
 
 
+class SessionStageBackgroundTransformModel(StrictSchemaModel):
+    positionX: float = 50
+    positionY: float = 50
+    scale: float = 100
+
+
+class SessionStageBackgroundModel(StrictSchemaModel):
+    key: str = "default"
+    label: str = ""
+    url: str = ""
+    kind: str = "none"
+    transform: SessionStageBackgroundTransformModel = Field(
+        default_factory=SessionStageBackgroundTransformModel,
+    )
+
+
+class SessionStageRuntimeContextModel(StrictSchemaModel):
+    background: SessionStageBackgroundModel | None = None
+
+
 class SessionRuntimeContextResponse(StrictSchemaModel):
     session_name: str = "default"
     role_name: str = "default"
@@ -466,6 +486,7 @@ class SessionRuntimeContextResponse(StrictSchemaModel):
     voice_profile: VoiceProfileAdminModel | None = None
     live2d_model: Live2DModelAdminModel | None = None
     channel: ChannelIntegrationAdminModel | None = None
+    stage: SessionStageRuntimeContextModel | None = None
 
 
 class UpdateSessionRuntimeOverridesRequest(StrictSchemaModel):
@@ -476,6 +497,7 @@ class UpdateSessionRuntimeOverridesRequest(StrictSchemaModel):
     tts: TTSModelProfileConfigModel | None = None
     asr: ASRModelProfileConfigModel | None = None
     live2d: Live2DModelProfileConfigModel | None = None
+    stage: SessionStageRuntimeContextModel | None = None
 
 
 class StageContextResponse(StrictSchemaModel):

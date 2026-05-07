@@ -1,7 +1,7 @@
 import { DOM } from "../../core/dom.js";
 import { appState } from "../../core/store.js";
 import { readJson, removeStoredValue, writeJson } from "../../core/storage.js";
-import { createStageBackgroundController } from "./backgrounds.js?v=site-public-6";
+import { createStageBackgroundController } from "./backgrounds.js?v=stage-background-1";
 import { createLive2DConfigController } from "./config.js?v=site-public-6";
 import { createLive2DControlsController } from "./controls.js?v=site-public-6";
 import { createStageEffectsController } from "./effects.js?v=site-public-6";
@@ -164,6 +164,7 @@ export function createLive2DModule(deps) {
         handleStageBackgroundTransformInput: backgroundController.handleStageBackgroundTransformInput,
         handleStageBackgroundTransformReset: backgroundController.handleStageBackgroundTransformReset,
         handleStageBackgroundUpload: backgroundController.handleStageBackgroundUpload,
+        currentStageBackgroundOverride: backgroundController.currentStageBackgroundOverride,
         handleStageEffectsInput: effectsController.handleStageEffectsInput,
         handleStageEffectsReset: effectsController.handleStageEffectsReset,
         handleStageWheel: modelController.handleStageWheel,

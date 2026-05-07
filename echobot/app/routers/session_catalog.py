@@ -218,6 +218,7 @@ async def _session_runtime_context_response(
         voice_profile=voice_model,
         live2d_model=live2d_model,
         channel=channel,
+        stage=_stage_context_from_override(live_override),
     )
 
 
@@ -496,6 +497,14 @@ def _apply_live2d_override(
             "model_url": str(catalog_item.get("model_url") or ""),
         },
     )
+
+
+def _stage_context_from_override(live_override: dict[str, Any]) -> dict[str, Any] | None:
+    stage = _section(live_override, "stage")
+    background = _section(stage, "background")
+    if not background:
+        return None
+    return {"background": background}
 
 
 def _section(profile: dict[str, Any], section_name: str) -> dict[str, Any]:

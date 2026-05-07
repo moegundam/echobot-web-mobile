@@ -2763,6 +2763,19 @@ class AppApiTests(unittest.TestCase):
                         "live2d": {
                             "selection_key": live2d_key,
                         },
+                        "stage": {
+                            "background": {
+                                "key": "unit-background",
+                                "label": "Unit Background",
+                                "url": "/api/web/stage/backgrounds/unit-background.png",
+                                "kind": "uploaded",
+                                "transform": {
+                                    "positionX": 32,
+                                    "positionY": 64,
+                                    "scale": 125,
+                                },
+                            },
+                        },
                     },
                 )
                 context = client.get("/api/sessions/default/runtime-context")
@@ -2782,11 +2795,23 @@ class AppApiTests(unittest.TestCase):
             )
             self.assertEqual("fake-asr", applied.json()["voice_profile"]["stt"]["provider"])
             self.assertEqual(live2d_key, applied.json()["live2d_model"]["selection_key"])
+            self.assertEqual(
+                "unit-background",
+                applied.json()["stage"]["background"]["key"],
+            )
+            self.assertEqual(
+                125,
+                applied.json()["stage"]["background"]["transform"]["scale"],
+            )
 
             self.assertEqual(200, context.status_code)
             self.assertEqual(
                 "zh-TW-HsiaoChenNeural",
                 context.json()["voice_profile"]["tts"]["voice"],
+            )
+            self.assertEqual(
+                "/api/web/stage/backgrounds/unit-background.png",
+                context.json()["stage"]["background"]["url"],
             )
 
             self.assertEqual(200, stored_profile.status_code)
@@ -2797,6 +2822,7 @@ class AppApiTests(unittest.TestCase):
             stored_profile_text = json.dumps(stored_profile.json())
             self.assertNotIn("zh-TW-HsiaoChenNeural", stored_profile_text)
             self.assertNotIn("fake-asr", stored_profile_text)
+            self.assertNotIn("unit-background", stored_profile_text)
             self.assertNotIn("admin-profile-secret", json.dumps(context.json()))
 
             self.assertEqual(404, unknown.status_code)

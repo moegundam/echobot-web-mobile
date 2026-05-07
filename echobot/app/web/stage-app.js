@@ -25,6 +25,8 @@ const menuToggleButton = document.getElementById("stage-menu-toggle");
 const menuCloseButton = document.getElementById("stage-menu-close");
 const menuBackdrop = document.getElementById("stage-menu-backdrop");
 const menuPanel = document.getElementById("stage-menu-panel");
+const stageSurface = document.getElementById("stage-surface");
+const stageBackgroundImage = document.getElementById("stage-background-image");
 const canvasHost = document.getElementById("stage-canvas-host");
 
 const DEFAULT_LIP_SYNC_IDS = ["ParamMouthOpenY", "PARAM_MOUTH_OPEN_Y", "MouthOpenY"];
@@ -268,6 +270,7 @@ function renderStageContext() {
     const context = stageContext && typeof stageContext === "object"
         ? stageContext
         : {};
+    applyStageBackgroundFromContext(context);
     const roleName = String(context.role_name || "default");
     if (roleLabelElement) {
         roleLabelElement.textContent = i18n.t("stage.roleLabel", {
@@ -294,6 +297,59 @@ function renderStageContext() {
             channel: runtimeContextValue(context, "channel", i18n.t),
         });
     }
+}
+
+function applyStageBackgroundFromContext(context = stageContext) {
+    if (!stageSurface || !stageBackgroundImage) {
+        return;
+    }
+
+    const background = stageBackgroundFromContext(context);
+    const url = String(background && background.url || "").trim();
+    if (!url) {
+        stageBackgroundImage.hidden = true;
+        stageBackgroundImage.style.backgroundImage = "";
+        clearStageBackgroundStyles();
+        stageSurface.classList.remove("has-custom-background");
+        return;
+    }
+
+    const safeUrl = url.replace(/"/g, "%22");
+    const transform = normalizeStageBackgroundTransform(background.transform);
+    stageBackgroundImage.style.backgroundImage = `url("${safeUrl}")`;
+    stageBackgroundImage.hidden = false;
+    stageSurface.classList.add("has-custom-background");
+    stageSurface.style.setProperty("--stage-background-position-x", `${transform.positionX}%`);
+    stageSurface.style.setProperty("--stage-background-position-y", `${transform.positionY}%`);
+    stageSurface.style.setProperty("--stage-background-scale-factor", String(transform.scale / 100));
+}
+
+function stageBackgroundFromContext(context) {
+    const stage = context && typeof context.stage === "object" ? context.stage : {};
+    return stage && typeof stage.background === "object" ? stage.background : null;
+}
+
+function normalizeStageBackgroundTransform(transform) {
+    const source = transform && typeof transform === "object" ? transform : {};
+    return {
+        positionX: clampNumber(source.positionX, 0, 100, 50),
+        positionY: clampNumber(source.positionY, 0, 100, 50),
+        scale: clampNumber(source.scale, 60, 200, 100),
+    };
+}
+
+function clampNumber(value, min, max, fallback) {
+    const number = Number.parseFloat(String(value));
+    if (!Number.isFinite(number)) {
+        return fallback;
+    }
+    return clamp(number, min, max);
+}
+
+function clearStageBackgroundStyles() {
+    stageSurface.style.removeProperty("--stage-background-position-x");
+    stageSurface.style.removeProperty("--stage-background-position-y");
+    stageSurface.style.removeProperty("--stage-background-scale-factor");
 }
 
 function stageModelProfileText(context) {

@@ -217,6 +217,23 @@ export function createStageBackgroundController(deps) {
         );
     }
 
+    function currentStageBackgroundOverride() {
+        flushStageBackgroundTransformPersist();
+        const selectedOption = currentStageBackgroundOption();
+        const transform = selectedOption && selectedOption.url
+            ? (live2dState.currentStageBackgroundTransform
+                || resolveStageBackgroundTransform(selectedOption))
+            : DEFAULT_STAGE_BACKGROUND_TRANSFORM;
+        const normalizedTransform = normalizeStageBackgroundTransform(transform);
+        return {
+            key: selectedOption ? selectedOption.key : "default",
+            label: selectedOption ? selectedOption.label : t("console.noStageBackground"),
+            url: selectedOption ? selectedOption.url : "",
+            kind: selectedOption ? selectedOption.kind : "none",
+            transform: normalizedTransform,
+        };
+    }
+
     function resolveStageBackgroundTransform(backgroundOption) {
         if (!backgroundOption || !backgroundOption.url) {
             return {
@@ -769,6 +786,7 @@ export function createStageBackgroundController(deps) {
     return {
         applyStageBackgroundByKey,
         applyStageBackgroundTransform,
+        currentStageBackgroundOverride,
         currentStageBackgroundOption,
         handleStageBackgroundChange,
         handleStageBackgroundReset,

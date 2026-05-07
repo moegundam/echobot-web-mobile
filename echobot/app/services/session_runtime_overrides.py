@@ -65,6 +65,9 @@ def _clean_override(override: dict[str, Any]) -> dict[str, Any]:
         }
         if cleaned_section:
             cleaned[section_name] = cleaned_section
+    stage = _clean_stage_override(override.get("stage"))
+    if stage:
+        cleaned["stage"] = stage
     return cleaned
 
 
@@ -73,3 +76,54 @@ def _clean_text(value: object, *, max_length: int = MAX_RUNTIME_OVERRIDE_VALUE_L
     if len(text) > max_length:
         raise ValueError("Session runtime override value is too large")
     return text
+
+
+def _clean_stage_override(value: object) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        return {}
+
+    background = _clean_stage_background(value.get("background"))
+    if not background:
+        return {}
+    return {"background": background}
+
+
+def _clean_stage_background(value: object) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        return {}
+
+    background = {
+        "key": _clean_text(value.get("key"), max_length=128) or "default",
+        "label": _clean_text(value.get("label"), max_length=256),
+        "url": _clean_text(value.get("url")),
+        "kind": _clean_text(value.get("kind"), max_length=64) or "none",
+        "transform": _clean_stage_background_transform(value.get("transform")),
+    }
+    return background
+
+
+def _clean_stage_background_transform(value: object) -> dict[str, float]:
+    transform = value if isinstance(value, dict) else {}
+    return {
+        "positionX": _clean_float(transform.get("positionX"), default=50, minimum=0, maximum=100),
+        "positionY": _clean_float(transform.get("positionY"), default=50, minimum=0, maximum=100),
+        "scale": _clean_float(transform.get("scale"), default=100, minimum=60, maximum=200),
+    }
+
+
+def _clean_float(
+    value: object,
+    *,
+    default: float,
+    minimum: float,
+    maximum: float,
+) -> float:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        number = default
+    if number < minimum:
+        number = minimum
+    if number > maximum:
+        number = maximum
+    return round(number, 2)

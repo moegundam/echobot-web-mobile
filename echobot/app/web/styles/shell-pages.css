@@ -233,9 +233,34 @@ textarea {
         linear-gradient(135deg, #101820 0%, #1b2732 56%, #2b2a28 100%);
 }
 
+.stage-surface.has-custom-background {
+    background: #080d12;
+}
+
+.stage-background-image {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    background-repeat: no-repeat;
+    background-position:
+        var(--stage-background-position-x, 50%)
+        var(--stage-background-position-y, 50%);
+    background-size: cover;
+    pointer-events: none;
+    transform: scale(var(--stage-background-scale-factor, 1));
+    transform-origin:
+        var(--stage-background-position-x, 50%)
+        var(--stage-background-position-y, 50%);
+}
+
+.stage-background-image[hidden] {
+    display: none;
+}
+
 .stage-orbit {
     position: absolute;
     inset: 0;
+    z-index: 1;
     pointer-events: none;
     opacity: 0.16;
 }
@@ -255,7 +280,7 @@ textarea {
 
 .stage-canvas-host {
     position: relative;
-    z-index: 1;
+    z-index: 2;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -273,7 +298,7 @@ textarea {
 
 .stage-subtitle-panel {
     position: relative;
-    z-index: 2;
+    z-index: 3;
     width: min(980px, calc(100% - 32px));
     margin: 0 auto 22px;
     padding: 18px 20px;
