@@ -425,6 +425,30 @@ textarea {
     background: rgba(12, 18, 24, 0.72);
 }
 
+.stage-view-controls {
+    display: grid;
+    gap: 8px;
+    min-width: 0;
+    padding: 9px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.stage-view-control-row {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+}
+
+.stage-view-button {
+    min-width: 0;
+    padding-inline: 8px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .stage-audio-button {
     position: static;
     flex: 0 0 auto;

@@ -8,6 +8,11 @@ import {
     fetchSessionRuntimeContext,
     runtimeContextValue,
 } from "./session-runtime-context.js?v=session-runtime-context-1";
+import {
+    readJson,
+    removeStoredValue,
+    writeJson,
+} from "./core/storage.js?v=stage-zoom-1";
 
 const subtitleElement = document.getElementById("stage-subtitle");
 const sessionLabelElement = document.getElementById("stage-session-label");
@@ -23,6 +28,9 @@ const subtitlePanel = document.getElementById("stage-subtitle-panel");
 const subtitleToggleButton = document.getElementById("stage-subtitle-toggle");
 const menuToggleButton = document.getElementById("stage-menu-toggle");
 const menuCloseButton = document.getElementById("stage-menu-close");
+const zoomOutButton = document.getElementById("stage-zoom-out");
+const zoomResetButton = document.getElementById("stage-zoom-reset");
+const zoomInButton = document.getElementById("stage-zoom-in");
 const menuBackdrop = document.getElementById("stage-menu-backdrop");
 const menuPanel = document.getElementById("stage-menu-panel");
 const stageSurface = document.getElementById("stage-surface");
@@ -32,6 +40,10 @@ const canvasHost = document.getElementById("stage-canvas-host");
 const DEFAULT_LIP_SYNC_IDS = ["ParamMouthOpenY", "PARAM_MOUTH_OPEN_Y", "MouthOpenY"];
 const STAGE_CONTEXT_REFRESH_INTERVAL_MS = 5000;
 const STAGE_SUBTITLE_STORAGE_KEY = "echobot.stage.subtitles.hidden";
+const STAGE_LIVE2D_ZOOM_STORAGE_PREFIX = "echobot.stage.live2d.zoom";
+const STAGE_LIVE2D_ZOOM_MIN = 0.45;
+const STAGE_LIVE2D_ZOOM_MAX = 2.6;
+const STAGE_LIVE2D_ZOOM_STEP = 1.08;
 let sessionName = resolveSessionName();
 rememberShellSessionName(sessionName);
 initShellSessionLinks();
@@ -54,6 +66,12 @@ let live2dApp = null;
 let live2dModel = null;
 let live2dConfig = null;
 let live2dLoadPromise = null;
+let stageLive2DBaseScale = 1;
+let stageLive2DZoom = 1;
+let stagePinchStartDistance = 0;
+let stagePinchStartZoom = 1;
+let stagePinchActive = false;
+let stageGestureStartZoom = 1;
 let stageContextRefreshTimerId = 0;
 let activeStageExpressionDefinition = null;
 let stageExpressionHook = null;
@@ -86,6 +104,24 @@ if (subtitleToggleButton) {
     });
 }
 
+if (zoomOutButton) {
+    zoomOutButton.addEventListener("click", () => {
+        adjustStageLive2DZoom(1 / STAGE_LIVE2D_ZOOM_STEP);
+    });
+}
+
+if (zoomResetButton) {
+    zoomResetButton.addEventListener("click", () => {
+        resetStageLive2DZoom();
+    });
+}
+
+if (zoomInButton) {
+    zoomInButton.addEventListener("click", () => {
+        adjustStageLive2DZoom(STAGE_LIVE2D_ZOOM_STEP);
+    });
+}
+
 if (menuToggleButton) {
     menuToggleButton.addEventListener("click", () => {
         setStageMenuOpen(true);
@@ -107,7 +143,9 @@ if (menuBackdrop) {
 window.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && isStageMenuOpen()) {
         setStageMenuOpen(false);
+        return;
     }
+    handleStageZoomKeyDown(event);
 });
 
 if (sessionSelect) {
@@ -116,6 +154,8 @@ if (sessionSelect) {
     });
 }
 
+bindStageZoomInteractions();
+updateStageZoomControls();
 init();
 
 async function init() {
@@ -179,6 +219,153 @@ function setSubtitlesHidden(hidden, options = {}) {
     if (options.persist !== false) {
         writeStoredSubtitlesHidden(subtitlesHidden);
     }
+}
+
+function bindStageZoomInteractions() {
+    if (!stageSurface) {
+        return;
+    }
+
+    stageSurface.addEventListener("wheel", handleStageWheelZoom, { passive: false });
+    stageSurface.addEventListener("touchstart", handleStageTouchStart, { passive: true });
+    stageSurface.addEventListener("touchmove", handleStageTouchMove, { passive: false });
+    stageSurface.addEventListener("touchend", handleStageTouchEnd, { passive: true });
+    stageSurface.addEventListener("touchcancel", handleStageTouchEnd, { passive: true });
+    stageSurface.addEventListener("gesturestart", handleStageGestureStart, { passive: false });
+    stageSurface.addEventListener("gesturechange", handleStageGestureChange, { passive: false });
+    stageSurface.addEventListener("gestureend", handleStageGestureEnd, { passive: true });
+}
+
+function handleStageWheelZoom(event) {
+    if (!canAdjustStageLive2DZoom() || shouldIgnoreStageZoomEvent(event)) {
+        return;
+    }
+
+    const deltaY = Number(event.deltaY);
+    if (!Number.isFinite(deltaY) || deltaY === 0) {
+        return;
+    }
+
+    event.preventDefault();
+    const direction = deltaY < 0 ? 1 : -1;
+    const wheelMagnitude = Math.min(Math.abs(deltaY), 600) / 120;
+    const step = Math.pow(STAGE_LIVE2D_ZOOM_STEP, Math.max(wheelMagnitude, 0.35));
+    adjustStageLive2DZoom(direction > 0 ? step : 1 / step);
+}
+
+function handleStageTouchStart(event) {
+    if (
+        !canAdjustStageLive2DZoom()
+        || !event.touches
+        || event.touches.length !== 2
+        || shouldIgnoreStageZoomEvent(event)
+    ) {
+        stagePinchActive = false;
+        return;
+    }
+
+    stagePinchStartDistance = distanceBetweenTouches(event.touches[0], event.touches[1]);
+    stagePinchStartZoom = stageLive2DZoom;
+    stagePinchActive = stagePinchStartDistance > 0;
+}
+
+function handleStageTouchMove(event) {
+    if (
+        !stagePinchActive
+        || !canAdjustStageLive2DZoom()
+        || !event.touches
+        || event.touches.length !== 2
+    ) {
+        return;
+    }
+
+    const nextDistance = distanceBetweenTouches(event.touches[0], event.touches[1]);
+    if (nextDistance <= 0 || stagePinchStartDistance <= 0) {
+        return;
+    }
+
+    event.preventDefault();
+    setStageLive2DZoom(stagePinchStartZoom * (nextDistance / stagePinchStartDistance));
+}
+
+function handleStageTouchEnd(event) {
+    if (!event.touches || event.touches.length < 2) {
+        stagePinchActive = false;
+        stagePinchStartDistance = 0;
+        stagePinchStartZoom = stageLive2DZoom;
+    }
+}
+
+function handleStageGestureStart(event) {
+    if (!canAdjustStageLive2DZoom() || shouldIgnoreStageZoomEvent(event)) {
+        return;
+    }
+    event.preventDefault();
+    stageGestureStartZoom = stageLive2DZoom;
+}
+
+function handleStageGestureChange(event) {
+    if (!canAdjustStageLive2DZoom() || shouldIgnoreStageZoomEvent(event)) {
+        return;
+    }
+    const gestureScale = Number(event.scale);
+    if (!Number.isFinite(gestureScale) || gestureScale <= 0) {
+        return;
+    }
+    event.preventDefault();
+    setStageLive2DZoom(stageGestureStartZoom * gestureScale);
+}
+
+function handleStageGestureEnd() {
+    stageGestureStartZoom = stageLive2DZoom;
+}
+
+function handleStageZoomKeyDown(event) {
+    if (!canAdjustStageLive2DZoom() || shouldIgnoreStageZoomKeyEvent(event)) {
+        return;
+    }
+
+    if (event.key === "+" || event.key === "=" || event.code === "NumpadAdd") {
+        event.preventDefault();
+        adjustStageLive2DZoom(STAGE_LIVE2D_ZOOM_STEP);
+        return;
+    }
+    if (event.key === "-" || event.code === "NumpadSubtract") {
+        event.preventDefault();
+        adjustStageLive2DZoom(1 / STAGE_LIVE2D_ZOOM_STEP);
+        return;
+    }
+    if (event.key === "0" || event.code === "Numpad0") {
+        event.preventDefault();
+        resetStageLive2DZoom();
+    }
+}
+
+function distanceBetweenTouches(firstTouch, secondTouch) {
+    const deltaX = Number(firstTouch.clientX) - Number(secondTouch.clientX);
+    const deltaY = Number(firstTouch.clientY) - Number(secondTouch.clientY);
+    return Math.sqrt((deltaX * deltaX) + (deltaY * deltaY));
+}
+
+function shouldIgnoreStageZoomEvent(event) {
+    const target = event && event.target;
+    if (!target || typeof target.closest !== "function") {
+        return false;
+    }
+    return Boolean(target.closest(
+        "button, a, input, select, textarea, [role='button'], #stage-menu-panel, #stage-menu-backdrop",
+    ));
+}
+
+function shouldIgnoreStageZoomKeyEvent(event) {
+    const target = event && event.target;
+    if (!target || typeof target.closest !== "function") {
+        return false;
+    }
+    if (target.closest("input, select, textarea, [contenteditable='true']")) {
+        return true;
+    }
+    return Boolean(isStageMenuOpen() && target.closest("#stage-menu-panel"));
 }
 
 async function setActiveSessionName(value, options = {}) {
@@ -927,6 +1114,8 @@ async function initLive2D() {
         resolveStageLive2DConfig(contextConfig, config && config.live2d),
         contextConfig ? "session" : "web-config",
     );
+    stageLive2DZoom = loadSavedStageLive2DZoom();
+    updateStageZoomControls();
     const modelUrl = live2dConfig.model_url;
     canvasHost.dataset.live2dSource = live2dConfig.source;
     canvasHost.dataset.live2dSelectionKey = live2dConfig.selection_key;
@@ -952,6 +1141,7 @@ async function initLive2D() {
             attachStageExpressionHook(live2dModel);
             fitLive2DModel();
             window.addEventListener("resize", fitLive2DModel);
+            updateStageZoomControls();
             canvasHost.dataset.live2d = "ready";
             canvasHost.dataset.live2dSource = live2dConfig.source;
             canvasHost.dataset.live2dSelectionKey = live2dConfig.selection_key;
@@ -1294,6 +1484,7 @@ function destroyLive2DApp() {
     detachStageExpressionHook();
     activeStageExpressionDefinition = null;
     live2dModel = null;
+    stageLive2DBaseScale = 1;
     if (live2dApp && typeof live2dApp.destroy === "function") {
         try {
             live2dApp.destroy(true, {
@@ -1306,6 +1497,7 @@ function destroyLive2DApp() {
         }
     }
     live2dApp = null;
+    updateStageZoomControls();
 }
 
 function fitLive2DModel() {
@@ -1326,11 +1518,102 @@ function fitLive2DModel() {
     const modelWidth = Math.max(live2dModel.width || width, 1);
     const modelHeight = Math.max(live2dModel.height || height, 1);
     const scale = Math.min(width / modelWidth, height / modelHeight) * 0.82;
-    if (live2dModel.scale && typeof live2dModel.scale.set === "function") {
-        live2dModel.scale.set(Math.max(scale, 0.05));
-    }
+    stageLive2DBaseScale = Math.max(scale, 0.05);
+    applyStageLive2DZoom({ persist: false });
     live2dModel.x = width * 0.5;
     live2dModel.y = height * 0.62;
+}
+
+function canAdjustStageLive2DZoom() {
+    return Boolean(
+        live2dModel
+        && live2dModel.scale
+        && typeof live2dModel.scale.set === "function"
+        && live2dApp
+        && canvasHost,
+    );
+}
+
+function adjustStageLive2DZoom(scaleFactor, options = {}) {
+    const factor = Number(scaleFactor);
+    if (!Number.isFinite(factor) || factor <= 0) {
+        return;
+    }
+    setStageLive2DZoom(stageLive2DZoom * factor, options);
+}
+
+function setStageLive2DZoom(nextZoom, options = {}) {
+    stageLive2DZoom = clampNumber(
+        nextZoom,
+        STAGE_LIVE2D_ZOOM_MIN,
+        STAGE_LIVE2D_ZOOM_MAX,
+        1,
+    );
+    applyStageLive2DZoom(options);
+}
+
+function resetStageLive2DZoom() {
+    stageLive2DZoom = 1;
+    removeStoredValue(stageLive2DZoomStorageKey());
+    applyStageLive2DZoom({ persist: false });
+}
+
+function applyStageLive2DZoom(options = {}) {
+    if (!canAdjustStageLive2DZoom()) {
+        updateStageZoomControls();
+        return;
+    }
+
+    live2dModel.scale.set(stageLive2DBaseScale * stageLive2DZoom);
+    if (options.persist !== false) {
+        persistStageLive2DZoom();
+    }
+    updateStageZoomControls();
+}
+
+function loadSavedStageLive2DZoom() {
+    const payload = readJson(stageLive2DZoomStorageKey());
+    if (!payload) {
+        return 1;
+    }
+    const savedZoom = typeof payload === "number"
+        ? payload
+        : Number(payload && payload.zoom);
+    return clampNumber(
+        savedZoom,
+        STAGE_LIVE2D_ZOOM_MIN,
+        STAGE_LIVE2D_ZOOM_MAX,
+        1,
+    );
+}
+
+function persistStageLive2DZoom() {
+    writeJson(stageLive2DZoomStorageKey(), {
+        zoom: stageLive2DZoom,
+    });
+}
+
+function stageLive2DZoomStorageKey() {
+    const live2DKey = live2dConfig
+        ? String(live2dConfig.selection_key || live2dConfig.model_url || "default")
+        : "default";
+    return [
+        STAGE_LIVE2D_ZOOM_STORAGE_PREFIX,
+        encodeURIComponent(sessionName || "default"),
+        encodeURIComponent(live2DKey || "default"),
+    ].join(".");
+}
+
+function updateStageZoomControls() {
+    const ready = canAdjustStageLive2DZoom();
+    [zoomOutButton, zoomResetButton, zoomInButton].forEach((button) => {
+        if (button) {
+            button.disabled = !ready;
+        }
+    });
+    if (canvasHost) {
+        canvasHost.dataset.live2dZoom = String(Math.round(stageLive2DZoom * 1000) / 1000);
+    }
 }
 
 function markLive2DUnavailable(messageKey) {

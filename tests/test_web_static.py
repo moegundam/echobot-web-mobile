@@ -348,6 +348,10 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn('id="messenger-attachments"', messenger_html)
         self.assertIn('id="stage-session-select"', stage_html)
         self.assertIn('id="stage-background-image"', stage_html)
+        self.assertIn('id="stage-zoom-out"', stage_html)
+        self.assertIn('id="stage-zoom-reset"', stage_html)
+        self.assertIn('id="stage-zoom-in"', stage_html)
+        self.assertIn('data-i18n-aria-label-key="stage.viewControlsAria"', stage_html)
         self.assertIn('id="stage-menu-toggle"', stage_html)
         self.assertIn('id="stage-menu-panel"', stage_html)
         self.assertIn('id="stage-subtitle-toggle"', stage_html)
@@ -377,6 +381,12 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn("reloadLive2DFromContext", stage_js)
         self.assertIn("applyStageBackgroundFromContext", stage_js)
         self.assertIn("context.stage", stage_js)
+        self.assertIn("handleStageWheelZoom", stage_js)
+        self.assertIn("handleStageTouchMove", stage_js)
+        self.assertIn("handleStageGestureChange", stage_js)
+        self.assertIn("handleStageZoomKeyDown", stage_js)
+        self.assertIn("stageLive2DZoom", stage_js)
+        self.assertIn("dataset.live2dZoom", stage_js)
         self.assertIn("canvasHost.dataset.live2dSelectionKey", stage_js)
         self.assertNotIn("normalizeLive2DConfig(config && config.live2d)", stage_js)
         self.assertIn("loadSessions", messenger_js)
@@ -458,6 +468,11 @@ class WebStaticAssetTests(unittest.TestCase):
             "stage.menu.close",
             "stage.menu.eyebrow",
             "stage.menu.title",
+            "stage.viewControlsAria",
+            "stage.viewControls",
+            "stage.zoomOut",
+            "stage.zoomReset",
+            "stage.zoomIn",
             "stage.subtitle.hide",
             "stage.subtitle.show",
             "stage.sessionFallback",
