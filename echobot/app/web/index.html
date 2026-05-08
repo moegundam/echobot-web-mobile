@@ -497,6 +497,14 @@
                             </div>
                             <div class="stage-background-actions">
                                 <button
+                                    id="stage-background-apply-button"
+                                    class="primary-button ghost-button-compact"
+                                    type="button"
+                                    data-i18n-key="console.applyBackgroundToStage"
+                                >
+                                    Apply background to Stage
+                                </button>
+                                <button
                                     id="stage-background-upload-button"
                                     class="ghost-button ghost-button-compact"
                                     type="button"
@@ -517,6 +525,9 @@
                                     hidden
                                 >
                             </div>
+                            <p class="muted-text stage-background-apply-note" data-i18n-key="console.backgroundApplyHelp">
+                                Background changes update this Console preview first. Apply them to update the selected Stage session.
+                            </p>
                             <div class="stage-background-transform-panel">
                                 <div class="stage-background-transform-header">
                                     <p class="section-title" data-i18n-key="console.backgroundTransform">Background framing</p>
@@ -1058,6 +1069,6 @@
     <script src="/web/assets/vendor/pixi.min.js"></script>
     <script src="/web/assets/vendor/live2dcubismcore.min.js"></script>
     <script src="/web/assets/vendor/cubism4.min.js"></script>
-    <script type="module" src="/web/assets/app.js?v=stage-background-1"></script>
+    <script type="module" src="/web/assets/app.js?v=stage-background-2"></script>
 </body>
 </html>

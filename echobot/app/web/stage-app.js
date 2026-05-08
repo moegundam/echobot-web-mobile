@@ -12,7 +12,7 @@ import {
     readJson,
     removeStoredValue,
     writeJson,
-} from "./core/storage.js?v=stage-zoom-1";
+} from "./core/storage.js?v=stage-view-1";
 
 const subtitleElement = document.getElementById("stage-subtitle");
 const sessionLabelElement = document.getElementById("stage-session-label");
@@ -40,10 +40,11 @@ const canvasHost = document.getElementById("stage-canvas-host");
 const DEFAULT_LIP_SYNC_IDS = ["ParamMouthOpenY", "PARAM_MOUTH_OPEN_Y", "MouthOpenY"];
 const STAGE_CONTEXT_REFRESH_INTERVAL_MS = 5000;
 const STAGE_SUBTITLE_STORAGE_KEY = "echobot.stage.subtitles.hidden";
-const STAGE_LIVE2D_ZOOM_STORAGE_PREFIX = "echobot.stage.live2d.zoom";
+const STAGE_LIVE2D_VIEW_STORAGE_PREFIX = "echobot.stage.live2d.view";
 const STAGE_LIVE2D_ZOOM_MIN = 0.45;
 const STAGE_LIVE2D_ZOOM_MAX = 2.6;
 const STAGE_LIVE2D_ZOOM_STEP = 1.08;
+const STAGE_LIVE2D_PAN_LIMIT_FACTOR = 0.85;
 let sessionName = resolveSessionName();
 rememberShellSessionName(sessionName);
 initShellSessionLinks();
@@ -68,6 +69,9 @@ let live2dConfig = null;
 let live2dLoadPromise = null;
 let stageLive2DBaseScale = 1;
 let stageLive2DZoom = 1;
+let stageLive2DOffsetX = 0;
+let stageLive2DOffsetY = 0;
+let stageDragState = null;
 let stagePinchStartDistance = 0;
 let stagePinchStartZoom = 1;
 let stagePinchActive = false;
@@ -234,10 +238,76 @@ function bindStageZoomInteractions() {
     stageSurface.addEventListener("gesturestart", handleStageGestureStart, { passive: false });
     stageSurface.addEventListener("gesturechange", handleStageGestureChange, { passive: false });
     stageSurface.addEventListener("gestureend", handleStageGestureEnd, { passive: true });
+
+    if (canvasHost) {
+        canvasHost.addEventListener("pointerdown", handleStagePointerDown);
+        canvasHost.addEventListener("pointermove", handleStagePointerMove);
+        canvasHost.addEventListener("pointerup", handleStagePointerUp);
+        canvasHost.addEventListener("pointercancel", handleStagePointerUp);
+        canvasHost.addEventListener("lostpointercapture", handleStagePointerUp);
+    }
+}
+
+function handleStagePointerDown(event) {
+    if (!canAdjustStageLive2DView() || shouldIgnoreStageViewEvent(event)) {
+        return;
+    }
+    if (event.pointerType === "mouse" && event.button !== 0) {
+        return;
+    }
+    if (stagePinchActive) {
+        return;
+    }
+
+    event.preventDefault();
+    stageDragState = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        offsetX: stageLive2DOffsetX,
+        offsetY: stageLive2DOffsetY,
+    };
+    canvasHost?.classList.add("is-stage-dragging");
+    try {
+        canvasHost?.setPointerCapture?.(event.pointerId);
+    } catch (_error) {
+        // Pointer capture is optional across browsers.
+    }
+}
+
+function handleStagePointerMove(event) {
+    if (
+        !stageDragState
+        || event.pointerId !== stageDragState.pointerId
+        || !canAdjustStageLive2DView()
+    ) {
+        return;
+    }
+
+    event.preventDefault();
+    stageLive2DOffsetX = stageDragState.offsetX + (event.clientX - stageDragState.startX);
+    stageLive2DOffsetY = stageDragState.offsetY + (event.clientY - stageDragState.startY);
+    clampStageLive2DOffset();
+    applyStageLive2DView({ persist: false });
+}
+
+function handleStagePointerUp(event) {
+    if (!stageDragState || event.pointerId !== stageDragState.pointerId) {
+        return;
+    }
+
+    try {
+        canvasHost?.releasePointerCapture?.(event.pointerId);
+    } catch (_error) {
+        // Pointer capture may already be released.
+    }
+    stageDragState = null;
+    canvasHost?.classList.remove("is-stage-dragging");
+    persistStageLive2DView();
 }
 
 function handleStageWheelZoom(event) {
-    if (!canAdjustStageLive2DZoom() || shouldIgnoreStageZoomEvent(event)) {
+    if (!canAdjustStageLive2DView() || shouldIgnoreStageViewEvent(event)) {
         return;
     }
 
@@ -348,6 +418,10 @@ function distanceBetweenTouches(firstTouch, secondTouch) {
 }
 
 function shouldIgnoreStageZoomEvent(event) {
+    return shouldIgnoreStageViewEvent(event);
+}
+
+function shouldIgnoreStageViewEvent(event) {
     const target = event && event.target;
     if (!target || typeof target.closest !== "function") {
         return false;
@@ -1114,7 +1188,10 @@ async function initLive2D() {
         resolveStageLive2DConfig(contextConfig, config && config.live2d),
         contextConfig ? "session" : "web-config",
     );
-    stageLive2DZoom = loadSavedStageLive2DZoom();
+    const savedView = loadSavedStageLive2DView();
+    stageLive2DZoom = savedView.zoom;
+    stageLive2DOffsetX = savedView.offsetX;
+    stageLive2DOffsetY = savedView.offsetY;
     updateStageZoomControls();
     const modelUrl = live2dConfig.model_url;
     canvasHost.dataset.live2dSource = live2dConfig.source;
@@ -1137,6 +1214,11 @@ async function initLive2D() {
             live2dModel = await window.PIXI.live2d.Live2DModel.from(modelUrl, {
                 autoInteract: false,
             });
+            if (live2dModel.anchor && typeof live2dModel.anchor.set === "function") {
+                live2dModel.anchor.set(0.5, 0.5);
+            }
+            live2dModel.interactive = true;
+            live2dModel.cursor = "grab";
             live2dApp.stage.addChild(live2dModel);
             attachStageExpressionHook(live2dModel);
             fitLive2DModel();
@@ -1485,6 +1567,8 @@ function destroyLive2DApp() {
     activeStageExpressionDefinition = null;
     live2dModel = null;
     stageLive2DBaseScale = 1;
+    stageDragState = null;
+    canvasHost?.classList.remove("is-stage-dragging");
     if (live2dApp && typeof live2dApp.destroy === "function") {
         try {
             live2dApp.destroy(true, {
@@ -1515,16 +1599,20 @@ function fitLive2DModel() {
         live2dModel.anchor.set(0.5, 0.5);
     }
 
-    const modelWidth = Math.max(live2dModel.width || width, 1);
-    const modelHeight = Math.max(live2dModel.height || height, 1);
+    const modelBounds = measureStageLive2DBaseSize();
+    const modelWidth = Math.max(modelBounds.width || width, 1);
+    const modelHeight = Math.max(modelBounds.height || height, 1);
     const scale = Math.min(width / modelWidth, height / modelHeight) * 0.82;
     stageLive2DBaseScale = Math.max(scale, 0.05);
-    applyStageLive2DZoom({ persist: false });
-    live2dModel.x = width * 0.5;
-    live2dModel.y = height * 0.62;
+    clampStageLive2DOffset();
+    applyStageLive2DView({ persist: false });
 }
 
 function canAdjustStageLive2DZoom() {
+    return canAdjustStageLive2DView();
+}
+
+function canAdjustStageLive2DView() {
     return Boolean(
         live2dModel
         && live2dModel.scale
@@ -1554,58 +1642,132 @@ function setStageLive2DZoom(nextZoom, options = {}) {
 
 function resetStageLive2DZoom() {
     stageLive2DZoom = 1;
-    removeStoredValue(stageLive2DZoomStorageKey());
-    applyStageLive2DZoom({ persist: false });
+    stageLive2DOffsetX = 0;
+    stageLive2DOffsetY = 0;
+    removeStoredValue(stageLive2DViewStorageKey());
+    removeStoredValue(stageLegacyLive2DZoomStorageKey());
+    applyStageLive2DView({ persist: false });
 }
 
 function applyStageLive2DZoom(options = {}) {
-    if (!canAdjustStageLive2DZoom()) {
+    applyStageLive2DView(options);
+}
+
+function applyStageLive2DView(options = {}) {
+    if (!canAdjustStageLive2DView()) {
         updateStageZoomControls();
         return;
     }
 
     live2dModel.scale.set(stageLive2DBaseScale * stageLive2DZoom);
+    live2dModel.x = (canvasHost.clientWidth * 0.5) + stageLive2DOffsetX;
+    live2dModel.y = (canvasHost.clientHeight * 0.62) + stageLive2DOffsetY;
     if (options.persist !== false) {
-        persistStageLive2DZoom();
+        persistStageLive2DView();
     }
     updateStageZoomControls();
 }
 
-function loadSavedStageLive2DZoom() {
-    const payload = readJson(stageLive2DZoomStorageKey());
+function loadSavedStageLive2DView() {
+    const payload = readJson(stageLive2DViewStorageKey())
+        || readJson(stageLegacyLive2DZoomStorageKey());
     if (!payload) {
-        return 1;
+        return {
+            zoom: 1,
+            offsetX: 0,
+            offsetY: 0,
+        };
     }
     const savedZoom = typeof payload === "number"
         ? payload
         : Number(payload && payload.zoom);
-    return clampNumber(
-        savedZoom,
-        STAGE_LIVE2D_ZOOM_MIN,
-        STAGE_LIVE2D_ZOOM_MAX,
-        1,
-    );
+    return {
+        zoom: clampNumber(
+            savedZoom,
+            STAGE_LIVE2D_ZOOM_MIN,
+            STAGE_LIVE2D_ZOOM_MAX,
+            1,
+        ),
+        offsetX: clampStageOffsetNumber(payload && payload.offsetX, "x"),
+        offsetY: clampStageOffsetNumber(payload && payload.offsetY, "y"),
+    };
 }
 
-function persistStageLive2DZoom() {
-    writeJson(stageLive2DZoomStorageKey(), {
+function persistStageLive2DView() {
+    writeJson(stageLive2DViewStorageKey(), {
         zoom: stageLive2DZoom,
+        offsetX: Math.round(stageLive2DOffsetX * 100) / 100,
+        offsetY: Math.round(stageLive2DOffsetY * 100) / 100,
+        stageWidth: Math.round(Math.max(canvasHost?.clientWidth || 0, 1) * 100) / 100,
+        stageHeight: Math.round(Math.max(canvasHost?.clientHeight || 0, 1) * 100) / 100,
     });
 }
 
-function stageLive2DZoomStorageKey() {
+function stageLive2DViewStorageKey() {
     const live2DKey = live2dConfig
         ? String(live2dConfig.selection_key || live2dConfig.model_url || "default")
         : "default";
     return [
-        STAGE_LIVE2D_ZOOM_STORAGE_PREFIX,
+        STAGE_LIVE2D_VIEW_STORAGE_PREFIX,
         encodeURIComponent(sessionName || "default"),
         encodeURIComponent(live2DKey || "default"),
     ].join(".");
 }
 
+function stageLegacyLive2DZoomStorageKey() {
+    const live2DKey = live2dConfig
+        ? String(live2dConfig.selection_key || live2dConfig.model_url || "default")
+        : "default";
+    return [
+        "echobot.stage.live2d.zoom",
+        encodeURIComponent(sessionName || "default"),
+        encodeURIComponent(live2DKey || "default"),
+    ].join(".");
+}
+
+function measureStageLive2DBaseSize() {
+    if (!live2dModel) {
+        return {
+            width: canvasHost?.clientWidth || 1,
+            height: canvasHost?.clientHeight || 1,
+        };
+    }
+    if (typeof live2dModel.getLocalBounds === "function") {
+        const bounds = live2dModel.getLocalBounds();
+        if (bounds && bounds.width > 0 && bounds.height > 0) {
+            return {
+                width: bounds.width,
+                height: bounds.height,
+            };
+        }
+    }
+    const scaleX = Math.max(Math.abs(live2dModel.scale?.x) || 0, 0.0001);
+    const scaleY = Math.max(Math.abs(live2dModel.scale?.y) || 0, 0.0001);
+    return {
+        width: (live2dModel.width || 1) / scaleX,
+        height: (live2dModel.height || 1) / scaleY,
+    };
+}
+
+function clampStageLive2DOffset() {
+    stageLive2DOffsetX = clampStageOffsetNumber(stageLive2DOffsetX, "x");
+    stageLive2DOffsetY = clampStageOffsetNumber(stageLive2DOffsetY, "y");
+}
+
+function clampStageOffsetNumber(value, axis) {
+    const number = Number.parseFloat(String(value));
+    if (!Number.isFinite(number)) {
+        return 0;
+    }
+    const rawSize = axis === "y"
+        ? Number(canvasHost?.clientHeight || 0)
+        : Number(canvasHost?.clientWidth || 0);
+    const size = Number.isFinite(rawSize) && rawSize > 1 ? rawSize : 1000;
+    return clamp(number, -size * STAGE_LIVE2D_PAN_LIMIT_FACTOR, size * STAGE_LIVE2D_PAN_LIMIT_FACTOR);
+}
+
 function updateStageZoomControls() {
-    const ready = canAdjustStageLive2DZoom();
+    const ready = canAdjustStageLive2DView();
     [zoomOutButton, zoomResetButton, zoomInButton].forEach((button) => {
         if (button) {
             button.disabled = !ready;
@@ -1613,6 +1775,8 @@ function updateStageZoomControls() {
     });
     if (canvasHost) {
         canvasHost.dataset.live2dZoom = String(Math.round(stageLive2DZoom * 1000) / 1000);
+        canvasHost.dataset.live2dOffsetX = String(Math.round(stageLive2DOffsetX * 100) / 100);
+        canvasHost.dataset.live2dOffsetY = String(Math.round(stageLive2DOffsetY * 100) / 100);
     }
 }
 

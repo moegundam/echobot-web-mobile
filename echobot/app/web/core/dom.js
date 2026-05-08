@@ -101,6 +101,7 @@ export const DOM = {
     stageBackgroundDetail: document.getElementById("stage-background-detail"),
     stageBackgroundImage: document.getElementById("stage-background-image"),
     stageBackgroundPanel: document.getElementById("stage-background-panel"),
+    stageBackgroundApplyButton: document.getElementById("stage-background-apply-button"),
     stageBackgroundPositionXInput: document.getElementById("stage-background-position-x-input"),
     stageBackgroundPositionXValue: document.getElementById("stage-background-position-x-value"),
     stageBackgroundPositionYInput: document.getElementById("stage-background-position-y-input"),

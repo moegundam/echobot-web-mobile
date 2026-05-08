@@ -108,9 +108,12 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn('id="model-profile-select"', html)
         self.assertIn('id="model-profile-link"', html)
         self.assertIn('id="session-settings-save-button"', html)
+        self.assertIn('id="stage-background-apply-button"', html)
         self.assertIn('data-i18n-key="console.applyToStage"', html)
+        self.assertIn('data-i18n-key="console.applyBackgroundToStage"', html)
+        self.assertIn('data-i18n-key="console.backgroundApplyHelp"', html)
         self.assertIn('data-language-switcher', html)
-        self.assertIn('app.js?v=stage-background-1', html)
+        self.assertIn('app.js?v=stage-background-2', html)
         self.assertIn('shell-i18n.js?v=language-menu-1', app_js)
         self.assertIn('shell-display-mode.js?v=display-menu-1', app_js)
         self.assertIn('id="console-advanced-overrides-panel"', html)
@@ -125,6 +128,7 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn("updateSessionRuntimeOverrides", app_js)
         self.assertIn("buildConsoleRuntimeOverride", app_js)
         self.assertIn("currentStageBackgroundOverride", app_js)
+        self.assertIn("DOM.stageBackgroundApplyButton", app_js)
         self.assertIn('source: "console"', app_js)
         self.assertIn('"/api/stage/events"', app_js)
         self.assertNotIn("/api/model-profiles/${encodeURIComponent(nextProfileId)}/activate", app_js)
@@ -133,6 +137,8 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn('"console.applyToStage": "Apply to Stage"', i18n_js)
         self.assertIn('"console.applyToStage": "套用到前台"', i18n_js)
         self.assertIn('"console.applyToStage": "应用到前台"', i18n_js)
+        self.assertIn('"console.applyBackgroundToStage"', i18n_js)
+        self.assertIn('"console.backgroundApplyHelp"', i18n_js)
         self.assertIn("getUiLanguage: () => i18n.language", app_js)
         self.assertIn('document.querySelectorAll("[data-language-switcher]")', i18n_js)
         self.assertNotIn('document.querySelector("[data-language-switcher]")', i18n_js)
@@ -248,6 +254,11 @@ class WebStaticAssetTests(unittest.TestCase):
             "console.shellSafetyFullAccess",
             "console.shellSafetyWorkspaceWrite",
             "console.shellSafetyReadOnly",
+            "console.applyBackgroundToStage",
+            "console.applyingBackgroundToStage",
+            "console.backgroundAppliedToStage",
+            "console.applyBackgroundToStageFailed",
+            "console.backgroundApplyHelp",
         ):
             self.assertIn(f'"{key}"', i18n_js)
 
@@ -352,6 +363,7 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn('id="stage-zoom-reset"', stage_html)
         self.assertIn('id="stage-zoom-in"', stage_html)
         self.assertIn('data-i18n-aria-label-key="stage.viewControlsAria"', stage_html)
+        self.assertIn('data-i18n-key="stage.viewHelp"', stage_html)
         self.assertIn('id="stage-menu-toggle"', stage_html)
         self.assertIn('id="stage-menu-panel"', stage_html)
         self.assertIn('id="stage-subtitle-toggle"', stage_html)
@@ -382,11 +394,19 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn("applyStageBackgroundFromContext", stage_js)
         self.assertIn("context.stage", stage_js)
         self.assertIn("handleStageWheelZoom", stage_js)
+        self.assertIn("handleStagePointerDown", stage_js)
+        self.assertIn("handleStagePointerMove", stage_js)
+        self.assertIn("handleStagePointerUp", stage_js)
         self.assertIn("handleStageTouchMove", stage_js)
         self.assertIn("handleStageGestureChange", stage_js)
         self.assertIn("handleStageZoomKeyDown", stage_js)
         self.assertIn("stageLive2DZoom", stage_js)
+        self.assertIn("stageLive2DOffsetX", stage_js)
+        self.assertIn("stageLive2DOffsetY", stage_js)
         self.assertIn("dataset.live2dZoom", stage_js)
+        self.assertIn("dataset.live2dOffsetX", stage_js)
+        self.assertIn("dataset.live2dOffsetY", stage_js)
+        self.assertIn("STAGE_LIVE2D_VIEW_STORAGE_PREFIX", stage_js)
         self.assertIn("canvasHost.dataset.live2dSelectionKey", stage_js)
         self.assertNotIn("normalizeLive2DConfig(config && config.live2d)", stage_js)
         self.assertIn("loadSessions", messenger_js)
@@ -470,6 +490,7 @@ class WebStaticAssetTests(unittest.TestCase):
             "stage.menu.title",
             "stage.viewControlsAria",
             "stage.viewControls",
+            "stage.viewHelp",
             "stage.zoomOut",
             "stage.zoomReset",
             "stage.zoomIn",

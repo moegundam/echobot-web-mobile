@@ -637,6 +637,10 @@ html[data-layout-mode="tablet"][data-viewport-orientation="landscape"] .settings
     margin-top: 14px;
 }
 
+.stage-background-apply-note {
+    margin: 8px 0 0;
+}
+
 .stage-background-transform-panel {
     margin-top: 14px;
     padding: 16px;

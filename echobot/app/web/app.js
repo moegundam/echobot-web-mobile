@@ -9,14 +9,14 @@ import {
     uploadChatFile,
     uploadChatImage,
 } from "./modules/api.js";
-import { wireAppEvents } from "./bootstrap/wire-events.js?v=site-public-6";
+import { wireAppEvents } from "./bootstrap/wire-events.js?v=background-apply-1";
 import { createUiStatusController } from "./bootstrap/ui-status.js?v=site-public-6";
 import { DOM } from "./core/dom.js";
 import { appState, audioState, sessionState } from "./core/store.js";
 import { createAsrModule } from "./features/asr.js?v=site-public-6";
 import { createChatModule } from "./features/chat/index.js?v=response-language-1";
 import { createLayoutModule } from "./features/layout/index.js?v=console-layout-1";
-import { createLive2DModule } from "./features/live2d/index.js?v=stage-background-1";
+import { createLive2DModule } from "./features/live2d/index.js?v=background-apply-1";
 import { createRolesModule } from "./features/roles.js?v=site-public-6";
 import { createSessionsModule } from "./features/sessions.js?v=console-save-1";
 import { createTtsModule } from "./features/tts.js?v=site-public-6";
@@ -310,16 +310,28 @@ function initializeModelProfileControls() {
 }
 
 function initializeConsoleSaveControls() {
-    if (!DOM.sessionSettingsSaveButton || DOM.sessionSettingsSaveButton.dataset.bound === "true") {
-        return;
+    if (DOM.sessionSettingsSaveButton && DOM.sessionSettingsSaveButton.dataset.bound !== "true") {
+        DOM.sessionSettingsSaveButton.dataset.bound = "true";
+        DOM.sessionSettingsSaveButton.addEventListener("click", () => {
+            void applyConsoleRuntimeForCurrentSession();
+        });
     }
-    DOM.sessionSettingsSaveButton.dataset.bound = "true";
-    DOM.sessionSettingsSaveButton.addEventListener("click", () => {
-        void applyConsoleRuntimeForCurrentSession();
-    });
+    if (DOM.stageBackgroundApplyButton && DOM.stageBackgroundApplyButton.dataset.bound !== "true") {
+        DOM.stageBackgroundApplyButton.dataset.bound = "true";
+        DOM.stageBackgroundApplyButton.addEventListener("click", () => {
+            void applyConsoleRuntimeForCurrentSession({
+                statusKey: "console.applyingBackgroundToStage",
+                successKey: "console.backgroundAppliedToStage",
+                failureKey: "console.applyBackgroundToStageFailed",
+            });
+        });
+    }
 }
 
-async function applyConsoleRuntimeForCurrentSession() {
+async function applyConsoleRuntimeForCurrentSession(options = {}) {
+    const statusKey = options.statusKey || "console.applyingToStage";
+    const successKey = options.successKey || "console.appliedToStage";
+    const failureKey = options.failureKey || "console.applyToStageFailed";
     const sessionName = normalizeSessionName(
         sessionState.currentSessionName
         || (appState.config && appState.config.session_name)
@@ -336,8 +348,8 @@ async function applyConsoleRuntimeForCurrentSession() {
 
     setConsoleSaveBusy(true);
     status.setRunStatus(
-        i18n.t("console.applyingToStage"),
-        "console.applyingToStage",
+        i18n.t(statusKey),
+        statusKey,
     );
 
     try {
@@ -355,13 +367,13 @@ async function applyConsoleRuntimeForCurrentSession() {
         });
         await publishStageRuntimeRefresh(sessionName);
         status.setRunStatus(
-            i18n.t("console.appliedToStage", { session: sessionName }),
-            "console.appliedToStage",
+            i18n.t(successKey, { session: sessionName }),
+            successKey,
             { session: sessionName },
         );
     } catch (error) {
         console.error(error);
-        status.setRunStatus(error.message || i18n.t("console.applyToStageFailed"));
+        status.setRunStatus(error.message || i18n.t(failureKey));
     } finally {
         setConsoleSaveBusy(false);
     }
@@ -444,6 +456,9 @@ async function publishStageRuntimeRefresh(sessionName) {
 function setConsoleSaveBusy(isBusy) {
     if (DOM.sessionSettingsSaveButton) {
         DOM.sessionSettingsSaveButton.disabled = Boolean(isBusy);
+    }
+    if (DOM.stageBackgroundApplyButton) {
+        DOM.stageBackgroundApplyButton.disabled = Boolean(isBusy);
     }
 }
 
