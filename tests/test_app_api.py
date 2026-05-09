@@ -1892,6 +1892,131 @@ class AppApiTests(unittest.TestCase):
             self.assertEqual(403, blocked_heartbeat_update.status_code)
             self.assertEqual(200, allowed_channel_update.status_code)
 
+    def test_trusted_user_channel_config_uses_owner_scope(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            config_path = workspace / ".echobot" / "channels.json"
+
+            with patch.dict(
+                os.environ,
+                {
+                    "ECHOBOT_TRUSTED_USER_HEADER_ENABLED": "true",
+                    "ECHOBOT_TRUSTED_USER_REQUIRED": "true",
+                    "ECHOBOT_ADMIN_ALLOWLIST": "admin@example.test",
+                },
+                clear=False,
+            ):
+                app = create_app(
+                    runtime_options=RuntimeOptions(
+                        workspace=workspace,
+                        no_tools=True,
+                        no_skills=True,
+                        no_memory=True,
+                        no_heartbeat=True,
+                    ),
+                    channel_config_path=config_path,
+                    context_builder=build_test_context,
+                )
+
+            admin_headers = {DEFAULT_TRUSTED_USER_HEADER: "admin@example.test"}
+            user_headers = {DEFAULT_TRUSTED_USER_HEADER: "user@example.test"}
+            raw_config = {
+                "telegram": {
+                    "enabled": False,
+                    "allow_from": ["12345"],
+                    "mirror_to_stage": True,
+                    "stage_session_name": "front",
+                    "bot_token": "owner-telegram-secret",
+                },
+            }
+
+            with TestClient(app) as client:
+                updated = client.put(
+                    "/api/channels/config",
+                    headers=admin_headers,
+                    json=raw_config,
+                )
+                readonly = client.get("/api/channels/config", headers=user_headers)
+                integrations = client.get("/api/channel-integrations", headers=user_headers)
+                smoke = client.post(
+                    "/api/channel-integrations/telegram/smoke",
+                    headers=admin_headers,
+                )
+                user_runtime = asyncio.run(app.state.runtime.for_user("user@example.test"))
+
+            self.assertEqual(200, updated.status_code)
+            self.assertEqual(200, readonly.status_code)
+            self.assertEqual(200, integrations.status_code)
+            self.assertEqual(200, smoke.status_code)
+            self.assertFalse(hasattr(user_runtime, "channel_service"))
+            self.assertFalse((user_runtime.storage_root / "channels.json").exists())
+            readonly_text = json.dumps(readonly.json())
+            integrations_text = json.dumps(integrations.json())
+            self.assertNotIn("owner-telegram-secret", readonly_text)
+            self.assertNotIn("owner-telegram-secret", integrations_text)
+            self.assertTrue(readonly.json()["telegram"]["bot_token_configured"])
+            telegram_integration = next(
+                item
+                for item in integrations.json()["integrations"]
+                if item["id"] == "telegram"
+            )
+            self.assertTrue(telegram_integration["configured"])
+            self.assertEqual("front", telegram_integration["stage_session_name"])
+
+    def test_trusted_admin_local_channel_test_uses_owner_gateway_bus(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+
+            with patch.dict(
+                os.environ,
+                {
+                    "ECHOBOT_TRUSTED_USER_HEADER_ENABLED": "true",
+                    "ECHOBOT_TRUSTED_USER_REQUIRED": "true",
+                    "ECHOBOT_ADMIN_ALLOWLIST": "admin@example.test",
+                },
+                clear=False,
+            ):
+                app = create_app(
+                    runtime_options=RuntimeOptions(
+                        workspace=workspace,
+                        no_tools=True,
+                        no_skills=True,
+                        no_memory=True,
+                        no_heartbeat=True,
+                    ),
+                    channel_config_path=workspace / ".echobot" / "channels.json",
+                    context_builder=build_test_context,
+                )
+
+            admin_headers = {DEFAULT_TRUSTED_USER_HEADER: "admin@example.test"}
+
+            with TestClient(app) as client:
+                client.put(
+                    "/api/channels/config",
+                    headers=admin_headers,
+                    json={
+                        "discord": {
+                            "enabled": False,
+                            "allow_from": ["discord-user"],
+                            "mirror_to_stage": True,
+                            "stage_session_name": "ops-room",
+                        },
+                    },
+                )
+                accepted = client.post(
+                    "/api/channels/discord/local-test-message",
+                    headers=admin_headers,
+                    json={
+                        "chat_id": "channel-1",
+                        "sender_id": "discord-user",
+                        "text": "ping",
+                    },
+                )
+
+            self.assertEqual(200, accepted.status_code)
+            self.assertTrue(accepted.json()["accepted"])
+            self.assertEqual("discord", accepted.json()["channel"])
+
     def test_trusted_user_header_protects_product_routes_and_api_docs(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             workspace = Path(temp_dir)

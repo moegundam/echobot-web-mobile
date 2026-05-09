@@ -10,6 +10,7 @@ from ...channels import InboundMessage, get_channel_definition
 from ...channels.types import ChannelAddress
 from ...runtime.sessions import normalize_session_name
 from ..schemas import channel_config_payload
+from ..services.channel_owner_scope import channel_owner_scope
 from ..state import get_app_runtime, require_admin_user
 
 
@@ -36,12 +37,14 @@ class LocalChannelTestMessageRequest(BaseModel):
 
 @router.get("/channels/definitions")
 async def get_channel_definitions(runtime=Depends(get_app_runtime)) -> list[dict[str, Any]]:
-    return runtime.channel_service.get_definitions()
+    scope = _channel_owner_scope_or_503(runtime)
+    return scope.service.get_definitions()
 
 
 @router.get("/channels/config")
 async def get_channel_config(runtime=Depends(get_app_runtime)) -> dict[str, Any]:
-    config = await runtime.channel_service.get_config()
+    scope = _channel_owner_scope_or_503(runtime)
+    config = await scope.service.get_config()
     return channel_config_payload(config)
 
 
@@ -51,8 +54,9 @@ async def update_channel_config(
     runtime=Depends(get_app_runtime),
     _admin_user: str = Depends(require_admin_user),
 ) -> dict[str, Any]:
+    scope = _channel_owner_scope_or_503(runtime)
     try:
-        updated = await runtime.channel_service.update_config(raw_config)
+        updated = await scope.service.update_config(raw_config)
     except TypeError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return channel_config_payload(updated)
@@ -60,12 +64,14 @@ async def update_channel_config(
 
 @router.get("/channels/status")
 async def get_channel_status(runtime=Depends(get_app_runtime)) -> dict[str, dict[str, bool]]:
-    return await runtime.channel_service.get_status()
+    scope = _channel_owner_scope_or_503(runtime)
+    return await scope.service.get_status()
 
 
 @router.get("/channels/stage-targets")
 async def get_channel_stage_targets(runtime=Depends(get_app_runtime)) -> dict[str, Any]:
-    return await runtime.channel_service.get_stage_targets()
+    scope = _channel_owner_scope_or_503(runtime)
+    return await scope.service.get_stage_targets()
 
 
 @router.post("/channels/{channel_name}/smoke")
@@ -74,8 +80,9 @@ async def smoke_channel(
     runtime=Depends(get_app_runtime),
     _admin_user: str = Depends(require_admin_user),
 ) -> dict[str, Any]:
+    scope = _channel_owner_scope_or_503(runtime)
     try:
-        return await runtime.channel_service.smoke_channel(channel_name)
+        return await scope.service.smoke_channel(channel_name)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Unknown channel") from exc
 
@@ -90,10 +97,11 @@ async def publish_local_channel_test_message(
     normalized_channel_name = str(channel_name or "").strip().lower()
     if get_channel_definition(normalized_channel_name) is None:
         raise HTTPException(status_code=404, detail="Unknown channel")
-    if runtime.bus is None or runtime.channel_service is None:
+    scope = _channel_owner_scope_or_503(runtime)
+    if scope.bus is None:
         raise HTTPException(status_code=503, detail="Channel gateway is not ready")
 
-    config = await runtime.channel_service.get_config()
+    config = await scope.service.get_config()
     channel_config = config.get(normalized_channel_name, {}) if isinstance(config, dict) else {}
     if not isinstance(channel_config, dict):
         channel_config = {}
@@ -108,7 +116,7 @@ async def publish_local_channel_test_message(
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    await runtime.bus.publish_inbound(
+    await scope.bus.publish_inbound(
         InboundMessage(
             address=ChannelAddress(
                 channel=normalized_channel_name,
@@ -129,7 +137,7 @@ async def publish_local_channel_test_message(
         "channel": normalized_channel_name,
         "session_name": session_name,
         "external_delivery": bool(
-            runtime.channel_status()
+            scope.runtime.channel_status()
             .get(normalized_channel_name, {})
             .get("running", False)
         ),
@@ -142,9 +150,10 @@ async def receive_discord_webhook(
     runtime=Depends(get_app_runtime),
     x_echobot_discord_secret: str = Header(default=""),
 ) -> dict[str, Any]:
-    if runtime.bus is None or runtime.channel_service is None:
+    scope = _channel_owner_scope_or_503(runtime)
+    if scope.bus is None:
         raise HTTPException(status_code=503, detail="Discord gateway is not ready")
-    config = await runtime.channel_service.get_config()
+    config = await scope.service.get_config()
     discord_config = config.get("discord", {}) if isinstance(config, dict) else {}
     if not isinstance(discord_config, dict):
         discord_config = {}
@@ -170,7 +179,7 @@ async def receive_discord_webhook(
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    await runtime.bus.publish_inbound(
+    await scope.bus.publish_inbound(
         InboundMessage(
             address=ChannelAddress(
                 channel="discord",
@@ -192,3 +201,10 @@ async def receive_discord_webhook(
         "channel": "discord",
         "session_name": session_name,
     }
+
+
+def _channel_owner_scope_or_503(runtime):
+    try:
+        return channel_owner_scope(runtime)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc

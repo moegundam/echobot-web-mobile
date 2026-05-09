@@ -32,6 +32,7 @@ from ..services.session_catalog import (
     project_channel_integrations,
     voice_profile_from_profile,
 )
+from ..services.channel_owner_scope import channel_owner_scope
 from ..services.runtime_profile_composer import (
     live2d_runtime_profile,
     llm_runtime_profile,
@@ -310,10 +311,9 @@ async def smoke_channel_integration(
     runtime=Depends(get_app_runtime),
     _admin_user: str = Depends(require_admin_user),
 ) -> dict[str, Any]:
-    if runtime.channel_service is None:
-        raise HTTPException(status_code=503, detail="Channel service is not ready")
+    scope = _channel_owner_scope_or_503(runtime)
     try:
-        return await runtime.channel_service.smoke_channel(integration_id)
+        return await scope.service.smoke_channel(integration_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Unknown channel integration") from exc
 
@@ -519,18 +519,24 @@ async def _live2d_catalog(runtime) -> list[dict[str, Any]]:
 
 
 async def _channel_integrations(runtime):
-    if runtime.channel_service is None:
-        raise HTTPException(status_code=503, detail="Channel service is not ready")
-    definitions = runtime.channel_service.get_definitions()
-    config = await runtime.channel_service.get_config()
-    status = await runtime.channel_service.get_status()
-    stage_targets = await runtime.channel_service.get_stage_targets()
+    scope = _channel_owner_scope_or_503(runtime)
+    definitions = scope.service.get_definitions()
+    config = await scope.service.get_config()
+    status = await scope.service.get_status()
+    stage_targets = await scope.service.get_stage_targets()
     return project_channel_integrations(
         definitions=definitions,
         config=config,
         status=status,
         stage_targets=stage_targets,
     )
+
+
+def _channel_owner_scope_or_503(runtime):
+    try:
+        return channel_owner_scope(runtime)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 async def _character_for_role(

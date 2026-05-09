@@ -11,7 +11,6 @@ from ...runtime.bootstrap import RuntimeContext
 from ...runtime.session_service import SessionLifecycleService
 from ...tts import TTSService
 from ..auth import TrustedUserConfig, user_storage_key
-from .channels import ChannelService
 from .chat import ChatService
 from .character_profiles import CharacterProfileSettingsService
 from .live2d_models import Live2DModelService
@@ -57,7 +56,6 @@ class UserScopedRuntime:
         self.session_runtime_override_service = SessionRuntimeOverrideService()
         self.tts_service: TTSService | None = None
         self.asr_service: ASRService | None = None
-        self.channel_service: ChannelService | None = None
         self._started = False
 
     @property
@@ -114,7 +112,6 @@ class UserScopedRuntime:
             self.voice_model_service,
             self.live2d_model_service,
         ) = build_runtime_model_services(self.model_profile_service)
-        self.channel_service = self.parent.channel_service
         self.asr_service = self.parent._asr_service_builder(self.context.workspace)
         self.tts_service = self.parent._tts_service_builder(self.context.workspace)
         self.web_console_service = WebConsoleService(
