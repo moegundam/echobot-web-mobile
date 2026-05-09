@@ -151,6 +151,7 @@ A model profile management page was added:
 - Discord can store enabled state, allow list, bot token, webhook URL, webhook secret, application/guild/channel ids. It currently supports the secret-protected `POST /api/channels/discord/webhook` inbound bridge, outbound webhook delivery, and native Discord bot events after `discord.py` is installed and Message Content Intent is enabled.
 - Secret fields only expose configured status in the API and UI; plaintext values are never returned.
 - `POST /api/channels/{channel}/smoke` provides safe local readiness checks without echoing tokens in responses.
+- `scripts/telegram_gateway_smoke.py` and `scripts/discord_gateway_smoke.py` rerun gateway checks. Plain text validates session history, while deterministic `/ping` / `/smoke` commands validate Stage replay because those commands do not write normal conversation history.
 - `GET /api/channels/stage-targets` exposes a secret-free messaging target list so `/stage` and `/messenger` can select the Stage session bound to a configured platform.
 - Telegram token validation, Bot API `getMe`, poller startup, Bot API outbound, session binding, and Stage target projection have passed local checks; the test token is stored only in repo-external ignored runtime config and is not committed.
 - Production messaging gateways can set `mirror_to_stage` and `stage_session_name`; real Telegram platform inbound has been verified with Telegram Desktop `/ping TG_OK`, including the EchoBot reply and `/stage` mirror.

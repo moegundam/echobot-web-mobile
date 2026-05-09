@@ -65,6 +65,32 @@ Public safety check passed.
 - Telegram/Discord local gateway smoke 已確認 EchoBot 內部 session routing 與 Stage replay；真正從手機或 Discord/Telegram client 發訊息到 bot 的驗收仍屬外部平台 E2E，可在需要時另外跑。
 - Cloudflare Tunnel、Access、真機麥克風、Open WebUI 實機工作台連線屬部署環境驗收，不在本機無人工流程內假裝完成。
 
+### 追加驗證：2026-05-09 20:55
+
+本輪追加了可重跑的 Telegram gateway smoke 腳本，並修正 TG/DC smoke 對 deterministic `/ping` / `/smoke` command 的判定：這類 gateway command 會直接回覆並 mirror 到 Stage，不寫入一般 session history，因此 smoke 應驗證 Stage replay；一般文字訊息才驗證 session history。
+
+```text
+.venv/bin/python scripts/telegram_gateway_smoke.py --base-url http://127.0.0.1:8001 --session-name final-telegram-smoke --text '/ping TG_FINAL_OK' --timeout 120 --require-poller-running
+Telegram gateway smoke passed.
+
+.venv/bin/python scripts/discord_gateway_smoke.py --base-url http://127.0.0.1:8001 --session-name final-discord-smoke --text '/ping DISCORD_FINAL_OK' --timeout 120 --require-native-running
+Discord gateway smoke passed.
+
+.venv/bin/python scripts/echobot_entrypoint.py doctor
+local_health: ok
+gb10_reverse_health: ok
+cloudflared_auth: warn - origin certificate is missing.
+
+.venv/bin/python scripts/echobot_entrypoint.py smoke-openwebui --target local --session-name final-entrypoint-openwebui --target-user-id echobot-smoke@local
+Open WebUI bridge smoke passed.
+
+.venv/bin/python scripts/browser_smoke.py --base-url http://127.0.0.1:8001 --viewport 360x800 --viewport 390x844 --viewport 768x1024 --viewport 1280x900
+Browser smoke passed.
+
+.venv/bin/python -m pytest tests/test_entrypoint_scripts.py tests/test_gateway.py -q
+33 passed, 1 warning.
+```
+
 ## English version
 
 ### Scope
@@ -129,3 +155,29 @@ Public safety check passed.
 - Console runtime changes should still affect only the current testing/operation state and must not directly overwrite Admin's persistent model, voice, or Live2D profiles.
 - Telegram/Discord local gateway smoke verifies EchoBot's internal session routing and Stage replay. True platform E2E from a mobile Telegram or Discord client to the bot remains an external-platform acceptance check.
 - Cloudflare Tunnel, Access, real-device microphone, and a real Open WebUI workstation connection are deployment-environment checks and are not claimed as complete by the local no-human flow.
+
+### Follow-Up Verification: 2026-05-09 20:55
+
+This round added a rerunnable Telegram gateway smoke script and fixed deterministic `/ping` / `/smoke` command handling in the TG/DC smoke scripts. These gateway commands reply directly and mirror to Stage without writing normal conversation history, so the smoke check should validate Stage replay for command messages and keep session-history validation for plain text messages.
+
+```text
+.venv/bin/python scripts/telegram_gateway_smoke.py --base-url http://127.0.0.1:8001 --session-name final-telegram-smoke --text '/ping TG_FINAL_OK' --timeout 120 --require-poller-running
+Telegram gateway smoke passed.
+
+.venv/bin/python scripts/discord_gateway_smoke.py --base-url http://127.0.0.1:8001 --session-name final-discord-smoke --text '/ping DISCORD_FINAL_OK' --timeout 120 --require-native-running
+Discord gateway smoke passed.
+
+.venv/bin/python scripts/echobot_entrypoint.py doctor
+local_health: ok
+gb10_reverse_health: ok
+cloudflared_auth: warn - origin certificate is missing.
+
+.venv/bin/python scripts/echobot_entrypoint.py smoke-openwebui --target local --session-name final-entrypoint-openwebui --target-user-id echobot-smoke@local
+Open WebUI bridge smoke passed.
+
+.venv/bin/python scripts/browser_smoke.py --base-url http://127.0.0.1:8001 --viewport 360x800 --viewport 390x844 --viewport 768x1024 --viewport 1280x900
+Browser smoke passed.
+
+.venv/bin/python -m pytest tests/test_entrypoint_scripts.py tests/test_gateway.py -q
+33 passed, 1 warning.
+```

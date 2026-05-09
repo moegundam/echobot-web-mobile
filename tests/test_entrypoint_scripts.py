@@ -24,6 +24,25 @@ def test_openwebui_smoke_reads_token_file_without_echoing_secret(tmp_path: Path)
     assert smoke._read_token("explicit-token", str(token_file)) == "explicit-token"
 
 
+def test_telegram_smoke_default_sender_respects_allowlist() -> None:
+    smoke = _load_script("telegram_gateway_smoke")
+
+    assert smoke._default_sender([]) == "local-telegram-user"
+    assert smoke._default_sender(["*"]) == "local-telegram-user"
+    assert smoke._default_sender(["12345"]) == "12345"
+
+
+def test_gateway_smoke_scripts_detect_deterministic_commands() -> None:
+    telegram = _load_script("telegram_gateway_smoke")
+    discord = _load_script("discord_gateway_smoke")
+
+    for smoke in (telegram, discord):
+        assert smoke._is_gateway_smoke_command("/ping OK")
+        assert smoke._is_gateway_smoke_command("/ping@EchoBot OK")
+        assert smoke._is_gateway_smoke_command("/smoke OK")
+        assert not smoke._is_gateway_smoke_command("Reply exactly: OK")
+
+
 def test_launchd_app_plist_uses_token_file_not_token_value(tmp_path: Path) -> None:
     entrypoint = _load_script("echobot_entrypoint")
     token_file = tmp_path / "bridge-token"

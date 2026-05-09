@@ -13,18 +13,18 @@ from typing import Any
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Smoke-test EchoBot's Discord gateway without printing secrets.",
+        description="Smoke-test EchoBot's Telegram gateway without printing secrets.",
     )
     parser.add_argument("--base-url", default="http://127.0.0.1:8001")
-    parser.add_argument("--session-name", default="discord-smoke")
+    parser.add_argument("--session-name", default="telegram-smoke")
     parser.add_argument("--sender-id", default="")
-    parser.add_argument("--chat-id", default="discord-smoke-channel")
-    parser.add_argument("--text", default="Reply with exactly: discord-ok")
+    parser.add_argument("--chat-id", default="telegram-smoke-chat")
+    parser.add_argument("--text", default="/ping telegram-ok")
     parser.add_argument("--timeout", type=float, default=120.0)
     parser.add_argument(
-        "--require-native-running",
+        "--require-poller-running",
         action="store_true",
-        help="Fail when the native Discord bot is not running.",
+        help="Fail when the Telegram poller is not running.",
     )
     parser.add_argument(
         "--skip-stage-sse",
@@ -35,55 +35,48 @@ def main() -> int:
 
     base_url = args.base_url.rstrip("/")
     try:
-        health = _request_json("GET", f"{base_url}/api/health")
+        _request_json("GET", f"{base_url}/api/health")
         config = _request_json("GET", f"{base_url}/api/channels/config")
         status = _request_json("GET", f"{base_url}/api/channels/status")
-        discord_config = config.get("discord") if isinstance(config, dict) else {}
-        discord_status = status.get("discord") if isinstance(status, dict) else {}
-        if not isinstance(discord_config, dict):
-            discord_config = {}
-        if not isinstance(discord_status, dict):
-            discord_status = {}
+        telegram_config = config.get("telegram") if isinstance(config, dict) else {}
+        telegram_status = status.get("telegram") if isinstance(status, dict) else {}
+        if not isinstance(telegram_config, dict):
+            telegram_config = {}
+        if not isinstance(telegram_status, dict):
+            telegram_status = {}
 
-        enabled = bool(discord_config.get("enabled") or discord_status.get("enabled"))
-        running = bool(discord_status.get("running"))
-        configured = bool(discord_config.get("bot_token_configured")) or bool(
-            str(discord_config.get("webhook_url") or "").strip()
-        )
+        enabled = bool(telegram_config.get("enabled") or telegram_status.get("enabled"))
+        running = bool(telegram_status.get("running"))
+        configured = bool(telegram_config.get("bot_token_configured"))
         allow_from = [
             str(item)
-            for item in (discord_config.get("allow_from") or [])
+            for item in (telegram_config.get("allow_from") or [])
             if str(item).strip()
         ]
         sender_id = args.sender_id.strip() or _default_sender(allow_from)
 
         print(
-            "discord config:",
+            "telegram config:",
             json.dumps(
                 {
                     "enabled": enabled,
                     "running": running,
                     "configured": configured,
-                    "bot_token_configured": bool(discord_config.get("bot_token_configured")),
-                    "webhook_url_configured": bool(
-                        str(discord_config.get("webhook_url") or "").strip()
-                    ),
-                    "webhook_secret_configured": bool(
-                        discord_config.get("webhook_secret_configured")
-                    ),
+                    "bot_token_configured": bool(telegram_config.get("bot_token_configured")),
                     "allow_from_count": len(allow_from),
+                    "mirror_to_stage": bool(telegram_config.get("mirror_to_stage")),
                 },
                 ensure_ascii=False,
             ),
         )
-        if args.require_native_running and not running:
-            print("native Discord bot is not running", file=sys.stderr)
+        if args.require_poller_running and not running:
+            print("Telegram poller is not running", file=sys.stderr)
             return 2
 
         _ensure_session(base_url, args.session_name)
         accepted = _request_json(
             "POST",
-            f"{base_url}/api/channels/discord/local-test-message",
+            f"{base_url}/api/channels/telegram/local-test-message",
             {
                 "chat_id": args.chat_id,
                 "sender_id": sender_id,
@@ -111,20 +104,20 @@ def main() -> int:
             _read_stage_event_replay(base_url, args.session_name)
         if not running:
             print(
-                "native delivery not verified: configure a repo-external Discord bot token, "
-                "enable Message Content Intent in Discord Developer Portal, and restart EchoBot.",
+                "native delivery not verified: configure a repo-external Telegram bot token "
+                "and restart EchoBot.",
             )
-        print("Discord gateway smoke passed.")
+        print("Telegram gateway smoke passed.")
         return 0
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
         print(
-            f"Discord gateway smoke failed: HTTP {exc.code}: {detail}",
+            f"Telegram gateway smoke failed: HTTP {exc.code}: {detail}",
             file=sys.stderr,
         )
         return 1
     except Exception as exc:
-        print(f"Discord gateway smoke failed: {exc}", file=sys.stderr)
+        print(f"Telegram gateway smoke failed: {exc}", file=sys.stderr)
         return 1
 
 
@@ -151,8 +144,8 @@ def _ensure_session(base_url: str, session_name: str) -> None:
             f"{base_url}/api/sessions",
             {
                 "name": session_name,
-                "channel_type": "discord",
-                "channel_integration_id": "discord",
+                "channel_type": "telegram",
+                "channel_integration_id": "telegram",
                 "route_mode": "chat_only",
             },
         )
@@ -217,7 +210,7 @@ def _read_stage_event_replay(base_url: str, session_name: str) -> None:
 
 def _default_sender(allow_from: list[str]) -> str:
     if not allow_from or "*" in allow_from:
-        return "local-discord-user"
+        return "local-telegram-user"
     return allow_from[0]
 
 

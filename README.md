@@ -151,6 +151,7 @@ python -m echobot app --host 127.0.0.1 --port 8001
 - Discord 可設定 enabled、allow list、bot token、webhook URL、webhook secret、application/guild/channel id；目前支援受 secret 保護的 `POST /api/channels/discord/webhook` inbound bridge、outbound webhook 發送，以及安裝 `discord.py` 並開啟 Message Content Intent 後的原生 Discord bot events。
 - Secret 欄位在 API 與 UI 中只顯示 configured 狀態，不回傳明文。
 - `POST /api/channels/{channel}/smoke` 提供安全的本機 readiness check，不會把 token 回傳到 response。
+- `scripts/telegram_gateway_smoke.py` 與 `scripts/discord_gateway_smoke.py` 可重跑 gateway 檢查；一般文字會驗證 session history，`/ping` / `/smoke` deterministic command 會改驗證 Stage replay，因為這類 command 不寫入一般對話 history。
 - `GET /api/channels/stage-targets` 提供無 secret 的通訊 target 清單，讓 `/stage` 與 `/messenger` 直接選擇已設定平台綁定的前台 session。
 - Telegram token、Bot API `getMe`、poller 啟動、Bot API outbound、session 綁定與 Stage target projection 已做過本機驗證；測試 token 只放在 repo 外的 ignored runtime config，不寫入版本庫。
 - 正式通訊 gateway 可設定 `mirror_to_stage` 與 `stage_session_name`；Telegram 真實平台 inbound 已用 Telegram Desktop `/ping TG_OK` 驗證，EchoBot 回覆與 `/stage` 同步皆成功。
