@@ -17,6 +17,7 @@ DEFAULT_PAGES = [
     "/admin/live2d",
     "/admin/channels",
     "/admin/openwebui",
+    "/admin/deployment",
     "/admin/guide",
     "/admin/structure",
 ]

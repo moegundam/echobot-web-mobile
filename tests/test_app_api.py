@@ -2048,6 +2048,7 @@ class AppApiTests(unittest.TestCase):
                 "/admin",
                 "/admin/guide",
                 "/admin/structure",
+                "/admin/deployment",
                 "/admin/channels",
                 "/admin/characters",
                 "/admin/openwebui",
@@ -2057,6 +2058,7 @@ class AppApiTests(unittest.TestCase):
                 "/docs",
                 "/redoc",
                 "/openapi.json",
+                "/api/deployment/status",
             ]
             headers = {DEFAULT_TRUSTED_USER_HEADER: "alpha@example.test"}
 
@@ -2077,18 +2079,20 @@ class AppApiTests(unittest.TestCase):
             self.assertIn("data-display-mode-switcher", authorized[3].text)
             self.assertIn('id="guide-root"', authorized[4].text)
             self.assertIn("data-display-mode-switcher", authorized[4].text)
-            self.assertIn('id="channels-root"', authorized[6].text)
+            self.assertIn('id="deployment-root"', authorized[6].text)
             self.assertIn("data-display-mode-switcher", authorized[6].text)
-            self.assertIn('id="characters-root"', authorized[7].text)
+            self.assertIn('id="channels-root"', authorized[7].text)
             self.assertIn("data-display-mode-switcher", authorized[7].text)
-            self.assertIn('id="openwebui-root"', authorized[8].text)
+            self.assertIn('id="characters-root"', authorized[8].text)
             self.assertIn("data-display-mode-switcher", authorized[8].text)
-            self.assertIn('id="models-root"', authorized[9].text)
+            self.assertIn('id="openwebui-root"', authorized[9].text)
             self.assertIn("data-display-mode-switcher", authorized[9].text)
-            self.assertIn('id="voice-models-root"', authorized[10].text)
+            self.assertIn('id="models-root"', authorized[10].text)
             self.assertIn("data-display-mode-switcher", authorized[10].text)
-            self.assertIn('id="live2d-root"', authorized[11].text)
+            self.assertIn('id="voice-models-root"', authorized[11].text)
             self.assertIn("data-display-mode-switcher", authorized[11].text)
+            self.assertIn('id="live2d-root"', authorized[12].text)
+            self.assertIn("data-display-mode-switcher", authorized[12].text)
 
     def test_web_page_route_registry_serves_known_shells(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -2113,6 +2117,7 @@ class AppApiTests(unittest.TestCase):
                 "/admin": 'id="admin-root"',
                 "/admin/guide": 'id="guide-root"',
                 "/admin/structure": 'id="structure-root"',
+                "/admin/deployment": 'id="deployment-root"',
                 "/admin/sessions": 'id="sessions-root"',
                 "/admin/channels": 'id="channels-root"',
                 "/admin/characters": 'id="characters-root"',
@@ -2135,6 +2140,57 @@ class AppApiTests(unittest.TestCase):
             )
             for path, marker in expected_markers.items():
                 self.assertIn(marker, responses[path].text)
+
+    def test_deployment_status_is_read_only_and_reports_safe_readiness(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            workflow_path = workspace / ".github" / "workflows" / "ci.yml"
+            workflow_path.parent.mkdir(parents=True, exist_ok=True)
+            workflow_path.write_text(
+                "\n".join(
+                    [
+                        "name: CI",
+                        "jobs:",
+                        "  tests:",
+                        "    steps:",
+                        "      - uses: actions/checkout@v6",
+                        "      - uses: actions/setup-python@v6",
+                    ],
+                ),
+                encoding="utf-8",
+            )
+            app = create_app(
+                runtime_options=RuntimeOptions(
+                    workspace=workspace,
+                    no_tools=True,
+                    no_skills=True,
+                    no_memory=True,
+                    no_heartbeat=True,
+                ),
+                channel_config_path=workspace / ".echobot" / "channels.json",
+                context_builder=build_test_context,
+            )
+
+            with TestClient(app) as client:
+                response = client.get("/api/deployment/status")
+
+            self.assertEqual(200, response.status_code)
+            payload = response.json()
+            self.assertEqual("ok", payload["local"]["health"])
+            self.assertEqual(str(workspace.resolve()), payload["local"]["workspace"])
+            self.assertIn("cloudflare", payload)
+            self.assertIn("github_actions", payload)
+            self.assertTrue(payload["github_actions"]["node24_ready"])
+            self.assertFalse(payload["simple_deploy"]["enabled"])
+            self.assertIn("hostname", payload["simple_deploy"]["future_inputs"])
+            self.assertIn("next_step_keys", payload["cloudflare"])
+            self.assertEqual(
+                "deployment.readiness.localEchoBot",
+                payload["readiness"][0]["name_key"],
+            )
+            self.assertTrue(
+                any("cloudflared tunnel login" in command for command in payload["commands"]),
+            )
 
     def test_openwebui_bridge_uses_bearer_token_and_narrow_tool_spec(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

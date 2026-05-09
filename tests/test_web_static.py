@@ -638,24 +638,31 @@ class WebStaticAssetTests(unittest.TestCase):
         sessions_html = (WEB_ROOT / "sessions.html").read_text(encoding="utf-8")
         characters_html = (WEB_ROOT / "characters.html").read_text(encoding="utf-8")
         openwebui_html = (WEB_ROOT / "openwebui.html").read_text(encoding="utf-8")
+        deployment_html = (WEB_ROOT / "deployment.html").read_text(encoding="utf-8")
         guide_html = (WEB_ROOT / "guide.html").read_text(encoding="utf-8")
         structure_html = (WEB_ROOT / "structure.html").read_text(encoding="utf-8")
         models_js = (WEB_ROOT / "models-app.js").read_text(encoding="utf-8")
         voice_js = (WEB_ROOT / "voice-models-app.js").read_text(encoding="utf-8")
         live2d_js = (WEB_ROOT / "live2d-app.js").read_text(encoding="utf-8")
+        deployment_js = (WEB_ROOT / "deployment-app.js").read_text(encoding="utf-8")
+        admin_js = (WEB_ROOT / "admin-app.js").read_text(encoding="utf-8")
+        openwebui_js = (WEB_ROOT / "openwebui-app.js").read_text(encoding="utf-8")
         i18n_js = (WEB_ROOT / "shell-i18n.js").read_text(encoding="utf-8")
 
         self.assertIn('WebPageRoute("/admin/voice-models"', app_routes)
         self.assertIn('WebPageRoute("/admin/live2d"', app_routes)
+        self.assertIn('WebPageRoute("/admin/deployment"', app_routes)
         self.assertIn('href="/admin/voice-models"', admin_html)
         self.assertIn('href="/admin/live2d"', admin_html)
+        self.assertIn('href="/admin/deployment"', admin_html)
         expected_links_by_page = {
             "sessions": (sessions_html, ("/admin/models", "/admin/voice-models", "/admin/live2d", "/admin/openwebui")),
             "characters": (characters_html, ("/admin/models", "/admin/voice-models", "/admin/live2d", "/admin/openwebui")),
             "models": (models_html, ("/admin/voice-models", "/admin/live2d", "/admin/openwebui")),
             "voice": (voice_html, ("/admin/models", "/admin/live2d", "/admin/openwebui")),
             "live2d": (live2d_html, ("/admin/models", "/admin/voice-models", "/admin/openwebui")),
-            "openwebui": (openwebui_html, ("/admin/models", "/admin/voice-models", "/admin/live2d")),
+            "openwebui": (openwebui_html, ("/admin/models", "/admin/voice-models", "/admin/live2d", "/admin/deployment")),
+            "deployment": (deployment_html, ("/admin", "/admin/openwebui", "/admin/channels", "/api/health")),
             "guide": (guide_html, ("/admin/models", "/admin/voice-models", "/admin/live2d", "/admin/openwebui")),
             "structure": (structure_html, ("/admin/models", "/admin/voice-models", "/admin/live2d", "/admin/openwebui")),
         }
@@ -709,11 +716,27 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn("deleteSelectedProfile", live2d_js)
         self.assertIn("statusPayload.security_warnings", openwebui_html + (WEB_ROOT / "openwebui-app.js").read_text(encoding="utf-8"))
         self.assertIn("scripts/echobot_entrypoint.py", (WEB_ROOT / "openwebui-app.js").read_text(encoding="utf-8"))
+        self.assertIn('id="deployment-status-grid"', deployment_html)
+        self.assertIn('id="deployment-guided-grid"', deployment_html)
+        self.assertIn('shell-pages.css?v=deployment-2', deployment_html)
+        self.assertIn('shell-pages.css?v=deployment-1', openwebui_html)
+        self.assertIn('deployment-app.js?v=deployment-2', deployment_html)
+        self.assertIn('"/api/deployment/status"', deployment_js)
+        self.assertIn('shell-i18n.js?v=deployment-1', deployment_js)
+        self.assertIn('shell-i18n.js?v=deployment-1', admin_js)
+        self.assertIn('shell-i18n.js?v=deployment-1', openwebui_js)
+        self.assertIn('admin-app.js?v=deployment-1', admin_html)
+        self.assertIn('openwebui-app.js?v=deployment-1', openwebui_html)
+        self.assertIn("translatedPayloadText", deployment_js)
+        self.assertIn("translatedNextSteps", deployment_js)
+        self.assertIn("statusPayload.commands", deployment_js)
+        self.assertIn("future_inputs", deployment_js)
 
         for key in (
             "admin.llmModels",
             "admin.voiceModels",
             "admin.live2d",
+            "admin.deployment",
             "voiceModels.heading",
             "voiceModels.description",
             "live2dAdmin.heading",
@@ -722,6 +745,12 @@ class WebStaticAssetTests(unittest.TestCase):
             "openwebui.allowedTargets",
             "openwebui.requireTargetUser",
             "openwebui.security",
+            "deployment.statusHeading",
+            "deployment.guidedHeading",
+            "deployment.commandsHeading",
+            "deployment.readiness.localEchoBot",
+            "deployment.readiness.cloudflareWarning",
+            "deployment.nextStep.loginCloudflare",
         ):
             self.assertGreaterEqual(i18n_js.count(f'"{key}"'), 3)
 

@@ -22,6 +22,7 @@ from .routers import (
     character_profiles,
     channels,
     cron,
+    deployment,
     health,
     heartbeat,
     model_profiles,
@@ -126,6 +127,7 @@ def create_app(
     app.include_router(model_profiles.router, prefix="/api")
     app.include_router(session_catalog.router, prefix="/api")
     app.include_router(channels.router, prefix="/api")
+    app.include_router(deployment.router, prefix="/api")
     app.include_router(stage.router, prefix="/api")
     app.include_router(openwebui.router, prefix="/api")
     app.include_router(web.router, prefix="/api")

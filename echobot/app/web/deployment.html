@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title data-i18n-key="deployment.pageTitle">EchoBot</title>
+    <link rel="stylesheet" href="/web/assets/styles/shell-pages.css?v=deployment-2">
+</head>
+<body class="admin-page deployment-page" data-page-title-key="deployment.pageTitle">
+    <main id="deployment-root" class="admin-root guide-root deployment-root">
+        <header class="admin-header guide-header">
+            <div>
+                <h1 data-i18n-key="deployment.heading">Deployment Readiness</h1>
+                <p data-i18n-key="deployment.description">Read-only deployment status, checks, and next steps.</p>
+            </div>
+            <div class="shell-header-controls">
+                <div class="language-switcher" data-language-switcher></div>
+                <div class="display-mode-switcher" data-display-mode-switcher></div>
+            </div>
+        </header>
+        <nav class="admin-grid guide-nav" aria-label="Deployment quick links" data-i18n-aria-label-key="deployment.linksAria">
+            <a href="/admin" data-i18n-key="deployment.backToAdmin">Back to Admin</a>
+            <a href="/admin/guide" data-i18n-key="admin.guide">Operation Guide</a>
+            <a href="/admin/structure" data-i18n-key="admin.structure">Site Structure</a>
+            <a href="/admin/openwebui" data-i18n-key="admin.openwebui">Open WebUI Bridge</a>
+            <a href="/admin/channels" data-i18n-key="admin.channels">Channels</a>
+            <a href="/api/health" data-i18n-key="admin.health">Health</a>
+        </nav>
+        <section class="openwebui-status-panel deployment-status-panel" aria-label="Deployment status" data-i18n-aria-label-key="deployment.statusAria">
+            <h2 data-i18n-key="deployment.statusHeading">Deployment Status</h2>
+            <div id="deployment-status-grid" class="openwebui-status-grid deployment-status-grid"></div>
+        </section>
+        <section class="guide-section deployment-guided-panel" aria-label="Guided deployment" data-i18n-aria-label-key="deployment.guidedAria">
+            <h2 data-i18n-key="deployment.guidedHeading">Guided Deploy Later</h2>
+            <p class="guide-section-body" data-i18n-key="deployment.guidedBody">Simple inputs can generate commands and config later, but external account actions stay outside EchoBot.</p>
+            <div id="deployment-guided-grid" class="deployment-guided-grid"></div>
+        </section>
+        <section class="guide-section deployment-command-panel" aria-label="Deployment commands" data-i18n-aria-label-key="deployment.commandsAria">
+            <h2 data-i18n-key="deployment.commandsHeading">Recommended Checks</h2>
+            <pre id="deployment-commands-output" class="deployment-command-output" data-i18n-key="deployment.loading">Loading...</pre>
+        </section>
+    </main>
+    <script type="module" src="/web/assets/deployment-app.js?v=deployment-2"></script>
+</body>
+</html>
