@@ -810,7 +810,14 @@ textarea {
 }
 
 .messenger-file-control input {
+    width: 100%;
     max-width: 220px;
+    min-height: 40px;
+    padding: 7px 10px;
+    border: 1px solid var(--shell-line);
+    border-radius: 8px;
+    color: var(--shell-text);
+    background: var(--shell-surface-strong);
 }
 
 .messenger-attachments {
@@ -1131,6 +1138,20 @@ textarea {
     padding: 0;
 }
 
+.admin-page input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+.admin-page select,
+.admin-page textarea {
+    width: 100%;
+    min-width: 0;
+    min-height: 40px;
+    padding: 8px 10px;
+    border: 1px solid var(--shell-line);
+    border-radius: 8px;
+    color: var(--shell-text);
+    background: var(--shell-surface-strong);
+    overflow-wrap: anywhere;
+}
+
 .model-profile-section {
     display: grid;
     gap: 12px;
@@ -1178,8 +1199,56 @@ textarea {
 }
 
 .character-package-import {
+    display: block;
+    min-width: 0;
+    padding: 14px;
+    border: 1px solid var(--shell-line);
+    border-radius: 8px;
+    background: rgba(255, 253, 248, 0.86);
+}
+
+.character-package-summary {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    cursor: pointer;
+    list-style: none;
+}
+
+.character-package-summary::-webkit-details-marker {
+    display: none;
+}
+
+.character-package-summary::after {
+    content: "+";
+    display: inline-grid;
+    flex: 0 0 auto;
+    width: 30px;
+    height: 30px;
+    place-items: center;
+    border: 1px solid rgba(37, 99, 235, 0.16);
+    border-radius: 8px;
+    color: var(--shell-accent-strong);
+    background: var(--shell-surface-strong);
+    font-weight: 800;
+}
+
+.character-package-import[open] .character-package-summary::after {
+    content: "-";
+}
+
+.character-package-import-body {
     display: grid;
     gap: 14px;
+    min-width: 0;
+    padding-top: 14px;
+}
+
+.character-package-import-actions {
+    display: flex;
+    justify-content: flex-end;
 }
 
 .character-package-import textarea {
@@ -1339,12 +1408,63 @@ textarea {
 }
 
 .channels-field-list {
+    display: grid;
+    gap: 6px;
+    min-width: 0;
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     font-size: 0.82rem;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.channels-field-list p {
+    margin: 0;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.channels-field-row {
+    display: grid;
+    gap: 6px;
+    min-width: 0;
+    align-content: start;
+    color: var(--shell-muted);
+    font-size: 0.86rem;
+}
+
+.channels-field-row span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.channels-field-row input:not([type="checkbox"]),
+.channels-field-row select,
+.channels-field-row textarea {
+    width: 100%;
+    min-width: 0;
+    min-height: 40px;
+    padding: 8px 10px;
+    border: 1px solid var(--shell-line);
+    border-radius: 8px;
+    color: var(--shell-text);
+    background: var(--shell-surface-strong);
+}
+
+.channels-field-row textarea {
+    min-height: 84px;
+    resize: vertical;
+}
+
+.channels-field-row input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    justify-self: start;
 }
 
 .structure-card-grid {
     display: grid;
+    align-items: start;
     gap: 10px;
     min-width: 0;
 }
@@ -1358,6 +1478,52 @@ textarea {
     border: 1px solid var(--shell-line);
     border-radius: 8px;
     background: var(--shell-surface-strong);
+}
+
+.channels-config-card {
+    display: block;
+    min-height: 0;
+}
+
+.channels-config-summary {
+    display: grid;
+    gap: 8px;
+    min-width: 0;
+    padding-right: 34px;
+    cursor: pointer;
+    list-style: none;
+    position: relative;
+}
+
+.channels-config-summary::-webkit-details-marker {
+    display: none;
+}
+
+.channels-config-summary::after {
+    content: "+";
+    position: absolute;
+    top: 0;
+    right: 0;
+    display: inline-grid;
+    width: 26px;
+    height: 26px;
+    place-items: center;
+    border: 1px solid rgba(15, 118, 110, 0.2);
+    border-radius: 8px;
+    color: var(--shell-accent-strong);
+    background: rgba(15, 118, 110, 0.08);
+    font-weight: 800;
+}
+
+.channels-config-card[open] .channels-config-summary::after {
+    content: "-";
+}
+
+.channels-config-body {
+    display: grid;
+    gap: 10px;
+    min-width: 0;
+    padding-top: 12px;
 }
 
 .structure-card-header {
@@ -1844,4 +2010,28 @@ html[data-layout-mode="desktop"] .guide-content {
 
 html[data-layout-mode="desktop"] .structure-card-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.channels-root .structure-card-grid,
+html[data-layout-mode="desktop"] .channels-root .structure-card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+html[data-layout-mode="mobile"] .channels-root .structure-card-grid,
+html[data-layout-mode="tablet"] .channels-root .structure-card-grid {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+@media (max-width: 767px) {
+    .admin-grid,
+    .guide-content,
+    .structure-card-grid,
+    .openwebui-status-grid,
+    .model-role-binding-list,
+    .models-layout,
+    .model-profile-field-grid,
+    .character-package-controls,
+    .character-emotion-map-row {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
 }

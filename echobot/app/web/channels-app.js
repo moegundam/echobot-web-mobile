@@ -347,8 +347,12 @@ function buildChannelCardFromDefinition(definition) {
 function buildEditableChannelCard(definition) {
     const channelName = String(definition.name || "");
     const config = channelConfig(channelName);
-    const article = document.createElement("article");
-    article.className = "structure-card";
+    const article = document.createElement("details");
+    article.className = "structure-card channels-config-card";
+    article.open = Boolean(state.messages[channelName] || state.smokeResults[channelName]);
+
+    const summary = document.createElement("summary");
+    summary.className = "channels-config-summary";
 
     const header = document.createElement("div");
     header.className = "structure-card-header";
@@ -367,6 +371,11 @@ function buildEditableChannelCard(definition) {
 
     const purpose = document.createElement("p");
     purpose.textContent = currentText().descriptions[channelName] || i18n.t("channels.plannedPurpose");
+
+    summary.append(header, route, purpose);
+
+    const body = document.createElement("div");
+    body.className = "channels-config-body";
 
     const form = document.createElement("form");
     form.dataset.channel = channelName;
@@ -482,7 +491,8 @@ function buildEditableChannelCard(definition) {
     const hints = buildChannelHints(channelName);
     const localTest = buildLocalTestControls(channelName, config);
 
-    article.append(header, route, purpose, form, hints, controls, localTest, message, checks);
+    body.append(form, hints, controls, localTest, message, checks);
+    article.append(summary, body);
     return article;
 }
 
@@ -799,9 +809,11 @@ function buildChannelSection(titleText, bodyText, cards) {
 }
 
 function buildChannelCard(card) {
-    const article = document.createElement("article");
-    article.className = "structure-card";
+    const article = document.createElement("details");
+    article.className = "structure-card channels-config-card";
 
+    const summary = document.createElement("summary");
+    summary.className = "channels-config-summary";
     const header = document.createElement("div");
     header.className = "structure-card-header";
     const title = document.createElement("h3");
@@ -822,16 +834,22 @@ function buildChannelCard(card) {
     fields.className = "channels-field-list";
     fields.textContent = `${i18n.t("channels.configFields")}: ${card.fields.join(", ") || i18n.t("channels.none")}`;
 
+    summary.append(header, route, purpose);
+
+    const body = document.createElement("div");
+    body.className = "channels-config-body";
     const status = state.messages[card.channelName] || "";
     if (status) {
         const text = document.createElement("p");
         text.className = "channels-field-list";
         text.textContent = status;
-        article.append(header, route, purpose, fields, text);
+        body.append(fields, text);
+        article.append(summary, body);
         return article;
     }
 
-    article.append(header, route, purpose, fields);
+    body.append(fields);
+    article.append(summary, body);
     return article;
 }
 

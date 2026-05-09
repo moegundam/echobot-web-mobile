@@ -86,10 +86,6 @@
     flex-wrap: wrap;
 }
 
-.settings-summary-actions {
-    flex: 0 0 auto;
-}
-
 .settings-summary-icon {
     width: 12px;
     height: 12px;
@@ -110,6 +106,11 @@
     padding: 18px 24px;
     background:
         linear-gradient(180deg, rgba(255, 252, 247, 0.44) 0%, rgba(255, 247, 238, 0.82) 100%);
+}
+
+.settings-panel-toolbar {
+    justify-content: flex-start;
+    margin-bottom: 16px;
 }
 
 .console-control-section-heading {
@@ -136,7 +137,7 @@
 
 .console-control-link {
     flex: 0 0 auto;
-    min-height: 34px;
+    min-height: 40px;
     padding: 8px 12px;
     border: 1px solid rgba(87, 57, 34, 0.12);
     border-radius: 999px;
@@ -233,10 +234,10 @@
 }
 
 .session-settings-header {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 12px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    gap: 10px;
 }
 
 .session-settings-header > div:first-child {
@@ -247,10 +248,9 @@
 
 .session-settings-actions {
     display: flex;
-    flex: 0 0 auto;
     flex-wrap: wrap;
     gap: 8px;
-    justify-content: flex-end;
+    justify-content: flex-start;
 }
 
 .session-settings-grid {
@@ -977,9 +977,10 @@ html[data-layout-mode="tablet"][data-viewport-orientation="landscape"] .settings
     gap: 6px;
 }
 
-.runtime-panel .ghost-button,
-.stage-effects-header .ghost-button {
-    margin-left: auto;
+.runtime-panel-actions,
+.stage-effects-panel-actions {
+    justify-content: flex-start;
+    margin-bottom: 14px;
 }
 
 .stage-background-header::after,

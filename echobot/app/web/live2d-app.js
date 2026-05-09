@@ -1,6 +1,7 @@
 import { initShellI18n } from "./shell-i18n.js?v=language-menu-1";
 import { initShellDisplayMode } from "./shell-display-mode.js?v=session-centered-2";
 import {
+    activeModelProfileFromConfig,
     applyModelProfileToLocalPreferences,
     modelProfileScopeFromConfig,
     notifyModelProfileChanged,
@@ -64,12 +65,11 @@ async function load(options = {}) {
     state.loadError = "";
     setStatusKey("models.loading");
     try {
-        const [payload, live2dPayload, webConfig] = await Promise.all([
-            requestJson("/api/model-profiles"),
+        const [live2dPayload, webConfig] = await Promise.all([
             requestJson("/api/live2d-models"),
             requestJson("/api/web/config"),
         ]);
-        state.payload = payload;
+        state.payload = modelProfilesPayloadFromConfig(webConfig);
         state.live2dPayload = live2dPayload;
         state.webConfig = webConfig;
         state.selectedProfileId = resolveExistingProfileId(
@@ -78,7 +78,7 @@ async function load(options = {}) {
         ) || resolveExistingProfileId(
             state.selectedProfileId,
             live2dPayload,
-        ) || live2dPayload.active_live2d_model_id || payload.active_profile_id || "a";
+        ) || live2dPayload.active_live2d_model_id || state.payload.active_profile_id || "a";
         state.loaded = true;
         render();
         setStatusKey("models.ready");
@@ -177,21 +177,18 @@ async function saveSelectedProfile() {
     setBusy(true);
     setStatusKey("models.saving");
     try {
-        const updated = await requestJson(`/api/model-profiles/${profile.id}`, {
+        const updated = await requestJson(`/api/live2d-models/${profile.id}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                label: DOM.label.value,
-                live2d: {
-                    selection_key: DOM.selection.value,
-                },
+                name: DOM.label.value,
+                selection_key: DOM.selection.value,
             }),
         });
-        if (updated.profile_id === activeProfileId()) {
-            applyModelProfileToLocalPreferences(updated);
-            notifyModelProfileChanged(updated.profile_id, modelProfileScope());
+        if (updated.id === activeProfileId()) {
+            await refreshRuntimeModelSnapshot({ notify: true });
         }
-        await load({ selectedProfileId: updated.profile_id });
+        await load({ selectedProfileId: updated.id });
         setStatusKey("models.saved");
     } catch (error) {
         console.error(error);
@@ -222,15 +219,15 @@ async function createProfileFromSelection() {
     setBusy(true);
     setStatusKey("models.creating");
     try {
-        const created = await requestJson("/api/model-profiles", {
+        const created = await requestJson("/api/live2d-models", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                label: cleanedLabel,
-                source_profile_id: sourceProfile.id,
+                name: cleanedLabel,
+                source_model_id: sourceProfile.id,
             }),
         });
-        await load({ selectedProfileId: created.profile_id });
+        await load({ selectedProfileId: created.id });
         setStatusKey("models.created");
     } catch (error) {
         console.error(error);
@@ -248,15 +245,11 @@ async function activateSelectedProfile() {
     setBusy(true);
     setStatusKey("models.activating");
     try {
-        const payload = await requestJson(`/api/model-profiles/${profile.id}/activate`, {
+        await requestJson(`/api/live2d-models/${profile.id}/activate`, {
             method: "POST",
         });
-        const activeProfile = payload.profiles.find((item) => item.profile_id === payload.active_profile_id);
-        if (activeProfile) {
-            applyModelProfileToLocalPreferences(activeProfile);
-            notifyModelProfileChanged(activeProfile.profile_id, modelProfileScope());
-        }
-        await load({ selectedProfileId: payload.active_profile_id || profile.id });
+        await refreshRuntimeModelSnapshot({ notify: true });
+        await load({ selectedProfileId: profile.id });
         setStatusKey("models.activated");
     } catch (error) {
         console.error(error);
@@ -282,13 +275,13 @@ async function deleteSelectedProfile() {
     setBusy(true);
     setStatusKey("models.deleting");
     try {
-        const payload = await requestJson(`/api/model-profiles/${profile.id}`, {
+        const payload = await requestJson(`/api/live2d-models/${profile.id}`, {
             method: "DELETE",
         });
-        state.selectedProfileId = payload.active_profile_id
-            || (Array.isArray(payload.profiles) && payload.profiles[0] && payload.profiles[0].profile_id)
+        state.selectedProfileId = payload.active_live2d_model_id
+            || (Array.isArray(payload.models) && payload.models[0] && payload.models[0].id)
             || "a";
-        await load({ selectedProfileId: payload.active_profile_id || state.selectedProfileId });
+        await load({ selectedProfileId: payload.active_live2d_model_id || state.selectedProfileId });
         setStatusKey("models.deleted");
     } catch (error) {
         console.error(error);
@@ -332,7 +325,7 @@ function catalog() {
 }
 
 function activeProfileId() {
-    return state.payload && state.payload.active_profile_id || "";
+    return state.live2dPayload && state.live2dPayload.active_live2d_model_id || "";
 }
 
 function canDeleteSelectedProfile(profile = selectedProfile()) {
@@ -352,6 +345,26 @@ function nextProfileLabel() {
 
 function modelProfileScope() {
     return modelProfileScopeFromConfig(state.webConfig);
+}
+
+async function refreshRuntimeModelSnapshot(options = {}) {
+    state.webConfig = await requestJson("/api/web/config");
+    const payload = modelProfilesPayloadFromConfig(state.webConfig);
+    state.payload = payload;
+    const activeProfile = activeModelProfileFromConfig({ model_profiles: payload });
+    if (activeProfile && options.notify) {
+        applyModelProfileToLocalPreferences(activeProfile);
+        notifyModelProfileChanged(activeProfile.profile_id, modelProfileScope());
+    }
+    return payload;
+}
+
+function modelProfilesPayloadFromConfig(config) {
+    return config && config.model_profiles || {
+        active_profile_id: "",
+        role_bindings: {},
+        profiles: [],
+    };
 }
 
 function profileBadge(profile) {

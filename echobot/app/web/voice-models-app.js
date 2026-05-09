@@ -1,6 +1,7 @@
 import { initShellI18n } from "./shell-i18n.js?v=language-menu-1";
 import { initShellDisplayMode } from "./shell-display-mode.js?v=session-centered-2";
 import {
+    activeModelProfileFromConfig,
     applyModelProfileToLocalPreferences,
     modelProfileScopeFromConfig,
     notifyModelProfileChanged,
@@ -75,12 +76,11 @@ async function load(options = {}) {
     state.loadError = "";
     setStatusKey("models.loading");
     try {
-        const [payload, voicePayload, webConfig] = await Promise.all([
-            requestJson("/api/model-profiles"),
+        const [voicePayload, webConfig] = await Promise.all([
             requestJson("/api/voice-models"),
             requestJson("/api/web/config"),
         ]);
-        state.payload = payload;
+        state.payload = modelProfilesPayloadFromConfig(webConfig);
         state.voicePayload = voicePayload;
         state.webConfig = webConfig;
         state.selectedProfileId = resolveExistingProfileId(
@@ -89,7 +89,7 @@ async function load(options = {}) {
         ) || resolveExistingProfileId(
             state.selectedProfileId,
             voicePayload,
-        ) || voicePayload.active_voice_profile_id || payload.active_profile_id || "a";
+        ) || voicePayload.active_voice_profile_id || state.payload.active_profile_id || "a";
         state.loaded = true;
         render();
         setStatusKey("models.ready");
@@ -195,15 +195,15 @@ async function createProfileFromSelection() {
     setBusy(true);
     setStatusKey("models.creating");
     try {
-        const created = await requestJson("/api/model-profiles", {
+        const created = await requestJson("/api/voice-models", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                label: cleanedLabel,
+                name: cleanedLabel,
                 source_profile_id: selectedProfile().id,
             }),
         });
-        await load({ selectedProfileId: created.profile_id });
+        await load({ selectedProfileId: created.id });
         setStatusKey("models.created");
     } catch (error) {
         console.error(error);
@@ -221,11 +221,11 @@ async function saveSelectedProfile() {
     setBusy(true);
     setStatusKey("models.saving");
     try {
-        const updated = await requestJson(`/api/model-profiles/${profile.id}`, {
+        const updated = await requestJson(`/api/voice-models/${profile.id}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                label: DOM.label.value,
+                name: DOM.label.value,
                 tts: {
                     provider: DOM.ttsProvider.value,
                     model: DOM.ttsModel.value,
@@ -234,7 +234,7 @@ async function saveSelectedProfile() {
                     api_key: DOM.ttsApiKey.value,
                     clear_api_key: DOM.ttsClearApiKey.checked,
                 },
-                asr: {
+                stt: {
                     provider: DOM.sttProvider.value,
                     model: DOM.sttModel.value,
                     base_url: DOM.sttBaseUrl.value,
@@ -244,11 +244,10 @@ async function saveSelectedProfile() {
                 },
             }),
         });
-        if (updated.profile_id === activeProfileId()) {
-            applyModelProfileToLocalPreferences(updated);
-            notifyModelProfileChanged(updated.profile_id, modelProfileScope());
+        if (updated.id === activeProfileId()) {
+            await refreshRuntimeModelSnapshot({ notify: true });
         }
-        await load({ selectedProfileId: updated.profile_id });
+        await load({ selectedProfileId: updated.id });
         setStatusKey("models.saved");
     } catch (error) {
         console.error(error);
@@ -266,16 +265,11 @@ async function activateSelectedProfile() {
     setBusy(true);
     setStatusKey("models.activating");
     try {
-        const payload = await requestJson(`/api/model-profiles/${profile.id}/activate`, {
+        await requestJson(`/api/voice-models/${profile.id}/activate`, {
             method: "POST",
         });
-        state.payload = payload;
-        const activeProfile = payload.profiles.find((item) => item.profile_id === payload.active_profile_id);
-        if (activeProfile) {
-            applyModelProfileToLocalPreferences(activeProfile);
-            notifyModelProfileChanged(activeProfile.profile_id, modelProfileScope());
-        }
-        await load({ selectedProfileId: payload.active_profile_id || profile.id });
+        await refreshRuntimeModelSnapshot({ notify: true });
+        await load({ selectedProfileId: profile.id });
         setStatusKey("models.activated");
     } catch (error) {
         console.error(error);
@@ -300,7 +294,7 @@ async function deleteSelectedProfile() {
     setBusy(true);
     setStatusKey("models.deleting");
     try {
-        await requestJson(`/api/model-profiles/${profile.id}`, { method: "DELETE" });
+        await requestJson(`/api/voice-models/${profile.id}`, { method: "DELETE" });
         await load({ selectedProfileId: activeProfileId() || "a" });
         setStatusKey("models.deleted");
     } catch (error) {
@@ -335,11 +329,31 @@ function voiceProfiles() {
 }
 
 function activeProfileId() {
-    return state.payload && state.payload.active_profile_id || "";
+    return state.voicePayload && state.voicePayload.active_voice_profile_id || "";
 }
 
 function modelProfileScope() {
     return modelProfileScopeFromConfig(state.webConfig);
+}
+
+async function refreshRuntimeModelSnapshot(options = {}) {
+    state.webConfig = await requestJson("/api/web/config");
+    const payload = modelProfilesPayloadFromConfig(state.webConfig);
+    state.payload = payload;
+    const activeProfile = activeModelProfileFromConfig({ model_profiles: payload });
+    if (activeProfile && options.notify) {
+        applyModelProfileToLocalPreferences(activeProfile);
+        notifyModelProfileChanged(activeProfile.profile_id, modelProfileScope());
+    }
+    return payload;
+}
+
+function modelProfilesPayloadFromConfig(config) {
+    return config && config.model_profiles || {
+        active_profile_id: "",
+        role_bindings: {},
+        profiles: [],
+    };
 }
 
 function emptyProfile() {
@@ -408,6 +422,12 @@ function profileBadge(profile) {
 function setBusy(busy) {
     state.busy = Boolean(busy);
     DOM.form.classList.toggle("is-busy", state.busy);
+    const disabled = formActionsDisabled();
+    const profile = selectedProfile();
+    DOM.create.disabled = disabled;
+    DOM.activate.disabled = disabled || profile.id === activeProfileId();
+    DOM.save.disabled = disabled;
+    DOM.remove.disabled = disabled || !canDeleteSelectedProfile(profile);
 }
 
 function setStatusKey(key) {

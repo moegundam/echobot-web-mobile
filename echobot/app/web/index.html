@@ -265,7 +265,10 @@
                     <div class="settings-summary-main">
                         <p class="section-title" data-i18n-key="console.controlPanel">Control Panel</p>
                     </div>
-                    <div class="panel-header-actions settings-summary-actions">
+                    <span class="settings-summary-icon" aria-hidden="true"></span>
+                </summary>
+                <div class="settings-panel-body">
+                    <div class="panel-header-actions settings-panel-toolbar">
                         <button
                             id="session-sidebar-toggle"
                             class="ghost-button ghost-button-compact"
@@ -280,10 +283,7 @@
                         >
                             <span data-i18n-key="console.roleCard">Role card</span>
                         </button>
-                        <span class="settings-summary-icon" aria-hidden="true"></span>
                     </div>
-                </summary>
-                <div class="settings-panel-body">
                     <section
                         id="session-settings-summary"
                         class="session-settings-summary-block"
@@ -400,15 +400,17 @@
                             <div class="stage-background-header-main">
                                 <p class="section-title" data-i18n-key="console.runtimeConfig">Runtime Config</p>
                             </div>
-                            <button
-                                id="runtime-reset-button"
-                                class="ghost-button ghost-button-compact"
-                                type="button"
-                            >
-                                <span data-i18n-key="console.restoreDefault">Restore default</span>
-                            </button>
                         </summary>
                         <div class="stage-background-panel-body">
+                            <div class="stage-background-actions runtime-panel-actions">
+                                <button
+                                    id="runtime-reset-button"
+                                    class="ghost-button ghost-button-compact"
+                                    type="button"
+                                >
+                                    <span data-i18n-key="console.restoreDefault">Restore default</span>
+                                </button>
+                            </div>
                             <div class="field-grid">
                                 <label class="field field-span-full">
                                     <span data-i18n-key="console.shellSafetyMode">Shell safety mode</span>
@@ -589,6 +591,9 @@
                     <details id="stage-effects-panel" class="stage-effects-panel">
                         <summary class="stage-effects-header">
                             <p class="section-title" data-i18n-key="console.stageEffects">Lighting Effects</p>
+                        </summary>
+                        <div class="stage-effects-panel-body">
+                            <div class="stage-background-actions stage-effects-panel-actions">
                             <button
                                 id="stage-effects-reset-button"
                                 class="ghost-button ghost-button-compact"
@@ -596,8 +601,7 @@
                             >
                                 <span data-i18n-key="console.resetParameters">Reset parameters</span>
                             </button>
-                        </summary>
-                        <div class="stage-effects-panel-body">
+                            </div>
                             <div class="toggle-row">
                                 <label class="toggle-item">
                                     <input id="stage-effects-enabled-checkbox" type="checkbox" checked>
@@ -1069,6 +1073,6 @@
     <script src="/web/assets/vendor/pixi.min.js"></script>
     <script src="/web/assets/vendor/live2dcubismcore.min.js"></script>
     <script src="/web/assets/vendor/cubism4.min.js"></script>
-    <script type="module" src="/web/assets/app.js?v=stage-background-2"></script>
+    <script type="module" src="/web/assets/app.js?v=console-a11y-1"></script>
 </body>
 </html>

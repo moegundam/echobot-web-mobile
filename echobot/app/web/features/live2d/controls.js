@@ -1,5 +1,5 @@
 import { createLive2DControlsPersistence } from "./controls/persistence.js?v=site-public-6";
-import { createLive2DControlsRenderer } from "./controls/render.js?v=site-public-6";
+import { createLive2DControlsRenderer } from "./controls/render.js?v=console-a11y-1";
 import { createLive2DControlRuntime } from "./controls/runtime.js?v=site-public-6";
 
 export function createLive2DControlsController(deps) {

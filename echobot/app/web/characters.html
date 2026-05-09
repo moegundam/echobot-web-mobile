@@ -30,29 +30,33 @@
             <a href="/admin/guide" data-i18n-key="admin.guide">Operation Guide</a>
             <a href="/admin/openwebui" data-i18n-key="admin.openwebui">Open WebUI Bridge</a>
         </nav>
-        <section id="character-package-import" class="model-profile-section character-package-import">
-            <div class="character-emotion-map-header">
+        <details id="character-package-import" class="model-profile-section character-package-import">
+            <summary class="character-package-summary">
                 <div>
                     <h2 data-i18n-key="characters.importPackageTitle">Import character package</h2>
                     <p data-i18n-key="characters.importPackageDescription">Paste a character package JSON to create or replace one character.</p>
                 </div>
-                <button id="character-package-import-submit" type="button" data-i18n-key="characters.importPackage">Import JSON</button>
-            </div>
-            <label>
-                <span data-i18n-key="characters.packageJson">Package JSON</span>
-                <textarea id="character-package-json" rows="7" data-i18n-placeholder-key="characters.packageJsonPlaceholder"></textarea>
-            </label>
-            <div class="character-package-controls">
+            </summary>
+            <div class="character-package-import-body">
+                <div class="character-package-import-actions">
+                    <button id="character-package-import-submit" type="button" data-i18n-key="characters.importPackage">Import JSON</button>
+                </div>
                 <label>
-                    <span data-i18n-key="characters.packageImportName">Import as name</span>
-                    <input id="character-package-import-name" type="text" maxlength="80" autocomplete="off" data-i18n-placeholder-key="characters.packageImportNamePlaceholder">
+                    <span data-i18n-key="characters.packageJson">Package JSON</span>
+                    <textarea id="character-package-json" rows="7" data-i18n-placeholder-key="characters.packageJsonPlaceholder"></textarea>
                 </label>
-                <label class="character-package-checkbox">
-                    <input id="character-package-overwrite" type="checkbox">
-                    <span data-i18n-key="characters.packageOverwrite">Overwrite existing character</span>
-                </label>
+                <div class="character-package-controls">
+                    <label>
+                        <span data-i18n-key="characters.packageImportName">Import as name</span>
+                        <input id="character-package-import-name" type="text" maxlength="80" autocomplete="off" data-i18n-placeholder-key="characters.packageImportNamePlaceholder">
+                    </label>
+                    <label class="character-package-checkbox">
+                        <input id="character-package-overwrite" type="checkbox">
+                        <span data-i18n-key="characters.packageOverwrite">Overwrite existing character</span>
+                    </label>
+                </div>
             </div>
-        </section>
+        </details>
         <section class="models-layout" aria-label="Character profile editor" data-i18n-aria-label-key="characters.editorAria">
             <aside class="model-profile-sidebar">
                 <button id="character-profile-create" class="model-profile-create" type="button" data-i18n-key="characters.create">Add character</button>

@@ -194,7 +194,7 @@ button {
 .model-profile-select {
     flex: 1 1 150px;
     width: 100%;
-    min-height: 28px;
+    min-height: 40px;
     max-width: 260px;
     min-width: 0;
     border: 1px solid rgba(87, 57, 34, 0.16);
@@ -215,7 +215,8 @@ button {
     align-items: center;
     flex: 0 0 auto;
     max-width: 100%;
-    min-height: 24px;
+    min-height: 40px;
+    padding: 0 8px;
     overflow: hidden;
     color: var(--text);
     font-weight: 700;
@@ -267,7 +268,7 @@ button {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-height: 36px;
+    min-height: 40px;
     min-width: 76px;
     padding: 8px 12px;
     border: 1px solid rgba(87, 57, 34, 0.14);

@@ -237,6 +237,7 @@
 
 .primary-button,
 .ghost-button {
+    min-height: 42px;
     border-radius: 999px;
     padding: 11px 18px;
     font-weight: 700;

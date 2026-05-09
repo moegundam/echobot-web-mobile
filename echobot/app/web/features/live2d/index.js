@@ -3,7 +3,7 @@ import { appState } from "../../core/store.js";
 import { readJson, removeStoredValue, writeJson } from "../../core/storage.js";
 import { createStageBackgroundController } from "./backgrounds.js?v=stage-background-1";
 import { createLive2DConfigController } from "./config.js?v=site-public-6";
-import { createLive2DControlsController } from "./controls.js?v=site-public-6";
+import { createLive2DControlsController } from "./controls.js?v=console-a11y-1";
 import { createStageEffectsController } from "./effects.js?v=site-public-6";
 import { createLive2DModelController } from "./model.js?v=site-public-6";
 import { createLive2DSceneController } from "./scene.js";

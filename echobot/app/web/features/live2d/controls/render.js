@@ -15,6 +15,15 @@ export function createLive2DControlsRenderer(deps) {
         t = (key) => key,
     } = deps;
 
+    function controlFieldName(...parts) {
+        return parts.map((part) => String(part || "").trim())
+            .filter(Boolean)
+            .map((part) => part.replace(/[^a-zA-Z0-9_-]+/g, "-").replace(/^-+|-+$/g, ""))
+            .filter(Boolean)
+            .join("-")
+            .toLowerCase();
+    }
+
     function renderLive2DControls(live2dConfig) {
         const config = normalizeLive2DConfig(live2dConfig);
         const runtimeState = getSelectionRuntimeState(config.selection_key);
@@ -177,9 +186,10 @@ export function createLive2DControlsRenderer(deps) {
         const header = document.createElement("div");
         header.className = "live2d-control-card-head";
 
+        const titleText = item.name || item.file;
         const title = document.createElement("h4");
         title.className = "live2d-control-card-title";
-        title.textContent = item.name || item.file;
+        title.textContent = titleText;
         header.appendChild(title);
 
         if (actionName === "trigger-expression") {
@@ -188,7 +198,7 @@ export function createLive2DControlsRenderer(deps) {
                     file: item.file,
                     active: active,
                     selectionKey: selectionKey,
-                    title: item.name || item.file,
+                    title: titleText,
                     enabled: actionEnabled,
                 }),
             );
@@ -206,6 +216,9 @@ export function createLive2DControlsRenderer(deps) {
         card.appendChild(header);
 
         const noteInput = document.createElement("textarea");
+        const noteFieldName = controlFieldName("live2d", selectionKey, kind, item.file, "note");
+        noteInput.id = noteFieldName;
+        noteInput.name = noteFieldName;
         noteInput.className = "live2d-note-input";
         noteInput.rows = 3;
         noteInput.value = persistence.readAnnotationDraftValue(selectionKey, kind, item.file, item.note || "");
@@ -213,6 +226,7 @@ export function createLive2DControlsRenderer(deps) {
             ? t("console.live2dMotionNotePlaceholder")
             : t("console.live2dExpressionNotePlaceholder");
         noteInput.disabled = !noteEnabled;
+        noteInput.setAttribute("aria-label", `${titleText} note`);
         noteInput.dataset.live2dSelectionKey = selectionKey;
         noteInput.dataset.live2dKind = kind;
         noteInput.dataset.live2dFile = item.file;
@@ -246,6 +260,9 @@ export function createLive2DControlsRenderer(deps) {
         toggle.dataset.live2dDisabled = String(!enabled);
 
         const input = document.createElement("input");
+        const inputFieldName = controlFieldName("live2d", selectionKey, "expression", file, "enabled");
+        input.id = inputFieldName;
+        input.name = inputFieldName;
         input.type = "checkbox";
         input.className = "live2d-switch-input";
         input.checked = active;
@@ -355,6 +372,9 @@ export function createLive2DControlsRenderer(deps) {
         shell.className = "live2d-hotkey-input-shell";
 
         const shortcutInput = document.createElement("input");
+        const shortcutFieldName = controlFieldName("live2d", selectionKey, "hotkey", buildHotkeyKey(hotkeyItem));
+        shortcutInput.id = shortcutFieldName;
+        shortcutInput.name = shortcutFieldName;
         shortcutInput.type = "text";
         shortcutInput.className = "live2d-hotkey-input";
         shortcutInput.autocomplete = "off";

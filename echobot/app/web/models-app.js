@@ -9,6 +9,7 @@ import {
 
 const state = {
     payload: null,
+    llmPayload: null,
     webConfig: null,
     selectedProfileId: "a",
     busy: false,
@@ -64,21 +65,24 @@ DOM.remove.addEventListener("click", () => {
 
 void load();
 
-async function load() {
+async function load(options = {}) {
     setBusy(true);
     state.loaded = false;
     state.loadError = "";
     setStatusKey("models.loading");
     try {
-        const [payload, webConfig] = await Promise.all([
-            requestJson("/api/model-profiles"),
+        const [llmPayload, webConfig] = await Promise.all([
+            requestJson("/api/llm-models"),
             requestJson("/api/web/config"),
         ]);
-        state.payload = payload;
+        state.payload = modelProfilesPayloadFromConfig(webConfig);
+        state.llmPayload = llmPayload;
         state.webConfig = webConfig;
         state.loaded = true;
-        const activeProfile = activeModelProfileFromConfig({ model_profiles: payload });
-        state.selectedProfileId = activeProfile ? activeProfile.profile_id : "a";
+        state.selectedProfileId = resolveExistingProfileId(options.selectedProfileId)
+            || resolveExistingProfileId(state.selectedProfileId)
+            || activeProfileId()
+            || "a";
         render();
         setStatusKey("models.ready");
     } catch (error) {
@@ -99,14 +103,13 @@ function render() {
 
 function renderProfileList() {
     DOM.list.replaceChildren();
-    const payload = state.payload;
-    const profiles = Array.isArray(payload && payload.profiles) ? payload.profiles : [];
+    const profiles = llmProfiles();
     profiles.forEach((profile) => {
         const button = document.createElement("button");
         button.type = "button";
         button.className = "model-profile-card";
         button.classList.toggle("is-selected", profile.profile_id === state.selectedProfileId);
-        button.classList.toggle("is-active", profile.profile_id === payload.active_profile_id);
+        button.classList.toggle("is-active", profile.profile_id === activeProfileId());
         button.dataset.profileId = profile.profile_id;
 
         const code = document.createElement("strong");
@@ -114,7 +117,7 @@ function renderProfileList() {
         const label = document.createElement("span");
         label.textContent = profile.label || profile.profile_id.toUpperCase();
         const status = document.createElement("small");
-        status.textContent = profile.profile_id === payload.active_profile_id
+        status.textContent = profile.profile_id === activeProfileId()
             ? i18n.t("models.active")
             : i18n.t("models.inactive");
 
@@ -159,14 +162,44 @@ function apiKeyStatus(section) {
 }
 
 function selectedProfile() {
-    const payload = state.payload || { profiles: [] };
-    return payload.profiles.find((item) => item.profile_id === state.selectedProfileId)
-        || payload.profiles[0]
+    const profiles = llmProfiles();
+    return profiles.find((item) => item.profile_id === state.selectedProfileId)
+        || profiles[0]
         || emptyProfile();
 }
 
+function resolveExistingProfileId(profileId) {
+    const normalizedId = String(profileId || "").trim();
+    const profiles = llmProfiles();
+    if (!normalizedId || !profiles.length) {
+        return "";
+    }
+    return profiles.some((item) => item.profile_id === normalizedId)
+        ? normalizedId
+        : "";
+}
+
 function activeProfileId() {
-    return state.payload && state.payload.active_profile_id || "";
+    return state.llmPayload && state.llmPayload.active_model_id || "";
+}
+
+function llmProfiles() {
+    const models = state.llmPayload && Array.isArray(state.llmPayload.models)
+        ? state.llmPayload.models
+        : [];
+    return models.map((model) => ({
+        profile_id: model.id,
+        label: model.name,
+        chat: {
+            provider: model.provider,
+            model: model.model,
+            base_url: model.base_url,
+            temperature: model.temperature,
+            max_tokens: model.max_tokens,
+            api_key_configured: model.api_key_configured,
+            api_key_source: model.api_key_source,
+        },
+    }));
 }
 
 function modelProfileScope() {
@@ -202,17 +235,15 @@ async function createProfileFromSelection() {
     setBusy(true);
     setStatusKey("models.creating");
     try {
-        const created = await requestJson("/api/model-profiles", {
+        const created = await requestJson("/api/llm-models", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                label: cleanedLabel,
-                source_profile_id: sourceProfile.profile_id,
+                name: cleanedLabel,
+                source_model_id: sourceProfile.profile_id,
             }),
         });
-        replaceProfile(created);
-        state.selectedProfileId = created.profile_id;
-        render();
+        await load({ selectedProfileId: created.id });
         setStatusKey("models.created");
     } catch (error) {
         console.error(error);
@@ -230,17 +261,15 @@ async function saveSelectedProfile() {
     setBusy(true);
     setStatusKey("models.saving");
     try {
-        const updated = await requestJson(`/api/model-profiles/${profile.profile_id}`, {
+        const updated = await requestJson(`/api/llm-models/${profile.profile_id}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(profileRequestBody()),
         });
-        replaceProfile(updated);
-        if (updated.profile_id === activeProfileId()) {
-            applyModelProfileToLocalPreferences(updated);
-            notifyModelProfileChanged(updated.profile_id, modelProfileScope());
+        if (updated.id === activeProfileId()) {
+            await refreshRuntimeModelSnapshot({ notify: true });
         }
-        render();
+        await load({ selectedProfileId: updated.id });
         setStatusKey("models.saved");
     } catch (error) {
         console.error(error);
@@ -258,11 +287,11 @@ async function activateSelectedProfile() {
     setBusy(true);
     setStatusKey("models.activating");
     try {
-        const payload = await requestJson(`/api/model-profiles/${profile.profile_id}/activate`, {
+        await requestJson(`/api/llm-models/${profile.profile_id}/activate`, {
             method: "POST",
         });
-        applyModelProfilesPayload(payload, { notify: true });
-        render();
+        await refreshRuntimeModelSnapshot({ notify: true });
+        await load({ selectedProfileId: profile.profile_id });
         setStatusKey("models.activated");
     } catch (error) {
         console.error(error);
@@ -288,14 +317,10 @@ async function deleteSelectedProfile() {
     setBusy(true);
     setStatusKey("models.deleting");
     try {
-        const payload = await requestJson(`/api/model-profiles/${profile.profile_id}`, {
+        const payload = await requestJson(`/api/llm-models/${profile.profile_id}`, {
             method: "DELETE",
         });
-        applyModelProfilesPayload(payload);
-        state.selectedProfileId = payload.active_profile_id
-            || (Array.isArray(payload.profiles) && payload.profiles[0] && payload.profiles[0].profile_id)
-            || "a";
-        render();
+        await load({ selectedProfileId: payload.active_model_id || "a" });
         setStatusKey("models.deleted");
     } catch (error) {
         console.error(error);
@@ -307,31 +332,15 @@ async function deleteSelectedProfile() {
 
 function profileRequestBody() {
     return {
-        label: DOM.label.value,
-        chat: {
-            provider: DOM.chatProvider.value,
-            model: DOM.chatModel.value,
-            base_url: DOM.chatBaseUrl.value,
-            temperature: optionalNumber(DOM.chatTemperature.value),
-            max_tokens: optionalInteger(DOM.chatMaxTokens.value),
-            api_key: DOM.chatApiKey.value,
-            clear_api_key: DOM.chatClearApiKey.checked,
-        },
+        name: DOM.label.value,
+        provider: DOM.chatProvider.value,
+        model: DOM.chatModel.value,
+        base_url: DOM.chatBaseUrl.value,
+        temperature: optionalNumber(DOM.chatTemperature.value),
+        max_tokens: optionalInteger(DOM.chatMaxTokens.value),
+        api_key: DOM.chatApiKey.value,
+        clear_api_key: DOM.chatClearApiKey.checked,
     };
-}
-
-function replaceProfile(profile) {
-    if (!state.payload || !Array.isArray(state.payload.profiles)) {
-        return;
-    }
-    const index = state.payload.profiles.findIndex(
-        (item) => item.profile_id === profile.profile_id,
-    );
-    if (index === -1) {
-        state.payload.profiles.push(profile);
-        return;
-    }
-    state.payload.profiles.splice(index, 1, profile);
 }
 
 function applyModelProfilesPayload(payload, options = {}) {
@@ -341,6 +350,21 @@ function applyModelProfilesPayload(payload, options = {}) {
         applyModelProfileToLocalPreferences(activeProfile);
         notifyModelProfileChanged(activeProfile.profile_id, modelProfileScope());
     }
+}
+
+async function refreshRuntimeModelSnapshot(options = {}) {
+    state.webConfig = await requestJson("/api/web/config");
+    const payload = modelProfilesPayloadFromConfig(state.webConfig);
+    applyModelProfilesPayload(payload, options);
+    return payload;
+}
+
+function modelProfilesPayloadFromConfig(config) {
+    return config && config.model_profiles || {
+        active_profile_id: "",
+        role_bindings: {},
+        profiles: [],
+    };
 }
 
 function optionalNumber(value) {
@@ -389,8 +413,7 @@ function formActionsDisabled() {
 }
 
 function canDeleteSelectedProfile(profile = selectedProfile()) {
-    const payload = state.payload || { profiles: [] };
-    const profileCount = Array.isArray(payload.profiles) ? payload.profiles.length : 0;
+    const profileCount = llmProfiles().length;
     return Boolean(
         profile
         && profile.profile_id
@@ -400,9 +423,7 @@ function canDeleteSelectedProfile(profile = selectedProfile()) {
 }
 
 function nextProfileLabel() {
-    const count = state.payload && Array.isArray(state.payload.profiles)
-        ? state.payload.profiles.length + 1
-        : 1;
+    const count = llmProfiles().length + 1;
     return i18n.t("models.newProfileDefault", { count });
 }
 

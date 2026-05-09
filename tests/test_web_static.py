@@ -68,6 +68,9 @@ class WebStaticAssetTests(unittest.TestCase):
         panels_css = (WEB_ROOT / "styles" / "panels.css").read_text(encoding="utf-8")
         responsive_css = (WEB_ROOT / "styles" / "responsive.css").read_text(encoding="utf-8")
         i18n_js = (WEB_ROOT / "shell-i18n.js").read_text(encoding="utf-8")
+        live2d_render_js = (
+            WEB_ROOT / "features" / "live2d" / "controls" / "render.js"
+        ).read_text(encoding="utf-8")
 
         self.assertIn('id="session-settings-summary"', html)
         self.assertIn('id="session-settings-current"', html)
@@ -113,7 +116,7 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn('data-i18n-key="console.applyBackgroundToStage"', html)
         self.assertIn('data-i18n-key="console.backgroundApplyHelp"', html)
         self.assertIn('data-language-switcher', html)
-        self.assertIn('app.js?v=stage-background-2', html)
+        self.assertIn('app.js?v=console-a11y-1', html)
         self.assertIn('shell-i18n.js?v=language-menu-1', app_js)
         self.assertIn('shell-display-mode.js?v=display-menu-1', app_js)
         self.assertIn('id="console-advanced-overrides-panel"', html)
@@ -123,6 +126,23 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn('data-i18n-key="console.groupVoice"', html)
         self.assertIn('data-i18n-key="console.groupLive2dStage"', html)
         self.assertIn('data-i18n-key="console.groupRuntimeJobs"', html)
+        for summary_class in (
+            "settings-summary",
+            "stage-background-header",
+            "stage-effects-header",
+        ):
+            for summary_match in re.finditer(
+                rf'<summary class="{summary_class}">(.*?)</summary>',
+                html,
+                re.DOTALL,
+            ):
+                self.assertNotRegex(
+                    summary_match.group(1),
+                    r"<(?:button|input|select|textarea|a)\b",
+                )
+        self.assertIn("noteInput.name = noteFieldName", live2d_render_js)
+        self.assertIn("input.name = inputFieldName", live2d_render_js)
+        self.assertIn("shortcutInput.name = shortcutFieldName", live2d_render_js)
         self.assertIn("syncModelProfileFromServer", app_js)
         self.assertIn("selectConsoleModelProfile", app_js)
         self.assertIn("updateSessionRuntimeOverrides", app_js)
@@ -165,8 +185,11 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertNotIn('t("console.rename")', session_sidebar_js)
         self.assertNotIn('t("console.delete")', session_sidebar_js)
         self.assertIn(".session-settings-summary-block", panels_css)
+        self.assertIn(".session-settings-header {\n    display: grid;", panels_css)
         self.assertIn(".console-admin-handoff", panels_css)
+        self.assertIn("min-height: 40px", panels_css)
         self.assertIn(".console-quick-nav", base_css)
+        self.assertIn("min-height: 40px", base_css)
         self.assertIn(".sr-only", base_css)
         self.assertIn("flex: 1 1 min(100%, 420px)", base_css)
         self.assertIn("flex-wrap: wrap", base_css)
@@ -208,7 +231,15 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn('id="voice-profile-status" data-i18n-key="models.loading"', voice_html)
         self.assertIn('id="live2d-profile-status" data-i18n-key="models.loading"', live2d_html)
         self.assertIn('id="character-profile-status" data-i18n-key="characters.loading"', characters_html)
+        self.assertIn('<details id="character-package-import"', characters_html)
+        self.assertIn('class="character-package-summary"', characters_html)
         self.assertIn(".model-profile-card span", shell_pages_css)
+        self.assertIn('.admin-page input:not([type="checkbox"]):not([type="radio"]):not([type="range"])', shell_pages_css)
+        self.assertIn(".character-package-summary", shell_pages_css)
+        self.assertIn(".channels-root .structure-card-grid", shell_pages_css)
+        self.assertIn(".channels-field-row input:not([type=\"checkbox\"])", shell_pages_css)
+        self.assertIn(".messenger-file-control input", shell_pages_css)
+        self.assertIn("@media (max-width: 767px)", shell_pages_css)
         self.assertIn(".channels-local-test input", shell_pages_css)
         self.assertIn("overflow-wrap: anywhere", shell_pages_css)
 
@@ -649,16 +680,28 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn('id="live2d-profile-create"', live2d_html)
         self.assertIn('id="live2d-profile-delete"', live2d_html)
         self.assertIn('id="live2d-selection"', live2d_html)
-        self.assertIn('label: DOM.label.value', voice_js)
-        self.assertIn('label: DOM.label.value', live2d_js)
-        self.assertIn("load({ selectedProfileId: updated.profile_id })", voice_js)
-        self.assertIn("load({ selectedProfileId: updated.profile_id })", live2d_js)
+        self.assertIn('name: DOM.label.value', models_js)
+        self.assertIn('name: DOM.label.value', voice_js)
+        self.assertIn('name: DOM.label.value', live2d_js)
+        self.assertIn("load({ selectedProfileId: updated.id })", models_js)
+        self.assertIn("load({ selectedProfileId: updated.id })", voice_js)
+        self.assertIn("load({ selectedProfileId: updated.id })", live2d_js)
+        self.assertIn("DOM.create.disabled = disabled;", voice_js)
+        self.assertIn("DOM.save.disabled = disabled;", voice_js)
         self.assertIn("function resolveExistingProfileId", voice_js)
         self.assertIn("function resolveExistingProfileId", live2d_js)
+        self.assertIn('"/api/llm-models"', models_js)
         self.assertIn('"/api/voice-models"', voice_js)
         self.assertIn('"/api/live2d-models"', live2d_js)
-        self.assertIn('"/api/model-profiles"', voice_js)
-        self.assertIn('"/api/model-profiles"', live2d_js)
+        self.assertNotIn('"/api/model-profiles"', models_js)
+        self.assertNotIn('"/api/model-profiles"', voice_js)
+        self.assertNotIn('"/api/model-profiles"', live2d_js)
+        self.assertIn('"/api/web/config"', models_js)
+        self.assertIn('"/api/web/config"', voice_js)
+        self.assertIn('"/api/web/config"', live2d_js)
+        self.assertIn("modelProfilesPayloadFromConfig", models_js)
+        self.assertIn("modelProfilesPayloadFromConfig", voice_js)
+        self.assertIn("modelProfilesPayloadFromConfig", live2d_js)
         self.assertIn('<title data-i18n-key="console.pageTitle">EchoBot</title>', (WEB_ROOT / "index.html").read_text(encoding="utf-8"))
         self.assertIn('"console.sessionSettingSource": "Entry point"', i18n_js)
         self.assertIn('"sessions.channelType": "Entry point type"', i18n_js)
@@ -687,6 +730,9 @@ class WebStaticAssetTests(unittest.TestCase):
         i18n_js = (WEB_ROOT / "shell-i18n.js").read_text(encoding="utf-8")
 
         self.assertIn('buildEditableChannelCard', channels_js)
+        self.assertIn('document.createElement("details")', channels_js)
+        self.assertIn('summary.className = "channels-config-summary"', channels_js)
+        self.assertIn('body.className = "channels-config-body"', channels_js)
         self.assertIn('/api/channels/definitions', channels_js)
         self.assertIn('/api/channels/config', channels_js)
         self.assertIn('/api/channels/${encodeURIComponent(channelName)}/smoke', channels_js)
