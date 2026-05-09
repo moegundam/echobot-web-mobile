@@ -72,24 +72,21 @@ class ChannelService:
             self._config_path,
         )
         status = self._get_status()
-        targets: list[dict[str, Any]] = []
-        for channel_name, channel_config in config.to_dict().items():
-            target = _stage_target_from_channel_config(
-                channel_name,
-                channel_config,
-                status.get(channel_name, {}),
-            )
-            if target is not None:
-                targets.append(target)
+        return _stage_targets_from_config(config.to_dict(), status)
 
-        targets.sort(
-            key=lambda target: (
-                not bool(target["selectable"]),
-                str(target["label"]).lower(),
-                str(target["session_name"]).lower(),
-            ),
+    async def get_integration_projection_inputs(self) -> dict[str, Any]:
+        config = await asyncio.to_thread(
+            load_channels_config,
+            self._config_path,
         )
-        return {"targets": targets}
+        status = self._get_status()
+        config_payload = config.to_dict()
+        return {
+            "definitions": describe_channel_registry(),
+            "config": config_payload,
+            "status": status,
+            "stage_targets": _stage_targets_from_config(config_payload, status),
+        }
 
     async def smoke_channel(self, channel_name: str) -> dict[str, Any]:
         normalized_channel_name = str(channel_name or "").strip().lower()
@@ -106,6 +103,30 @@ class ChannelService:
         if normalized_channel_name == "discord":
             return _discord_smoke_result(channel_config)
         return _generic_smoke_result(normalized_channel_name, channel_config)
+
+
+def _stage_targets_from_config(
+    config: dict[str, Any],
+    status: dict[str, dict[str, bool]],
+) -> dict[str, list[dict[str, Any]]]:
+    targets: list[dict[str, Any]] = []
+    for channel_name, channel_config in config.items():
+        target = _stage_target_from_channel_config(
+            channel_name,
+            channel_config,
+            status.get(channel_name, {}),
+        )
+        if target is not None:
+            targets.append(target)
+
+    targets.sort(
+        key=lambda target: (
+            not bool(target["selectable"]),
+            str(target["label"]).lower(),
+            str(target["session_name"]).lower(),
+        ),
+    )
+    return {"targets": targets}
 
 
 def _merge_redacted_channel_config(

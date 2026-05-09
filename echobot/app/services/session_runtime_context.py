@@ -38,15 +38,8 @@ class SessionRuntimeContextError(RuntimeError):
 
 async def list_channel_integrations_for_runtime(runtime):
     scope = _channel_owner_scope_or_error(runtime)
-    definitions = scope.service.get_definitions()
-    config = await scope.service.get_config()
-    status = await scope.service.get_status()
-    stage_targets = await scope.service.get_stage_targets()
     return project_channel_integrations(
-        definitions=definitions,
-        config=config,
-        status=status,
-        stage_targets=stage_targets,
+        **await scope.service.get_integration_projection_inputs(),
     )
 
 
