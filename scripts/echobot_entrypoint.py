@@ -15,12 +15,12 @@ from urllib import error, parse, request
 
 
 APP_LABEL = "com.moegundam.echobot.app"
-GB10_TUNNEL_LABEL = "com.moegundam.echobot.gb10-openwebui-tunnel"
+OPENWEBUI_TUNNEL_LABEL = "com.moegundam.echobot.openwebui-tunnel"
 DEFAULT_LOCAL_HOST = "127.0.0.1"
 DEFAULT_LOCAL_PORT = 8001
-DEFAULT_REMOTE_HOST = "fortune@gx10-6703.local"
+DEFAULT_REMOTE_HOST = os.environ.get("ECHOBOT_OPENWEBUI_REMOTE_HOST", "")
 DEFAULT_REMOTE_BIND = "127.0.0.1"
-DEFAULT_REMOTE_PORT = 18001
+DEFAULT_REMOTE_PORT = int(os.environ.get("ECHOBOT_OPENWEBUI_REMOTE_PORT", "18001"))
 DEFAULT_TOKEN_FILE = "/tmp/echobot_openwebui_bridge_token"
 DEFAULT_TARGET_USER_ID = "echobot-smoke@local"
 
@@ -56,11 +56,11 @@ def main() -> int:
 
     write_parser = subparsers.add_parser(
         "write-launchd",
-        help="Write launchd plists for the app and/or GB10 reverse tunnel.",
+        help="Write launchd plists for the app and/or Open WebUI reverse tunnel.",
     )
     write_parser.add_argument(
         "--component",
-        choices=["app", "gb10-tunnel", "all"],
+        choices=["app", "openwebui-tunnel", "all"],
         default="all",
     )
     write_parser.add_argument(
@@ -79,7 +79,7 @@ def main() -> int:
     start_parser = subparsers.add_parser("start", help="Bootstrap launchd services.")
     start_parser.add_argument(
         "--component",
-        choices=["app", "gb10-tunnel", "all"],
+        choices=["app", "openwebui-tunnel", "all"],
         default="all",
     )
     start_parser.add_argument("--restart", action="store_true")
@@ -87,17 +87,17 @@ def main() -> int:
     stop_parser = subparsers.add_parser("stop", help="Boot out launchd services.")
     stop_parser.add_argument(
         "--component",
-        choices=["app", "gb10-tunnel", "all"],
+        choices=["app", "openwebui-tunnel", "all"],
         default="all",
     )
 
     smoke_parser = subparsers.add_parser(
         "smoke-openwebui",
-        help="Run Open WebUI bridge smoke through local or GB10 entrypoint.",
+        help="Run Open WebUI bridge smoke through the local or remote entrypoint.",
     )
     smoke_parser.add_argument(
         "--target",
-        choices=["local", "gb10"],
+        choices=["local", "remote"],
         default="local",
     )
     smoke_parser.add_argument("--session-name", default="openwebui-smoke")
@@ -172,7 +172,8 @@ def _doctor(config: dict[str, object]) -> int:
     local_url = _local_base_url(config)
     checks.append(("local_health", "ok" if _http_ok(f"{local_url}/api/health") else "warn", local_url))
     remote_url = _remote_base_url(config)
-    checks.append(("gb10_reverse_health", "ok" if _remote_http_ok(config, f"{remote_url}/api/health") else "warn", remote_url))
+    remote_state = "ok" if _remote_http_ok(config, f"{remote_url}/api/health") else "warn"
+    checks.append(("remote_openwebui_reverse_health", remote_state, remote_url))
 
     if shutil.which("cloudflared"):
         cf = _run(["cloudflared", "tunnel", "list"], check=False)
@@ -199,8 +200,12 @@ def _selected_plists(config: dict[str, object], component: str) -> list[tuple[st
     selected: list[tuple[str, dict[str, object]]] = []
     if component in {"app", "all"}:
         selected.append((APP_LABEL, _build_app_plist(config)))
-    if component in {"gb10-tunnel", "all"}:
-        selected.append((GB10_TUNNEL_LABEL, _build_gb10_tunnel_plist(config)))
+    if component in {"openwebui-tunnel", "all"}:
+        if not str(config.get("remote_host") or "").strip():
+            if component == "openwebui-tunnel":
+                raise ValueError("--remote-host or ECHOBOT_OPENWEBUI_REMOTE_HOST is required for the Open WebUI tunnel")
+        else:
+            selected.append((OPENWEBUI_TUNNEL_LABEL, _build_openwebui_tunnel_plist(config)))
     return selected
 
 
@@ -242,13 +247,13 @@ def _build_app_plist(config: dict[str, object]) -> dict[str, object]:
     }
 
 
-def _build_gb10_tunnel_plist(config: dict[str, object]) -> dict[str, object]:
+def _build_openwebui_tunnel_plist(config: dict[str, object]) -> dict[str, object]:
     remote_spec = (
         f"{config['remote_bind']}:{config['remote_port']}:"
         f"{config['host']}:{config['port']}"
     )
     return {
-        "Label": GB10_TUNNEL_LABEL,
+        "Label": OPENWEBUI_TUNNEL_LABEL,
         "ProgramArguments": [
             str(config["ssh"]),
             "-N",
@@ -264,8 +269,8 @@ def _build_gb10_tunnel_plist(config: dict[str, object]) -> dict[str, object]:
         ],
         "RunAtLoad": True,
         "KeepAlive": True,
-        "StandardOutPath": "/tmp/echobot-gb10-openwebui-tunnel.out.log",
-        "StandardErrorPath": "/tmp/echobot-gb10-openwebui-tunnel.err.log",
+        "StandardOutPath": "/tmp/echobot-openwebui-tunnel.out.log",
+        "StandardErrorPath": "/tmp/echobot-openwebui-tunnel.err.log",
     }
 
 
@@ -313,7 +318,7 @@ def _stop(config: dict[str, object], component: str) -> int:
 
 
 def _status(config: dict[str, object]) -> int:
-    for label in (APP_LABEL, GB10_TUNNEL_LABEL):
+    for label in (APP_LABEL, OPENWEBUI_TUNNEL_LABEL):
         result = _launchctl(["print", f"{_user_domain()}/{label}"], check=False)
         state = "loaded" if result.returncode == 0 else "not loaded"
         print(f"{label}: {state}")
@@ -323,7 +328,11 @@ def _status(config: dict[str, object]) -> int:
                 if stripped.startswith(("pid =", "last exit code =", "state =")):
                     print(f"  {stripped}")
     print(f"local health: {'ok' if _http_ok(_local_base_url(config) + '/api/health') else 'warn'}")
-    print(f"gb10 reverse health: {'ok' if _remote_http_ok(config, _remote_base_url(config) + '/api/health') else 'warn'}")
+    if str(config.get("remote_host") or "").strip():
+        state = "ok" if _remote_http_ok(config, _remote_base_url(config) + "/api/health") else "warn"
+        print(f"remote Open WebUI reverse health: {state}")
+    else:
+        print("remote Open WebUI reverse health: not configured")
     return 0
 
 
@@ -338,8 +347,8 @@ def _smoke_openwebui(
     if not token_file.exists():
         print(f"missing token file: {token_file}", file=sys.stderr)
         return 2
-    if target == "gb10":
-        return _smoke_openwebui_from_gb10(config, token_file, session_name, target_user_id, chat_prompt)
+    if target == "remote":
+        return _smoke_openwebui_from_remote(config, token_file, session_name, target_user_id, chat_prompt)
     base_url = _local_base_url(config) if target == "local" else _remote_base_url(config)
     command = [
         str(config["python"]),
@@ -358,7 +367,7 @@ def _smoke_openwebui(
     return _run(command, cwd=Path(config["repo_root"]), echo=True).returncode
 
 
-def _smoke_openwebui_from_gb10(
+def _smoke_openwebui_from_remote(
     config: dict[str, object],
     token_file: Path,
     session_name: str,
@@ -520,6 +529,8 @@ def _http_ok(url: str) -> bool:
 
 def _remote_http_ok(config: dict[str, object], url: str) -> bool:
     ssh = str(config["ssh"])
+    if not str(config.get("remote_host") or "").strip():
+        return False
     if not (shutil.which(ssh) or Path(ssh).exists()):
         return False
     result = _run(

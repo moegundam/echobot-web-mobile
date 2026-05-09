@@ -11,7 +11,7 @@
 
 > English version: [README_EN.md](./README_EN.md)
 
-`moegundam/echobot-web-mobile` 是基於 [KdaiP/EchoBot](https://github.com/KdaiP/EchoBot) 的私有管理版，目標是把原始 EchoBot 擴充成可做本機開發、手機測試、10 人內測、Stage 展示、Messenger 通訊入口、Console 中台與 Admin 後台管理的 Web/Mobile 版本。
+`moegundam/echobot-web-mobile` 是基於 [KdaiP/EchoBot](https://github.com/KdaiP/EchoBot) 的 Web/Mobile 管理版，目標是把原始 EchoBot 擴充成可做本機開發、手機測試、10 人內測、Stage 展示、Messenger 通訊入口、Console 中台與 Admin 後台管理的版本。
 
 本專案保留 EchoBot 作為主架構，不直接合併 [Open-LLM-VTuber/Open-LLM-VTuber](https://github.com/Open-LLM-VTuber/Open-LLM-VTuber) 後端。Open-LLM-VTuber 目前只作為 Live2D、ASR/TTS、VTuber 互動體驗與桌寵式介面的參考來源。
 
@@ -40,10 +40,11 @@
 | 後台 Admin | `/admin` | 後台索引、health、API docs、jobs 與管理頁入口 |
 | 操作說明 | `/admin/guide` | 操作、設定、預期成果、故障判斷與排除流程 |
 | 網站結構 | `/admin/structure` | Route map、Console 分區、API namespace 邊界 |
-| 角色設定 | `/admin/characters` | 管理角色 prompt、模型 profile 綁定、語音、Live2D 摘要、emotion map 與角色 package 匯入/匯出 |
-| 模型設定 | `/admin/models` | 可新增、自定義名稱、啟用角色模型 profile |
+| 角色設定 | `/admin/characters` | 管理角色 prompt、LLM / Voice / Live2D 綁定、emotion map 與角色 package 匯入/匯出 |
+| LLM 模型 | `/admin/models` | 管理 LLM provider、model、base URL、API key 與推理參數 |
 | 通訊平台 | `/admin/channels` | Telegram / Discord 設定與 smoke 驗證，QQ/LINE/WhatsApp 等 gateway 管理入口 |
 | Open WebUI Bridge | `/admin/openwebui` | Open WebUI narrow OpenAPI bridge 接線說明 |
+| 部署檢查 | `/admin/deployment` | 本機服務、Cloudflare、GitHub Actions 與 Open WebUI bridge readiness 檢查 |
 
 ### 2. 手機與桌面顯示模式
 
@@ -59,7 +60,7 @@
 本版本將原先只靠靜態 DOM 翻譯的方式，擴充到動態模組：
 
 - ASR、TTS、sessions、roles、Live2D、trace、attachments、messages 都會跟著語言切換刷新。
-- 動態按鈕、placeholder、title、aria label、狀態列與錯誤訊息不再硬編碼在功能模組內。
+- 主要動態按鈕、placeholder、title、aria label、狀態列與錯誤訊息已納入 i18n 管理，後續新增 UI 應延續同一模式。
 - 預設語言為英文，並支援繁體中文與簡體中文。
 
 ### 4. Cloudflare Local Tunnel 內測部署
@@ -93,7 +94,7 @@ python -m echobot app --host 127.0.0.1 --port 8001
 - 啟用後，受保護頁面、API docs、`/api/*` 與 ASR WebSocket 都需要可信 user id。
 - session、history、jobs、attachments、settings 會寫入 `.echobot/users/<user_id>/...`。
 - 不同 user 不應互看 session、history、job、attachment 或 Stage event。
-- 可用 `ECHOBOT_ADMIN_ALLOWLIST` 限制 runtime、channel、role、model profile 等高風險 mutation API。
+- 可用 `ECHOBOT_ADMIN_ALLOWLIST` 限制 runtime、channel、role、LLM/voice/Live2D profile 等高風險 mutation API。
 
 ### 6. Stage Event Broker
 
@@ -124,21 +125,21 @@ python -m echobot app --host 127.0.0.1 --port 8001
 - 預設 `chat_only`。
 - operator-agent mode 必須明確啟用才允許更高風險路由。
 
-### 8. Model Profiles
+### 8. Runtime Profiles：LLM、Voice、Live2D 分頁
 
-新增模型 profile 管理頁：
+本版本把角色 runtime 需要的模型設定拆成三個後台頁面，避免所有設定塞在同一個 profile 造成操作混亂：
 
-- 預設 A-E profile。
-- 使用者可持續新增 profile。
-- 可自定義 profile 名稱。
-- 可設定 chat、TTS、ASR、Live2D 相關 provider/model/base URL/API key。
-- 啟用 profile 後，Console 會讀取並更新目前使用的模型設定。
+- `/admin/models`：只管理 LLM / chat model provider、model、base URL、API key 與推理參數。
+- `/admin/voice-models`：管理 STT/TTS provider、model、voice、language、base URL 與 API key。
+- `/admin/live2d`：管理 Live2D selection、可用 catalog 與視覺 profile。
+- `/admin/characters`：把 LLM、Voice、Live2D 綁到角色，形成完整互動單位。
+- `/console`：可針對目前 session 做臨時 runtime override；中台變更不會覆寫後台 profile，但可套用到前台 Stage。
 
 ### 9. Character Packages
 
 `/admin/characters` 可匯出與匯入單一角色 package：
 
-- 匯出內容包含角色 prompt、model profile 綁定、emotion map 與非敏感模型設定快照。
+- 匯出內容包含角色 prompt、LLM / Voice / Live2D 綁定、emotion map 與非敏感模型設定快照。
 - 匯出內容不包含 API key、bot token、Cloudflare/Open WebUI token 或 `.echobot/` secret。
 - 匯入時可指定新角色名稱，也可選擇覆蓋既有角色。
 - v1 使用 JSON package，不打包 Live2D asset 檔案；模型 API key 仍需在 `/admin/models` 補填。
@@ -153,9 +154,9 @@ python -m echobot app --host 127.0.0.1 --port 8001
 - `POST /api/channels/{channel}/smoke` 提供安全的本機 readiness check，不會把 token 回傳到 response。
 - `scripts/telegram_gateway_smoke.py` 與 `scripts/discord_gateway_smoke.py` 可重跑 gateway 檢查；一般文字會驗證 session history，`/ping` / `/smoke` deterministic command 會改驗證 Stage replay，因為這類 command 不寫入一般對話 history。
 - `GET /api/channels/stage-targets` 提供無 secret 的通訊 target 清單，讓 `/stage` 與 `/messenger` 直接選擇已設定平台綁定的前台 session。
-- Telegram token、Bot API `getMe`、poller 啟動、Bot API outbound、session 綁定與 Stage target projection 已做過本機驗證；測試 token 只放在 repo 外的 ignored runtime config，不寫入版本庫。
-- 正式通訊 gateway 可設定 `mirror_to_stage` 與 `stage_session_name`；Telegram 真實平台 inbound 已用 Telegram Desktop `/ping TG_OK` 驗證，EchoBot 回覆與 `/stage` 同步皆成功。
-- Discord webhook bridge 可接收受 secret 保護的本機/反向代理 inbound request；原生 Discord bot events adapter 已完成，且 Discord 真 bot 已用 `/ping DISCORD_OK` 驗證 gateway 回覆與 `/stage` 同步。正式環境仍需 repo 外 bot token、Discord Developer Portal Message Content Intent，並重啟 EchoBot。
+- Telegram Bot API `getMe`、poller 啟動、Bot API outbound、session 綁定與 Stage target projection 已有可重跑 smoke path；實際 bot token 必須放在 repo 外的 ignored runtime config。
+- 正式通訊 gateway 可設定 `mirror_to_stage` 與 `stage_session_name`；維護者環境已用 Telegram `/ping TG_OK` 驗證 inbound 回覆與 `/stage` 同步。
+- Discord webhook bridge 可接收受 secret 保護的本機/反向代理 inbound request；原生 Discord bot events adapter 已完成，且維護者環境已用 Discord `/ping DISCORD_OK` 驗證 gateway 回覆與 `/stage` 同步。正式環境仍需 repo 外 bot token、Discord Developer Portal Message Content Intent，並重啟 EchoBot。
 - 通訊 gateway 內建 `/ping <text>` / `/smoke <text>` deterministic smoke command，避免平台 E2E 測試依賴 LLM 是否剛好遵守「精確回覆」提示。
 
 ### 11. 部署與架構文件
@@ -175,15 +176,15 @@ python -m echobot app --host 127.0.0.1 --port 8001
 - `/stage`、`/messenger`、`/console`、`/admin` 與後台說明/結構/模型/Open WebUI/channels 頁面已建立。
 - 英文、繁體中文、簡體中文語言切換已套用到靜態頁面與主要動態 UI。
 - 手機/平板/桌面顯示模式已加入，並驗證 360x800、390x844、430x932、768x1024 viewport 不應水平溢出。
-- Cloudflare Local Tunnel、trusted-user、Stage Event Broker、Open WebUI bridge API、Model Profiles、Character Packages 與 Channels 設定/smoke 的第一版接口與文件已建立。
-- Telegram / Discord 真實平台 E2E、Voice TTS/ASR smoke、Open WebUI bridge 本機與 GB10 reverse tunnel smoke 已完成。
+- Cloudflare Local Tunnel、trusted-user、Stage Event Broker、Open WebUI bridge API、LLM / Voice / Live2D profiles、Character Packages 與 Channels 設定/smoke 的第一版接口與文件已建立。
+- Telegram / Discord 維護者環境 E2E、Voice TTS/ASR smoke、Open WebUI bridge 本機與遠端 Open WebUI host reverse tunnel smoke 已完成。
 - Console/Admin UX 已補強：route mode 不再顯示 raw enum、Messenger 讀取場次 route mode、Stage/Messenger 補跨頁導覽、Open WebUI/Channels 顯示可重跑入口與平台實測狀態。
 - 公開前安全預設已調整為 `ECHOBOT_SHELL_SAFETY_MODE=workspace-write`。
 
 尚未完成或仍屬規劃中的部分：
 
 - LINE、WhatsApp 正式 runtime adapter 仍屬規劃中；QQ adapter 已保留 built-in 入口但尚未做真實平台長跑驗證。
-- Open WebUI bridge 已有 EchoBot 端 narrow API、說明頁、本機 smoke script，並已從 GB10 host 透過 SSH reverse tunnel 驗證 tool spec、stage event 與 chat。新增 `scripts/echobot_entrypoint.py` 可把本機 app 與 GB10 reverse tunnel 交給 macOS launchd 管理並重跑 smoke；Cloudflare Tunnel / Access 仍是正式 HTTPS 入口。
+- Open WebUI bridge 已有 EchoBot 端 narrow API、說明頁、本機 smoke script，並已從遠端 Open WebUI host 透過 SSH reverse tunnel 驗證 tool spec、stage event 與 chat。新增 `scripts/echobot_entrypoint.py` 可把本機 app 與 reverse tunnel 交給 macOS launchd 管理並重跑 smoke；Cloudflare Tunnel / Access 仍是正式 HTTPS 入口。
 - `/admin` 第一版偏向索引、說明與狀態檢視，還不是完整 production SaaS 管理後台。
 - Stage / Live2D / ASR / TTS 已有 v1 整合與本機 smoke；真機麥克風與長時間語音互動仍需在 HTTPS + 真機環境逐項驗收。
 - 多使用者內測建議使用 Cloudflare Access 或可信 reverse proxy；不要把本地服務匿名直接暴露到公開網路。
@@ -245,14 +246,14 @@ http://127.0.0.1:8000/admin
 python -m pytest
 ```
 
-目前本分支驗證過：
+目前本分支的可重跑驗證包含：
 
-- 全站 10 個 route × 手機/桌面 × 3 語言瀏覽器檢查。
-- i18n key coverage。
+- 主要 route 的手機/平板/桌面 browser smoke。
+- i18n key coverage 與 HTML translatable attribute 檢查。
 - API route/auth tests。
 - browser smoke：`scripts/browser_smoke.py --base-url http://127.0.0.1:8001`。
 - public safety scan：`scripts/check_public_safety.py`。
-- full pytest：`352 passed, 2 warnings, 16 subtests passed`。
+- full pytest / CI：`363 passed, 2 warnings`。
 
 ## 專案規矩
 

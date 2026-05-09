@@ -1,4 +1,4 @@
-import { initShellI18n } from "./shell-i18n.js?v=deployment-1";
+import { initShellI18n } from "./shell-i18n.js?v=ux-public-1";
 import { initShellDisplayMode } from "./shell-display-mode.js?v=site-public-6";
 import { initShellSessionLinks } from "./shell-session-links.js?v=site-public-6";
 
@@ -56,12 +56,12 @@ const bridgeContent = {
             },
             {
                 title: "Stable local entrypoint",
-                body: "The repeatable local service path is managed by `scripts/echobot_entrypoint.py`; it keeps EchoBot and the GB10 reverse bridge from depending on one-off terminal commands.",
+                body: "The repeatable local service path is managed by `scripts/echobot_entrypoint.py`; it keeps EchoBot and the remote Open WebUI reverse bridge from depending on one-off terminal commands.",
                 items: [
                     "`python scripts/echobot_entrypoint.py doctor` checks local tools, runtime files, SSH, Cloudflare CLI presence, and reachable health endpoints.",
-                    "`python scripts/echobot_entrypoint.py --env-file .env.launchd.local status` shows the launchd app and GB10 reverse-tunnel status.",
+                    "`python scripts/echobot_entrypoint.py --env-file .env.launchd.local status` shows the launchd app and remote reverse-tunnel status.",
                     "`python scripts/echobot_entrypoint.py --env-file .env.launchd.local smoke-openwebui --target local --session-name demo` verifies the local bridge.",
-                    "`python scripts/echobot_entrypoint.py --env-file .env.launchd.local smoke-openwebui --target gb10 --session-name demo` verifies the bridge from the Open WebUI host side.",
+                    "`python scripts/echobot_entrypoint.py --env-file .env.launchd.local --remote-host user@openwebui-host.local smoke-openwebui --target remote --session-name demo` verifies the bridge from the remote Open WebUI host side.",
                 ],
             },
         ],
@@ -119,12 +119,12 @@ const bridgeContent = {
             },
             {
                 title: "穩定本機入口",
-                body: "可重跑的本機服務入口由 `scripts/echobot_entrypoint.py` 管理，避免 EchoBot 與 GB10 reverse bridge 依賴一次性的 terminal 指令。",
+                body: "可重跑的本機服務入口由 `scripts/echobot_entrypoint.py` 管理，避免 EchoBot 與遠端 Open WebUI reverse bridge 依賴一次性的 terminal 指令。",
                 items: [
                     "`python scripts/echobot_entrypoint.py doctor` 檢查本機工具、runtime 檔案、SSH、Cloudflare CLI 是否存在，以及 health endpoint 是否可達。",
-                    "`python scripts/echobot_entrypoint.py --env-file .env.launchd.local status` 顯示 launchd app 與 GB10 reverse tunnel 狀態。",
+                    "`python scripts/echobot_entrypoint.py --env-file .env.launchd.local status` 顯示 launchd app 與遠端 reverse tunnel 狀態。",
                     "`python scripts/echobot_entrypoint.py --env-file .env.launchd.local smoke-openwebui --target local --session-name demo` 驗證本機 bridge。",
-                    "`python scripts/echobot_entrypoint.py --env-file .env.launchd.local smoke-openwebui --target gb10 --session-name demo` 從 Open WebUI 主機視角驗證 bridge。",
+                    "`python scripts/echobot_entrypoint.py --env-file .env.launchd.local --remote-host user@openwebui-host.local smoke-openwebui --target remote --session-name demo` 從遠端 Open WebUI 主機視角驗證 bridge。",
                 ],
             },
         ],
@@ -182,12 +182,12 @@ const bridgeContent = {
             },
             {
                 title: "稳定本机入口",
-                body: "可重跑的本机服务入口由 `scripts/echobot_entrypoint.py` 管理，避免 EchoBot 与 GB10 reverse bridge 依赖一次性的 terminal 指令。",
+                body: "可重跑的本机服务入口由 `scripts/echobot_entrypoint.py` 管理，避免 EchoBot 与远端 Open WebUI reverse bridge 依赖一次性的 terminal 指令。",
                 items: [
                     "`python scripts/echobot_entrypoint.py doctor` 检查本机工具、runtime 文件、SSH、Cloudflare CLI 是否存在，以及 health endpoint 是否可达。",
-                    "`python scripts/echobot_entrypoint.py --env-file .env.launchd.local status` 显示 launchd app 与 GB10 reverse tunnel 状态。",
+                    "`python scripts/echobot_entrypoint.py --env-file .env.launchd.local status` 显示 launchd app 与远端 reverse tunnel 状态。",
                     "`python scripts/echobot_entrypoint.py --env-file .env.launchd.local smoke-openwebui --target local --session-name demo` 验证本机 bridge。",
-                    "`python scripts/echobot_entrypoint.py --env-file .env.launchd.local smoke-openwebui --target gb10 --session-name demo` 从 Open WebUI 主机视角验证 bridge。",
+                    "`python scripts/echobot_entrypoint.py --env-file .env.launchd.local --remote-host user@openwebui-host.local smoke-openwebui --target remote --session-name demo` 从远端 Open WebUI 主机视角验证 bridge。",
                 ],
             },
         ],
@@ -372,18 +372,34 @@ function buildGuideSection(section, index) {
 
     const body = document.createElement("p");
     body.className = "guide-section-body";
-    body.textContent = section.body;
+    appendInlineCode(body, section.body);
 
     const list = document.createElement("ul");
     list.className = "guide-list";
     section.items.forEach((item) => {
         const listItem = document.createElement("li");
-        listItem.textContent = item;
+        appendInlineCode(listItem, item);
         list.appendChild(listItem);
     });
 
     article.append(heading, body, list);
     return article;
+}
+
+function appendInlineCode(element, text) {
+    const parts = String(text || "").split(/(`[^`]+`)/g);
+    parts.forEach((part) => {
+        if (!part) {
+            return;
+        }
+        if (part.startsWith("`") && part.endsWith("`") && part.length > 1) {
+            const code = document.createElement("code");
+            code.textContent = part.slice(1, -1);
+            element.appendChild(code);
+            return;
+        }
+        element.appendChild(document.createTextNode(part));
+    });
 }
 
 async function responseToError(response) {

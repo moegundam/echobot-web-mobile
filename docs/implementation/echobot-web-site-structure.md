@@ -13,7 +13,7 @@
 3. Admin 設定 Live2D：到 `/admin/live2d` 建立視覺 profile。
 4. Admin 角色綁定：到 `/admin/characters` 將 LLM/Voice/Live2D 綁到同一角色設定。
 5. Session 測試：到 `/admin/sessions` 建立/選擇 session，接著到 `/console` 選角色與可選 channel，最後用 `/messenger?session_name=<name>` 與 `/stage?session_name=<name>` 驗證。
-6. 通道狀態確認：`/admin/channels` 僅做入口管理，Telegram / Discord / QQ 為目前 built-in 通道；LINE、WhatsApp 仍規劃中。
+6. 通道狀態確認：`/admin/channels` 僅做入口管理，Telegram / Discord 為目前可重跑 smoke 的通道；QQ 保留 adapter 入口但尚未列入常規實測；LINE、WhatsApp 仍規劃中。
 7. Open WebUI bridge：在 `/admin/openwebui` 僅作為操作員工具接口設定與狀態檢視。
 
 ### 第一層頁面
@@ -45,8 +45,9 @@
 | `/admin/voice-models` | 語音設定 | STT/TTS profile 管理 |
 | `/admin/live2d` | 視覺設定 | Live2D 目錄與視覺 profile 管理 |
 | `/admin/characters` | 角色設定 | 角色綁定 LLM/Voice/Live2D |
-| `/admin/channels` | 通道入口 | Telegram/Discord/QQ 設定與 smoke；LINE/WhatsApp 規劃中 |
+| `/admin/channels` | 通道入口 | Telegram/Discord 設定與 smoke；QQ adapter 入口；LINE/WhatsApp 規劃中 |
 | `/admin/openwebui` | 工具接口 | Open WebUI bridge 接線與工具白名單 |
+| `/admin/deployment` | 部署檢查 | 本機服務、Cloudflare、GitHub Actions 與 Open WebUI bridge readiness |
 
 ### API 分組
 
@@ -57,16 +58,19 @@
 | `/api/sessions*` | `/console`、`/messenger`、`/stage` | session lifecycle 與當前 session |
 | `/api/stage/events` | `/stage`、`/messenger` | session-scoped 字幕與舞台事件推送 |
 | `/api/character-profiles*` | `/admin/characters` | 角色定義、prompt、角色綁定 |
-| `/api/model-profiles*` | `/admin/models`、`/console` | model profile CRUD 與啟用 |
+| `/api/llm-models` | `/admin/models` | LLM profile 管理 |
 | `/api/voice-models` | `/admin/voice-models` | STT/TTS profile 管理 |
+| `/api/live2d-models` | `/admin/live2d` | Live2D profile 管理 |
+| `/api/model-profiles*` | 相容層 | 舊 model profile 相容投影；新 UI 應優先使用 split model APIs |
 | `/api/openwebui/*` | `/admin/openwebui`、Open WebUI | 操作員工具 API bridge |
 | `/api/channels/*` | `/admin/channels` | 通道設定、狀態與 smoke 準備 |
+| `/api/deployment/status` | `/admin/deployment` | 唯讀部署 readiness 與建議命令 |
 | `/api/roles*`、`/api/attachments*`、`/api/cron*`、`/api/heartbeat*` | `/console` | 角色卡、檔案、排程、HEARTBEAT |
 
 ### 規則
 
 - Session-based 操作保持 `/admin`（設定）與 `/console`（即時操作）分離；`Messenger`/`Stage`僅作消息入口與輸出。
-- 通道是進入口，不是核心流程；先用 Telegram/Discord/QQ 驗證，LINE/WhatsApp 暫停在規劃清單。
+- 通道是進入口，不是核心流程；先用 Telegram/Discord 驗證，QQ 保留 adapter 入口，LINE/WhatsApp 暫停在規劃清單。
 - Open WebUI bridge 只在需要工具接口時使用，與一般會話測試路徑分離。
 
 ### Site Map
@@ -89,15 +93,18 @@ flowchart TD
     Admin --> Characters["/admin/characters"]
     Admin --> Channels["/admin/channels"]
     Admin --> OpenWebUI["/admin/openwebui"]
+    Admin --> Deployment["/admin/deployment"]
 
     Console --> WebAPI["/api/web/*"]
     Console --> ChatAPI["/api/chat* /api/sessions* /api/roles*"]
     Messenger --> ChatAPI
     Stage --> StageAPI["/api/stage/events SSE"]
     Characters --> CharacterAPI["/api/character-profiles*"]
-    Models --> ModelAPI["/api/model-profiles*"]
+    Models --> ModelAPI["/api/llm-models"]
     Voice --> VoiceAPI["/api/voice-models"]
+    Live2D --> Live2DAPI["/api/live2d-models"]
     OpenWebUI --> BridgeAPI["/api/openwebui/*"]
+    Deployment --> DeployAPI["/api/deployment/status"]
 ```
 
 ## English version
@@ -113,7 +120,7 @@ Define a session-centered operation flow: set up resources first, bind them into
 3. Configure Live2D in `/admin/live2d`.
 4. In `/admin/characters`, bind LLM profile + voice profile + Live2D profile into one character.
 5. Create/select a session in `/admin/sessions`, choose role and optional channel in `/console`, then validate through `/messenger?session_name=<name>` and `/stage?session_name=<name>`.
-6. Channel status is managed in `/admin/channels`: Telegram, Discord, and QQ are built-in channels; LINE and WhatsApp remain planned.
+6. Channel status is managed in `/admin/channels`: Telegram and Discord have repeatable smoke paths; QQ keeps an adapter entry but is not in the regular verified path yet; LINE and WhatsApp remain planned.
 7. Use `/admin/openwebui` only as the operator tool interface for bridge setup and status.
 
 ### Top-Level Pages
@@ -145,8 +152,9 @@ Define a session-centered operation flow: set up resources first, bind them into
 | `/admin/voice-models` | Speech setup | STT/TTS profile management |
 | `/admin/live2d` | Visual setup | Live2D catalog and profile management |
 | `/admin/characters` | Character setup | Bind LLM, voice, and Live2D into one character |
-| `/admin/channels` | Channel entrypoints | Telegram/Discord/QQ setup and smoke checks; LINE/WhatsApp planned |
+| `/admin/channels` | Channel entrypoints | Telegram/Discord setup and smoke checks; QQ adapter entry; LINE/WhatsApp planned |
 | `/admin/openwebui` | Tool bridge | Open WebUI interface status and operator tool wiring |
+| `/admin/deployment` | Deployment readiness | Local service, Cloudflare, GitHub Actions, and Open WebUI bridge readiness |
 
 ### API Groups
 
@@ -157,16 +165,19 @@ Define a session-centered operation flow: set up resources first, bind them into
 | `/api/sessions*` | `/console`, `/messenger`, `/stage` | session lifecycle and current session |
 | `/api/stage/events` | `/stage`, `/messenger` | user/session-scoped stage subtitle and event publishing |
 | `/api/character-profiles*` | `/admin/characters` | character definition and bindings |
-| `/api/model-profiles*` | `/admin/models`, `/console` | model profile CRUD and apply |
+| `/api/llm-models` | `/admin/models` | LLM profile management |
 | `/api/voice-models` | `/admin/voice-models` | STT/TTS profile management |
+| `/api/live2d-models` | `/admin/live2d` | Live2D profile management |
+| `/api/model-profiles*` | Compatibility layer | Legacy model-profile projection; new UI should prefer split model APIs |
 | `/api/openwebui/*` | `/admin/openwebui`, Open WebUI | Operator tool bridge endpoint |
 | `/api/channels/*` | `/admin/channels` | channel settings, status, and smoke readiness |
+| `/api/deployment/status` | `/admin/deployment` | Read-only deployment readiness and recommended commands |
 | `/api/roles*`, `/api/attachments*`, `/api/cron*`, `/api/heartbeat*` | `/console` | roles, files, schedules, heartbeat |
 
 ### Route rules
 
 - Keep Admin (setup) and Console (live operation) separate; use Messenger/Stage only for input and output checks.
-- Channels are entry points, not the control core. Use Telegram/Discord/QQ for current tests; keep LINE/WhatsApp in the roadmap.
+- Channels are entry points, not the control core. Use Telegram/Discord for current tests; keep QQ adapter-only until real-platform verification, and keep LINE/WhatsApp in the roadmap.
 - Open WebUI bridge is for operator tool actions and should be tested separately from normal session-path checks.
 
 ### Site Map
@@ -189,13 +200,16 @@ flowchart TD
     Admin --> Characters["/admin/characters"]
     Admin --> Channels["/admin/channels"]
     Admin --> OpenWebUI["/admin/openwebui"]
+    Admin --> Deployment["/admin/deployment"]
 
     Console --> WebAPI["/api/web/*"]
     Console --> ChatAPI["/api/chat* /api/sessions* /api/roles*"]
     Messenger --> ChatAPI
     Stage --> StageAPI["/api/stage/events SSE"]
     Characters --> CharacterAPI["/api/character-profiles*"]
-    Models --> ModelAPI["/api/model-profiles*"]
+    Models --> ModelAPI["/api/llm-models"]
     Voice --> VoiceAPI["/api/voice-models"]
+    Live2D --> Live2DAPI["/api/live2d-models"]
     OpenWebUI --> BridgeAPI["/api/openwebui/*"]
+    Deployment --> DeployAPI["/api/deployment/status"]
 ```

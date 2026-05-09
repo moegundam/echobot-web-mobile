@@ -19,11 +19,12 @@ http://127.0.0.1:8001
 | 後台 | Admin Index | http://127.0.0.1:8001/admin | 後台索引與主要管理入口 |
 | 後台 | Sessions | http://127.0.0.1:8001/admin/sessions | Session 建立、角色、route mode、channel binding |
 | 後台 | Characters | http://127.0.0.1:8001/admin/characters | 角色 prompt、模型/語音/Live2D 綁定、emotion map、package 匯入匯出 |
-| 後台 | LLM Models | http://127.0.0.1:8001/admin/models | LLM model profiles、provider/base URL/API key 設定 |
+| 後台 | LLM Models | http://127.0.0.1:8001/admin/models | LLM profile、provider、base URL、API key 與推理參數 |
 | 後台 | Voice Models | http://127.0.0.1:8001/admin/voice-models | STT/TTS profile 檢視與後續管理入口 |
 | 後台 | Live2D | http://127.0.0.1:8001/admin/live2d | Live2D asset/config 檢視與後續管理入口 |
 | 後台 | Channels | http://127.0.0.1:8001/admin/channels | Telegram/Discord 設定、secret redaction、smoke readiness |
 | 後台 | Open WebUI Bridge | http://127.0.0.1:8001/admin/openwebui | Open WebUI 對接說明、bridge status、tool spec 入口 |
+| 後台 | Deployment | http://127.0.0.1:8001/admin/deployment | 本機服務、Cloudflare、GitHub Actions、Open WebUI bridge readiness |
 | 後台文件 | Operation Guide | http://127.0.0.1:8001/admin/guide | 操作、設定、預期結果、故障判斷與排除 |
 | 後台文件 | Site Structure | http://127.0.0.1:8001/admin/structure | 頁面分層、資料流、架構邊界 |
 | API 文件 | Swagger Docs | http://127.0.0.1:8001/docs | FastAPI Swagger UI |
@@ -48,16 +49,16 @@ curl -H "Authorization: Bearer $ECHOBOT_OPENWEBUI_BRIDGE_TOKEN" \
   http://127.0.0.1:8001/api/openwebui/tools/openapi.json
 ```
 
-GB10 Open WebUI 開發接線已驗證過的方式：
+遠端 Open WebUI 開發接線可用的方式：
 
 ```text
-GB10 127.0.0.1:18001 -> SSH reverse tunnel -> Mac 127.0.0.1:8001
+Open WebUI host 127.0.0.1:<remote-port> -> SSH reverse tunnel -> EchoBot host 127.0.0.1:8001
 ```
 
-在 GB10/Open WebUI 端測工具 spec 時，URL 可用：
+在 Open WebUI host 端測工具 spec 時，URL 可用：
 
 ```text
-http://127.0.0.1:18001/api/openwebui/tools/openapi.json
+http://127.0.0.1:<remote-port>/api/openwebui/tools/openapi.json
 ```
 
 這是開發用 tunnel；長期內測應改用 Cloudflare Tunnel、Tailscale、VPS 或可信 reverse proxy。
@@ -81,11 +82,12 @@ If you run on another port, replace `8001` in the links below with the actual po
 | Admin | Admin Index | http://127.0.0.1:8001/admin | Admin index and main management entry |
 | Admin | Sessions | http://127.0.0.1:8001/admin/sessions | Session creation, character, route mode, and channel binding |
 | Admin | Characters | http://127.0.0.1:8001/admin/characters | Character prompts, model/voice/Live2D bindings, emotion maps, package import/export |
-| Admin | LLM Models | http://127.0.0.1:8001/admin/models | LLM model profiles, provider/base URL/API key settings |
+| Admin | LLM Models | http://127.0.0.1:8001/admin/models | LLM profiles, provider, base URL, API key, and inference parameters |
 | Admin | Voice Models | http://127.0.0.1:8001/admin/voice-models | STT/TTS profile management, naming, provider settings, and smoke checks |
 | Admin | Live2D | http://127.0.0.1:8001/admin/live2d | Live2D asset/profile management, naming, config, and stage binding |
 | Admin | Channels | http://127.0.0.1:8001/admin/channels | Telegram/Discord settings, secret redaction, and smoke readiness |
 | Admin | Open WebUI Bridge | http://127.0.0.1:8001/admin/openwebui | Open WebUI bridge guide, bridge status, and tool spec entry |
+| Admin | Deployment | http://127.0.0.1:8001/admin/deployment | Local service, Cloudflare, GitHub Actions, and Open WebUI bridge readiness |
 | Admin Docs | Operation Guide | http://127.0.0.1:8001/admin/guide | Operation, setup, expected results, failure signs, and troubleshooting |
 | Admin Docs | Site Structure | http://127.0.0.1:8001/admin/structure | Page layering, data flow, and architecture boundaries |
 | API Docs | Swagger Docs | http://127.0.0.1:8001/docs | FastAPI Swagger UI |
@@ -110,16 +112,16 @@ curl -H "Authorization: Bearer $ECHOBOT_OPENWEBUI_BRIDGE_TOKEN" \
   http://127.0.0.1:8001/api/openwebui/tools/openapi.json
 ```
 
-The verified GB10 Open WebUI development wiring is:
+Remote Open WebUI development wiring can use:
 
 ```text
-GB10 127.0.0.1:18001 -> SSH reverse tunnel -> Mac 127.0.0.1:8001
+Open WebUI host 127.0.0.1:<remote-port> -> SSH reverse tunnel -> EchoBot host 127.0.0.1:8001
 ```
 
-From GB10/Open WebUI, the tool spec URL can be:
+From the Open WebUI host, the tool spec URL can be:
 
 ```text
-http://127.0.0.1:18001/api/openwebui/tools/openapi.json
+http://127.0.0.1:<remote-port>/api/openwebui/tools/openapi.json
 ```
 
 This is a development tunnel. For long-running private testing, use Cloudflare Tunnel, Tailscale, a VPS, or a trusted reverse proxy.

@@ -43,12 +43,12 @@ const structureContent = {
                         label: "Session panel",
                         route: "/console left side",
                         owner: "Visual runtime",
-                        purpose: "Connection state, active session state, character/model profile, language, and Live2D display.",
+                        purpose: "Connection state, active session state, character/runtime profile, language, and Live2D display.",
                     },
                     {
                         label: "Control drawers",
                         route: "Console side panels",
-                        owner: "場次控制",
+                        owner: "Session control",
                         purpose: "Session list and character card selection for the active session.",
                     },
                     {
@@ -115,7 +115,13 @@ const structureContent = {
                         label: "Channels",
                         route: "/admin/channels",
                         owner: "Messaging gateways",
-                        purpose: "Channel entry settings. Telegram/Discord are smoke-ready; LINE/WhatsApp/QQ are planned.",
+                        purpose: "Channel entry settings. Telegram/Discord are smoke-ready; QQ is adapter-only; LINE/WhatsApp are planned.",
+                    },
+                    {
+                        label: "Deployment",
+                        route: "/admin/deployment",
+                        owner: "Readiness",
+                        purpose: "Read-only deployment checks, recommended commands, and external-account next steps.",
                     },
                     {
                         label: "Open WebUI Bridge",
@@ -149,9 +155,9 @@ const structureContent = {
                     },
                     {
                         label: "Admin/bridge API",
-                        route: "/api/character-profiles*, /api/model-profiles*, /api/llm-models, /api/voice-models, /api/live2d-models, /api/channel-integrations, /api/openwebui/*, /api/health",
+                        route: "/api/character-profiles*, /api/llm-models, /api/voice-models, /api/live2d-models, /api/channel-integrations, /api/openwebui/*, /api/deployment/status, /api/health",
                         owner: "Back office",
-                        purpose: "Character binding, split model profiles, channel status, Open WebUI bridge tools, and health checks.",
+                        purpose: "Character binding, split runtime profiles, channel status, Open WebUI bridge tools, deployment readiness, and health checks.",
                     },
                 ],
             },
@@ -161,7 +167,7 @@ const structureContent = {
                 items: [
                     "Session flow: Admin setup → Console session operation → Messenger + Stage verification.",
                     "Channels are entry points, not the core control loop.",
-                    "Telegram / Discord can be tested now; LINE, WhatsApp, QQ are planned.",
+                    "Telegram / Discord can be tested now; QQ remains adapter-only until real-platform verification; LINE and WhatsApp are planned.",
                     "Stage is output-only for a selected session.",
                     "Open WebUI bridge is operator tool integration, not regular chat routing.",
                 ],
@@ -219,7 +225,7 @@ const structureContent = {
                     {
                         label: "設定群組",
                         route: "Console details panels",
-                        owner: "Runtime configuration",
+                        owner: "執行設定",
                         purpose: "Route mode、provider 切換、ASR/TTS、Live2D、CRON 與 HEARTBEAT。",
                     },
                     {
@@ -279,8 +285,14 @@ const structureContent = {
                     {
                         label: "通訊平台",
                         route: "/admin/channels",
-                        owner: "Messaging gateways",
-                        purpose: "通訊入口設定。Telegram/Discord 可做連線檢查，LINE/WhatsApp/QQ 為規劃中。",
+                        owner: "通訊入口",
+                        purpose: "通訊入口設定。Telegram/Discord 可做連線檢查；QQ 仍是 adapter-only；LINE/WhatsApp 為規劃中。",
+                    },
+                    {
+                        label: "部署檢查",
+                        route: "/admin/deployment",
+                        owner: "Readiness",
+                        purpose: "唯讀部署檢查、建議命令與外部帳號下一步。",
                     },
                     {
                         label: "Open WebUI Bridge",
@@ -314,9 +326,9 @@ const structureContent = {
                     },
                     {
                         label: "Admin/Bridge API",
-                        route: "/api/character-profiles*, /api/model-profiles*, /api/llm-models, /api/voice-models, /api/live2d-models, /api/channel-integrations, /api/openwebui/*, /api/health",
+                        route: "/api/character-profiles*, /api/llm-models, /api/voice-models, /api/live2d-models, /api/channel-integrations, /api/openwebui/*, /api/deployment/status, /api/health",
                         owner: "後台",
-                        purpose: "角色綁定、拆分 model profile、通道狀態、Open WebUI bridge tools 與健康檢查。",
+                        purpose: "角色綁定、拆分 runtime profile、通道狀態、Open WebUI bridge tools、部署檢查與健康檢查。",
                     },
                 ],
             },
@@ -325,7 +337,7 @@ const structureContent = {
                 body: "後續擴充請維持以下順序與邊界。",
                 items: [
                     "場次流程為 Admin 設定 -> Console 場次操作 -> Messenger + Stage 驗證。",
-                    "通訊入口不是核心控台；Telegram/Discord 已可測，LINE、WhatsApp、QQ 規劃中。",
+                    "通訊入口不是核心控台；Telegram/Discord 已可測，QQ 仍是 adapter-only，LINE/WhatsApp 規劃中。",
                     "Stage 只顯示指定場次的結果。",
                     "Open WebUI Bridge 為操作員工具接線，不作為一般對話路由。",
                 ],
@@ -371,19 +383,19 @@ const structureContent = {
                     {
                         label: "場次面板",
                         route: "/console 左侧",
-                        owner: "Visual runtime",
+                        owner: "视觉 runtime",
                         purpose: "连接状态、场次状态、当前角色模型、语言与 Live2D 显示。",
                     },
                     {
                         label: "控制抽屉",
                         route: "Console side panels",
-                        owner: "場次控制",
+                        owner: "场次控制",
                         purpose: "显示场次列表与当前场次的角色卡。",
                     },
                     {
                         label: "设置群组",
                         route: "Console details panels",
-                        owner: "Runtime configuration",
+                        owner: "执行设置",
                         purpose: "Route mode、provider 切换、ASR/TTS、Live2D、CRON 与 HEARTBEAT。",
                     },
                     {
@@ -444,7 +456,13 @@ const structureContent = {
                         label: "通讯平台",
                         route: "/admin/channels",
                         owner: "通讯入口",
-                        purpose: "通讯入口设置。Telegram/Discord 可做连线检查，LINE/WhatsApp/QQ 为规划中。",
+                        purpose: "通讯入口设置。Telegram/Discord 可做连线检查；QQ 仍是 adapter-only；LINE/WhatsApp 为规划中。",
+                    },
+                    {
+                        label: "部署检查",
+                        route: "/admin/deployment",
+                        owner: "Readiness",
+                        purpose: "只读部署检查、建议命令与外部账号下一步。",
                     },
                     {
                         label: "Open WebUI Bridge",
@@ -478,9 +496,9 @@ const structureContent = {
                     },
                     {
                         label: "Admin/Bridge API",
-                        route: "/api/character-profiles*, /api/model-profiles*, /api/llm-models, /api/voice-models, /api/live2d-models, /api/channel-integrations, /api/openwebui/*, /api/health",
+                        route: "/api/character-profiles*, /api/llm-models, /api/voice-models, /api/live2d-models, /api/channel-integrations, /api/openwebui/*, /api/deployment/status, /api/health",
                         owner: "后台",
-                        purpose: "角色绑定、拆分 model profile、通道状态、Open WebUI bridge tools 与健康检查。",
+                        purpose: "角色绑定、拆分 runtime profile、通道状态、Open WebUI bridge tools、部署检查与健康检查。",
                     },
                 ],
             },
@@ -489,7 +507,7 @@ const structureContent = {
                 body: "后续扩展请保持以下顺序与边界。",
                 items: [
                     "场次流程固定为 Admin 设置 -> Console 场次操作 -> Messenger + Stage 验证。",
-                    "通讯入口不是核心；Telegram/Discord 已可测试，LINE、WhatsApp、QQ 规划中。",
+                    "通讯入口不是核心；Telegram/Discord 已可测试，QQ 仍是 adapter-only，LINE/WhatsApp 规划中。",
                     "Stage 只展示指定场次的结果。",
                     "Open WebUI Bridge 作为操作员工具接口，不作为一般对话路由。",
                 ],

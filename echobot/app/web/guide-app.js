@@ -19,9 +19,9 @@ const guideContent = {
                 title: "Recommended setup order",
                 body: "Complete setup before opening tests; this makes issue tracking easy and keeps session behavior stable.",
                 items: [
-                    "Admin → LLM setup: open `/admin/models` and configure the model profile for the target model provider.",
+                    "Admin → LLM setup: open `/admin/models` and configure the LLM profile for the target provider.",
                     "Admin → Voice setup: open `/admin/voice-models` and configure STT/TTS voice settings.",
-                    "Admin → Live2D setup: open `/admin/live2d` and configure the visual model profile.",
+                    "Admin → Live2D setup: open `/admin/live2d` and configure the Live2D visual profile.",
                     "Admin → Characters: open `/admin/characters` and bind LLM profile + voice profile + Live2D profile to one character.",
                 ],
             },
@@ -41,7 +41,7 @@ const guideContent = {
                 body: "Channels are entry points, not the session core. They decide who can send into a session.",
                 items: [
                     "Telegram supports Bot API polling; Discord supports a protected webhook bridge and native bot events with Message Content Intent enabled.",
-                    "LINE, WhatsApp, QQ, and others are planned and not part of the regular test path yet.",
+                    "QQ has a built-in adapter entry but is not part of the verified regular test path; LINE and WhatsApp remain planned.",
                     "Open WebUI bridge is not a chat channel; it is an operator tool API interface.",
                     "Keep session + character controls in Console and keep channels in setup context.",
                 ],
@@ -63,6 +63,16 @@ const guideContent = {
                     "Run `git status --short` and confirm `.echobot/`, `.env`, bot tokens, and bridge tokens are not tracked.",
                     "Use `/admin/channels` local E2E first; use real Telegram/Discord only after allow_from is restricted.",
                     "Use `/admin/openwebui` and `scripts/openwebui_bridge_smoke.py` before enabling Open WebUI tools.",
+                ],
+            },
+            {
+                title: "Failure signs and first checks",
+                body: "When behavior looks wrong, check the session boundary first before changing model or channel settings.",
+                items: [
+                    "Stage does not update: confirm Console, Messenger, and Stage use the same session, then refresh `/stage?session_name=<name>`.",
+                    "Character or Live2D does not change: use Console Apply to Stage for temporary runtime changes, or save the persistent binding in Admin → Characters/Sessions.",
+                    "Messenger replies in the wrong language: check the UI language and the character prompt; explicit prompt language has priority.",
+                    "Telegram/Discord does not mirror to Stage: open `/admin/channels`, confirm the bot is running, `mirror_to_stage` is enabled, and the stage session name is correct.",
                 ],
             },
             {
@@ -115,7 +125,7 @@ const guideContent = {
                 body: "通訊入口不是核心運行邏輯；核心是場次、角色與 runtime 控制。",
                 items: [
                     "Telegram 支援 Bot API polling；Discord 支援受保護 webhook bridge，並可在開啟 Message Content Intent 後使用原生 bot events。",
-                    "LINE、WhatsApp、QQ 等仍是規劃中，暫不列入常規測試流程。",
+                    "QQ 有 built-in adapter 入口，但尚未列入已驗證常規測試流程；LINE、WhatsApp 仍是規劃中。",
                     "Open WebUI bridge 是操作員工具介面，不是對話通道。",
                     "核心驗證都應在 `/console`、`/messenger`、`/stage` 的同場次流程中完成。",
                 ],
@@ -137,6 +147,16 @@ const guideContent = {
                     "執行 `git status --short`，確認 `.echobot/`、`.env`、bot token、bridge token 沒有被追蹤。",
                     "先用 `/admin/channels` 的本機 E2E 測試；真 Telegram/Discord 測試前要先收斂 allow_from。",
                     "啟用 Open WebUI tools 前，先用 `/admin/openwebui` 與 `scripts/openwebui_bridge_smoke.py` 驗證。",
+                ],
+            },
+            {
+                title: "故障判斷與第一步檢查",
+                body: "行為不符合預期時，先確認場次邊界，再調整模型或通訊設定。",
+                items: [
+                    "Stage 沒更新：確認 Console、Messenger、Stage 使用同一場次，再刷新 `/stage?session_name=<name>`。",
+                    "角色或 Live2D 沒變：中台臨時變更要按 Apply to Stage；長期綁定要到後台 Characters/Sessions 儲存。",
+                    "Messenger 回覆語言不對：確認 UI 語言與角色 prompt；prompt 明確指定語言時以 prompt 優先。",
+                    "Telegram/Discord 沒同步到 Stage：到 `/admin/channels` 確認 bot running、`mirror_to_stage` 已開啟，且 stage session name 正確。",
                 ],
             },
             {
@@ -189,7 +209,7 @@ const guideContent = {
                 body: "通讯入口不是核心；核心是场次、角色与 runtime 控制。",
                 items: [
                     "Telegram 支持 Bot API polling；Discord 支持受保护 webhook bridge，并可在开启 Message Content Intent 后使用原生 bot events。",
-                    "LINE、WhatsApp、QQ 等仍在规划中，暂不作为常规测试入口。",
+                    "QQ 有 built-in adapter 入口，但尚未列入已验证常规测试流程；LINE、WhatsApp 仍在规划中。",
                     "Open WebUI bridge 是操作员工具接口，不是对话通道。",
                     "核心验证仍以 `/console`、`/messenger`、`/stage` 的同场次流程为准。",
                 ],
@@ -211,6 +231,16 @@ const guideContent = {
                     "执行 `git status --short`，确认 `.echobot/`、`.env`、bot token、bridge token 没有被追踪。",
                     "先用 `/admin/channels` 的本机 E2E 测试；真 Telegram/Discord 测试前要先收敛 allow_from。",
                     "启用 Open WebUI tools 前，先用 `/admin/openwebui` 与 `scripts/openwebui_bridge_smoke.py` 验证。",
+                ],
+            },
+            {
+                title: "故障判断与第一步检查",
+                body: "行为不符合预期时，先确认场次边界，再调整模型或通讯设置。",
+                items: [
+                    "Stage 没更新：确认 Console、Messenger、Stage 使用同一场次，再刷新 `/stage?session_name=<name>`。",
+                    "角色或 Live2D 没变：中台临时变更要按 Apply to Stage；长期绑定要到后台 Characters/Sessions 保存。",
+                    "Messenger 回复语言不对：确认 UI 语言与角色 prompt；prompt 明确指定语言时以 prompt 优先。",
+                    "Telegram/Discord 没同步到 Stage：到 `/admin/channels` 确认 bot running、`mirror_to_stage` 已开启，且 stage session name 正确。",
                 ],
             },
             {
@@ -259,16 +289,32 @@ function buildGuideSection(section, index) {
 
     const body = document.createElement("p");
     body.className = "guide-section-body";
-    body.textContent = section.body;
+    appendInlineCode(body, section.body);
 
     const list = document.createElement("ul");
     list.className = "guide-list";
     section.items.forEach((item) => {
         const listItem = document.createElement("li");
-        listItem.textContent = item;
+        appendInlineCode(listItem, item);
         list.appendChild(listItem);
     });
 
     article.append(heading, body, list);
     return article;
+}
+
+function appendInlineCode(element, text) {
+    const parts = String(text || "").split(/(`[^`]+`)/g);
+    parts.forEach((part) => {
+        if (!part) {
+            return;
+        }
+        if (part.startsWith("`") && part.endsWith("`") && part.length > 1) {
+            const code = document.createElement("code");
+            code.textContent = part.slice(1, -1);
+            element.appendChild(code);
+            return;
+        }
+        element.appendChild(document.createTextNode(part));
+    });
 }

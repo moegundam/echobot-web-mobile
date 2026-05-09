@@ -181,8 +181,8 @@ class UserScopedRuntime:
         job_counts = await self.context.coordinator.job_counts()
         return {
             "status": "ok",
-            "workspace": str(self.context.workspace),
-            "storage_root": str(self.storage_root),
+            "workspace_name": self.context.workspace.name,
+            "storage_scope": "user",
             "trusted_user": self.user_id,
             "current_session": current_session.name,
             "current_role": current_role,

@@ -4,7 +4,7 @@
 
 ### 目標
 
-這份文件記錄 EchoBot 本機服務與 Open WebUI bridge 的可重跑入口。它不取代 Cloudflare Tunnel；用途是讓本機開發與 GB10/Open WebUI 測試不再依賴一次性的手動 `ssh -fN -R` 命令。
+這份文件記錄 EchoBot 本機服務與 Open WebUI bridge 的可重跑入口。它不取代 Cloudflare Tunnel；用途是讓本機開發與遠端 Open WebUI 測試不再依賴一次性的手動 `ssh -fN -R` 命令。
 
 ### 安全邊界
 
@@ -24,7 +24,7 @@ python scripts/echobot_entrypoint.py doctor
 - 檢查 `.venv`、channel config、bridge token file、SSH、`cloudflared`、本機 health 與遠端 reverse health。
 - 寫入 macOS launchd plists：
   - `com.moegundam.echobot.app`
-  - `com.moegundam.echobot.gb10-openwebui-tunnel`
+  - `com.moegundam.echobot.openwebui-tunnel`（遠端 Open WebUI reverse tunnel label）
 - 啟動、停止、查看 launchd 狀態。
 - 透過本機或遠端 reverse tunnel 跑 Open WebUI bridge smoke。
 
@@ -70,7 +70,7 @@ python scripts/echobot_entrypoint.py \
   --env-file .env.launchd.local \
   --token-file /path/to/runtime/bridge-token \
   --remote-host user@your-openwebui-host \
-  smoke-openwebui --target gb10 --session-name demo
+  smoke-openwebui --target remote --session-name demo
 ```
 
 ### 狀態判斷
@@ -78,10 +78,10 @@ python scripts/echobot_entrypoint.py \
 完成狀態應同時滿足：
 
 - `launchctl print gui/$(id -u)/com.moegundam.echobot.app` 顯示 running。
-- `launchctl print gui/$(id -u)/com.moegundam.echobot.gb10-openwebui-tunnel` 顯示 running。
+- `launchctl print gui/$(id -u)/com.moegundam.echobot.openwebui-tunnel` 顯示 running（若使用遠端 reverse tunnel）。
 - `curl http://127.0.0.1:8001/api/health` 回 `status=ok`。
 - `python scripts/echobot_entrypoint.py smoke-openwebui --target local ...` 通過。
-- `python scripts/echobot_entrypoint.py smoke-openwebui --target gb10 ...` 通過。
+- `python scripts/echobot_entrypoint.py --remote-host user@your-openwebui-host smoke-openwebui --target remote ...` 通過（遠端 Open WebUI host 視角）。
 
 ### 未完成範圍
 
@@ -93,7 +93,7 @@ python scripts/echobot_entrypoint.py \
 
 ### Goal
 
-This document records the repeatable entrypoint for the local EchoBot service and the Open WebUI bridge. It does not replace Cloudflare Tunnel. It keeps local development and GB10/Open WebUI testing from depending on one-off manual `ssh -fN -R` commands.
+This document records the repeatable entrypoint for the local EchoBot service and the Open WebUI bridge. It does not replace Cloudflare Tunnel. It keeps local development and remote Open WebUI testing from depending on one-off manual `ssh -fN -R` commands.
 
 ### Security Boundary
 
@@ -113,7 +113,7 @@ Main capabilities:
 - Check `.venv`, channel config, bridge token file, SSH, `cloudflared`, local health, and remote reverse health.
 - Write macOS launchd plists:
   - `com.moegundam.echobot.app`
-  - `com.moegundam.echobot.gb10-openwebui-tunnel`
+  - `com.moegundam.echobot.openwebui-tunnel` (the remote Open WebUI reverse tunnel label)
 - Start, stop, and inspect launchd status.
 - Run Open WebUI bridge smoke through either the local endpoint or the remote reverse tunnel.
 
@@ -159,7 +159,7 @@ python scripts/echobot_entrypoint.py \
   --env-file .env.launchd.local \
   --token-file /path/to/runtime/bridge-token \
   --remote-host user@your-openwebui-host \
-  smoke-openwebui --target gb10 --session-name demo
+  smoke-openwebui --target remote --session-name demo
 ```
 
 ### Status Criteria
@@ -167,10 +167,10 @@ python scripts/echobot_entrypoint.py \
 The entrypoint is complete when all of these pass:
 
 - `launchctl print gui/$(id -u)/com.moegundam.echobot.app` shows running.
-- `launchctl print gui/$(id -u)/com.moegundam.echobot.gb10-openwebui-tunnel` shows running.
+- `launchctl print gui/$(id -u)/com.moegundam.echobot.openwebui-tunnel` shows running when the remote reverse tunnel is used.
 - `curl http://127.0.0.1:8001/api/health` returns `status=ok`.
 - `python scripts/echobot_entrypoint.py smoke-openwebui --target local ...` passes.
-- `python scripts/echobot_entrypoint.py smoke-openwebui --target gb10 ...` passes.
+- `python scripts/echobot_entrypoint.py --remote-host user@your-openwebui-host smoke-openwebui --target remote ...` passes from the remote Open WebUI host point of view.
 
 ### Not Covered
 

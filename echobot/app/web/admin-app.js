@@ -1,4 +1,4 @@
-import { initShellI18n } from "./shell-i18n.js?v=deployment-1";
+import { initShellI18n } from "./shell-i18n.js?v=ux-public-1";
 import { initShellDisplayMode } from "./shell-display-mode.js?v=site-public-6";
 import { initShellSessionLinks } from "./shell-session-links.js?v=site-public-6";
 
@@ -35,7 +35,7 @@ async function loadHealthSnapshot() {
         }
         const payload = await response.json();
         healthLoaded = true;
-        healthOutput.textContent = JSON.stringify(payload, null, 2);
+        healthOutput.textContent = JSON.stringify(safeHealthSnapshot(payload), null, 2);
     } catch (error) {
         healthLoaded = false;
         healthErrorMessage = error.message || String(error);
@@ -43,6 +43,28 @@ async function loadHealthSnapshot() {
             message: healthErrorMessage,
         });
     }
+}
+
+function safeHealthSnapshot(payload) {
+    const channels = payload && typeof payload.channels === "object" && payload.channels
+        ? Object.fromEntries(
+            Object.entries(payload.channels).map(([name, value]) => [
+                name,
+                {
+                    enabled: Boolean(value && value.enabled),
+                    running: Boolean(value && value.running),
+                },
+            ]),
+        )
+        : {};
+    const jobs = payload && typeof payload.jobs === "object" && payload.jobs ? payload.jobs : {};
+    return {
+        status: payload && payload.status ? payload.status : i18n.t("admin.unknown"),
+        current_session: payload && payload.current_session ? payload.current_session : i18n.t("runtimeContext.notSet"),
+        current_role: payload && payload.current_role ? payload.current_role : i18n.t("runtimeContext.notSet"),
+        channels,
+        jobs,
+    };
 }
 
 function refreshLocalizedAdminText() {

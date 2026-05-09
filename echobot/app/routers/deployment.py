@@ -37,7 +37,7 @@ async def get_deployment_status(
     return {
         "local": {
             "health": health.get("status", "unknown"),
-            "workspace": str(workspace),
+            "workspace_name": workspace.name,
             "current_session": health.get("current_session", ""),
             "channels": health.get("channels", {}),
         },

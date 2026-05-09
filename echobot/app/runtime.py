@@ -268,7 +268,7 @@ class AppRuntime:
         job_counts = await self.context.coordinator.job_counts()
         return {
             "status": "ok",
-            "workspace": str(self.context.workspace),
+            "workspace_name": self.context.workspace.name,
             "current_session": current_session.name,
             "current_role": current_role,
             "channels": self.channel_status(),

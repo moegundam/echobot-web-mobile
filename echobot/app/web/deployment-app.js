@@ -1,4 +1,4 @@
-import { initShellI18n } from "./shell-i18n.js?v=deployment-1";
+import { initShellI18n } from "./shell-i18n.js?v=ux-public-1";
 import { initShellDisplayMode } from "./shell-display-mode.js?v=site-public-6";
 
 const statusGrid = document.getElementById("deployment-status-grid");

@@ -1134,6 +1134,9 @@ class AppApiTests(unittest.TestCase):
 
             self.assertEqual(200, health.status_code)
             self.assertEqual("ok", health.json()["status"])
+            self.assertEqual(workspace.name, health.json()["workspace_name"])
+            self.assertNotIn("workspace", health.json())
+            self.assertNotIn("storage_root", health.json())
             self.assertEqual("default", health.json()["current_session"])
             self.assertEqual("default", health.json()["current_role"])
             self.assertEqual(200, definitions.status_code)
@@ -1828,6 +1831,10 @@ class AppApiTests(unittest.TestCase):
             self.assertEqual("Trusted user header is invalid", invalid.json()["detail"])
             self.assertEqual(200, authorized.status_code)
             self.assertEqual("alpha@example.test", authorized.json()["trusted_user"])
+            self.assertEqual(workspace.name, authorized.json()["workspace_name"])
+            self.assertEqual("user", authorized.json()["storage_scope"])
+            self.assertNotIn("workspace", authorized.json())
+            self.assertNotIn("storage_root", authorized.json())
 
     def test_admin_allowlist_blocks_mutating_admin_apis(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -2177,7 +2184,8 @@ class AppApiTests(unittest.TestCase):
             self.assertEqual(200, response.status_code)
             payload = response.json()
             self.assertEqual("ok", payload["local"]["health"])
-            self.assertEqual(str(workspace.resolve()), payload["local"]["workspace"])
+            self.assertEqual(workspace.name, payload["local"]["workspace_name"])
+            self.assertNotIn("workspace", payload["local"])
             self.assertIn("cloudflare", payload)
             self.assertIn("github_actions", payload)
             self.assertTrue(payload["github_actions"]["node24_ready"])
@@ -2527,11 +2535,11 @@ class AppApiTests(unittest.TestCase):
                     runtime.model_profile_service.update_profile(
                         "b",
                         {
-                            "label": "Parent GB10",
+                            "label": "Parent Remote",
                             "chat": {
-                                "model": "parent-gb10-model",
-                                "base_url": "http://parent-gb10.test/v1",
-                                "api_key": "parent-gb10-key",
+                                "model": "parent-remote-model",
+                                "base_url": "http://parent-remote.test/v1",
+                                "api_key": "parent-remote-key",
                             },
                         },
                     )
@@ -2554,16 +2562,16 @@ class AppApiTests(unittest.TestCase):
                 for item in profiles.json()["profiles"]
                 if item["profile_id"] == "b"
             )
-            self.assertEqual("Parent GB10", seeded_profile["label"])
-            self.assertEqual("parent-gb10-model", seeded_profile["chat"]["model"])
+            self.assertEqual("Parent Remote", seeded_profile["label"])
+            self.assertEqual("parent-remote-model", seeded_profile["chat"]["model"])
             self.assertEqual("profile", seeded_profile["chat"]["api_key_source"])
 
             self.assertEqual(200, config.status_code)
             self.assertEqual("b", config.json()["model_profiles"]["active_profile_id"])
             provider_settings = user_runtime.context.agent.provider.settings
-            self.assertEqual("parent-gb10-model", provider_settings.model)
-            self.assertEqual("http://parent-gb10.test/v1", provider_settings.base_url)
-            self.assertEqual("parent-gb10-key", provider_settings.api_key)
+            self.assertEqual("parent-remote-model", provider_settings.model)
+            self.assertEqual("http://parent-remote.test/v1", provider_settings.base_url)
+            self.assertEqual("parent-remote-key", provider_settings.api_key)
 
     def test_legacy_model_profile_write_endpoints_are_retired(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

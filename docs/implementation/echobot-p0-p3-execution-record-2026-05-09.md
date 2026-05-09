@@ -78,7 +78,7 @@ Discord gateway smoke passed.
 
 .venv/bin/python scripts/echobot_entrypoint.py doctor
 local_health: ok
-gb10_reverse_health: ok
+remote_openwebui_reverse_health: ok
 cloudflared_auth: warn - origin certificate is missing.
 
 .venv/bin/python scripts/echobot_entrypoint.py smoke-openwebui --target local --session-name final-entrypoint-openwebui --target-user-id echobot-smoke@local
@@ -169,7 +169,7 @@ Discord gateway smoke passed.
 
 .venv/bin/python scripts/echobot_entrypoint.py doctor
 local_health: ok
-gb10_reverse_health: ok
+remote_openwebui_reverse_health: ok
 cloudflared_auth: warn - origin certificate is missing.
 
 .venv/bin/python scripts/echobot_entrypoint.py smoke-openwebui --target local --session-name final-entrypoint-openwebui --target-user-id echobot-smoke@local

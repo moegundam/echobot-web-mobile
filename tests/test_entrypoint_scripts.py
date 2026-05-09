@@ -67,7 +67,7 @@ def test_launchd_app_plist_uses_token_file_not_token_value(tmp_path: Path) -> No
     assert "-m echobot app" in rendered
 
 
-def test_launchd_gb10_tunnel_plist_maps_remote_to_local_port() -> None:
+def test_launchd_openwebui_tunnel_plist_maps_remote_to_local_port() -> None:
     entrypoint = _load_script("echobot_entrypoint")
     config = {
         "ssh": "/usr/bin/ssh",
@@ -75,11 +75,11 @@ def test_launchd_gb10_tunnel_plist_maps_remote_to_local_port() -> None:
         "remote_port": 18001,
         "host": "127.0.0.1",
         "port": 8001,
-        "remote_host": "fortune@gx10-6703.local",
+        "remote_host": "user@openwebui-host.local",
     }
 
-    plist = entrypoint._build_gb10_tunnel_plist(config)
+    plist = entrypoint._build_openwebui_tunnel_plist(config)
 
-    assert plist["Label"] == entrypoint.GB10_TUNNEL_LABEL
+    assert plist["Label"] == entrypoint.OPENWEBUI_TUNNEL_LABEL
     assert "127.0.0.1:18001:127.0.0.1:8001" in plist["ProgramArguments"]
-    assert "fortune@gx10-6703.local" in plist["ProgramArguments"]
+    assert "user@openwebui-host.local" in plist["ProgramArguments"]

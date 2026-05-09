@@ -11,7 +11,7 @@
 
 > Traditional Chinese version: [README.md](./README.md)
 
-`moegundam/echobot-web-mobile` is a private management edition based on [KdaiP/EchoBot](https://github.com/KdaiP/EchoBot). Its goal is to extend the original EchoBot into a Web/Mobile version suitable for local development, mobile testing, 10-user private testing, Stage display, Messenger chat entry, Console operations, and Admin management.
+`moegundam/echobot-web-mobile` is a Web/Mobile management edition based on [KdaiP/EchoBot](https://github.com/KdaiP/EchoBot). Its goal is to extend the original EchoBot into a version suitable for local development, mobile testing, 10-user private testing, Stage display, Messenger chat entry, Console operations, and Admin management.
 
 EchoBot remains the implementation base. [Open-LLM-VTuber/Open-LLM-VTuber](https://github.com/Open-LLM-VTuber/Open-LLM-VTuber) is not merged into this backend. It is used only as a reference for Live2D, ASR/TTS, VTuber interaction design, and desktop-companion style UX.
 
@@ -40,10 +40,11 @@ Original EchoBot mainly used `/web` as the operation page. This edition adds and
 | Admin | `/admin` | Admin index, health, API docs, jobs, and management pages |
 | Operation Guide | `/admin/guide` | Operation, setup, expected outcomes, failure signs, and troubleshooting |
 | Site Structure | `/admin/structure` | Route map, Console sections, and API namespace boundaries |
-| Characters | `/admin/characters` | Manage role prompts, model profile binding, voice, Live2D summary, emotion maps, and character package import/export |
-| Model Profiles | `/admin/models` | Create, rename, and activate role/model profiles |
+| Characters | `/admin/characters` | Manage role prompts, LLM / Voice / Live2D bindings, emotion maps, and character package import/export |
+| LLM Models | `/admin/models` | Manage LLM provider, model, base URL, API key, and inference parameters |
 | Channels | `/admin/channels` | Telegram / Discord setup and smoke checks, plus QQ/LINE/WhatsApp gateway management entry |
 | Open WebUI Bridge | `/admin/openwebui` | Narrow OpenAPI bridge instructions for Open WebUI |
+| Deployment | `/admin/deployment` | Readiness checks for local service, Cloudflare, GitHub Actions, and the Open WebUI bridge |
 
 ### 2. Mobile And Desktop Display Modes
 
@@ -59,7 +60,7 @@ This edition adds consistent language and display controls:
 The original static DOM translation approach has been expanded to dynamic modules:
 
 - ASR, TTS, sessions, roles, Live2D, traces, attachments, and messages refresh when the language changes.
-- Dynamic buttons, placeholders, titles, aria labels, status text, and error messages are no longer hard-coded inside feature modules.
+- Most dynamic buttons, placeholders, titles, aria labels, status text, and error messages now use the shared i18n layer. New UI should follow the same pattern.
 - The default language is English, with Traditional Chinese and Simplified Chinese available.
 
 ### 4. Cloudflare Local Tunnel Testing Deployment
@@ -93,7 +94,7 @@ This edition adds trusted-header support so private-test data can be isolated by
 - When enabled, protected pages, API docs, `/api/*`, and the ASR WebSocket require a trusted user id.
 - Sessions, history, jobs, attachments, and settings are stored under `.echobot/users/<user_id>/...`.
 - Different users should not see each other's sessions, history, jobs, attachments, or Stage events.
-- `ECHOBOT_ADMIN_ALLOWLIST` can restrict high-risk mutation APIs for runtime, channels, roles, and model profiles.
+- `ECHOBOT_ADMIN_ALLOWLIST` can restrict high-risk mutation APIs for runtime, channels, roles, and LLM/voice/Live2D profiles.
 
 ### 6. Stage Event Broker
 
@@ -124,21 +125,21 @@ Security design:
 - The default route mode is `chat_only`.
 - Operator-agent mode must be explicitly enabled before higher-risk routing is allowed.
 
-### 8. Model Profiles
+### 8. Runtime Profiles: LLM, Voice, And Live2D Pages
 
-A model profile management page was added:
+Runtime model configuration is split across three Admin pages so model, voice, and visual settings do not get mixed into one confusing profile:
 
-- Default A-E profiles.
-- Users can keep adding profiles.
-- Profile names are user-defined.
-- Each profile can configure chat, TTS, ASR, Live2D provider/model/base URL/API key values.
-- Activating a profile updates the model settings used by Console.
+- `/admin/models`: manages only LLM / chat model provider, model, base URL, API key, and inference parameters.
+- `/admin/voice-models`: manages STT/TTS provider, model, voice, language, base URL, and API key.
+- `/admin/live2d`: manages Live2D selection, available catalog entries, and visual profiles.
+- `/admin/characters`: binds LLM, Voice, and Live2D into a complete character interaction unit.
+- `/console`: can make temporary runtime overrides for the selected session. Console changes do not overwrite Admin profiles, but they can be applied to Stage.
 
 ### 9. Character Packages
 
 `/admin/characters` can export and import one character package:
 
-- Exports include the role prompt, model profile binding, emotion map, and a non-sensitive model settings snapshot.
+- Exports include the role prompt, LLM / Voice / Live2D bindings, emotion map, and a non-sensitive model settings snapshot.
 - Exports do not include API keys, bot tokens, Cloudflare/Open WebUI tokens, or `.echobot/` secrets.
 - Imports can use a new character name or overwrite an existing character.
 - v1 uses JSON packages and does not bundle Live2D asset files; model API keys are still filled from `/admin/models`.
@@ -153,9 +154,9 @@ A model profile management page was added:
 - `POST /api/channels/{channel}/smoke` provides safe local readiness checks without echoing tokens in responses.
 - `scripts/telegram_gateway_smoke.py` and `scripts/discord_gateway_smoke.py` rerun gateway checks. Plain text validates session history, while deterministic `/ping` / `/smoke` commands validate Stage replay because those commands do not write normal conversation history.
 - `GET /api/channels/stage-targets` exposes a secret-free messaging target list so `/stage` and `/messenger` can select the Stage session bound to a configured platform.
-- Telegram token validation, Bot API `getMe`, poller startup, Bot API outbound, session binding, and Stage target projection have passed local checks; the test token is stored only in repo-external ignored runtime config and is not committed.
-- Production messaging gateways can set `mirror_to_stage` and `stage_session_name`; real Telegram platform inbound has been verified with Telegram Desktop `/ping TG_OK`, including the EchoBot reply and `/stage` mirror.
-- The Discord webhook bridge can receive secret-protected local or reverse-proxy inbound requests. The native Discord bot events adapter is implemented, and the real Discord bot has been verified with `/ping DISCORD_OK`, including the gateway reply and `/stage` mirror. Production still requires a repo-external bot token, Discord Developer Portal Message Content Intent, and an EchoBot restart.
+- Telegram Bot API `getMe`, poller startup, Bot API outbound, session binding, and Stage target projection have a repeatable smoke path. Real bot tokens must stay in repo-external ignored runtime config.
+- Production messaging gateways can set `mirror_to_stage` and `stage_session_name`; the maintainer environment has verified Telegram `/ping TG_OK` inbound reply and `/stage` mirroring.
+- The Discord webhook bridge can receive secret-protected local or reverse-proxy inbound requests. The native Discord bot events adapter is implemented, and the maintainer environment has verified Discord `/ping DISCORD_OK` gateway reply and `/stage` mirroring. Production still requires a repo-external bot token, Discord Developer Portal Message Content Intent, and an EchoBot restart.
 - Messaging gateways include deterministic `/ping <text>` / `/smoke <text>` smoke commands so platform E2E tests do not depend on LLM exact-output obedience.
 
 ### 11. Deployment And Architecture Documentation
@@ -175,15 +176,15 @@ Completed so far:
 - `/stage`, `/messenger`, `/console`, `/admin`, and the Admin guide/structure/models/Open WebUI/channels pages have been added.
 - English, Traditional Chinese, and Simplified Chinese switching is applied to static pages and the main dynamic UI.
 - Mobile/tablet/desktop display modes have been added, with 360x800, 390x844, 430x932, and 768x1024 viewport checks expected to avoid horizontal overflow.
-- First-version interfaces and documentation exist for Cloudflare Local Tunnel, trusted-user isolation, Stage Event Broker, Open WebUI bridge APIs, Model Profiles, Character Packages, and Channels setup/smoke checks.
-- Real Telegram / Discord platform E2E, Voice TTS/ASR smoke, and Open WebUI bridge smoke from both local EchoBot and the GB10 host over a reverse tunnel have passed.
+- First-version interfaces and documentation exist for Cloudflare Local Tunnel, trusted-user isolation, Stage Event Broker, Open WebUI bridge APIs, LLM / Voice / Live2D profiles, Character Packages, and Channels setup/smoke checks.
+- Telegram / Discord E2E in the maintainer environment, Voice TTS/ASR smoke, and Open WebUI bridge smoke from both local EchoBot and a remote Open WebUI host over a reverse tunnel have passed.
 - Console/Admin UX has been tightened: route mode no longer shows raw enum values, Messenger uses the Session route mode, Stage/Messenger include cross-surface navigation, and Open WebUI/Channels show repeatable entrypoint and verified-platform status.
 - The public-facing safety default is now `ECHOBOT_SHELL_SAFETY_MODE=workspace-write`.
 
 Not finished or still planned:
 
 - LINE and WhatsApp production runtime adapters remain planned; the QQ adapter still has a built-in entry but has not had a long-running real-platform check.
-- The EchoBot-side narrow Open WebUI bridge API, documentation page, and local smoke script exist. GB10 host calls have been verified through an SSH reverse tunnel for tool spec, stage events, and chat. `scripts/echobot_entrypoint.py` now lets the local app and GB10 reverse tunnel run under macOS launchd and rerun bridge smoke checks. Cloudflare Tunnel / Access remains the formal HTTPS entrypoint.
+- The EchoBot-side narrow Open WebUI bridge API, documentation page, and local smoke script exist. A remote Open WebUI host has been verified through an SSH reverse tunnel for tool spec, stage events, and chat. `scripts/echobot_entrypoint.py` can run the local app and reverse tunnel under macOS launchd and rerun bridge smoke checks. Cloudflare Tunnel / Access remains the formal HTTPS entrypoint.
 - `/admin` v1 is mostly an index, guide, and status surface. It is not a complete production SaaS admin console.
 - Stage / Live2D / ASR / TTS have v1 integration and local smoke coverage. Real-device microphone and long-running voice interaction checks still need HTTPS plus real-device validation.
 - Multi-user private testing should use Cloudflare Access or a trusted reverse proxy. Do not expose the local service anonymously to the public internet.
@@ -245,14 +246,14 @@ http://127.0.0.1:8000/admin
 python -m pytest
 ```
 
-This branch has been verified with:
+This branch has repeatable verification for:
 
-- 10 routes × mobile/desktop × 3 languages browser checks.
-- i18n key coverage.
+- Browser smoke for the main routes across mobile/tablet/desktop viewports.
+- i18n key coverage and HTML translatable attribute checks.
 - API route/auth tests.
 - Browser smoke: `scripts/browser_smoke.py --base-url http://127.0.0.1:8001`.
 - Public safety scan: `scripts/check_public_safety.py`.
-- Full pytest: `352 passed, 2 warnings, 16 subtests passed`.
+- Full pytest / CI: `363 passed, 2 warnings`.
 
 ## Project Rules
 
