@@ -15,6 +15,9 @@ def build_postgres_seed_export(workspace: str | Path) -> dict[str, Any]:
         "format": "echobot-postgres-seed-v1",
         "sessions": _export_sessions(storage_root / "sessions"),
         "model_profiles": _read_json(storage_root / "model_profiles.json"),
+        "llm_models": _read_json(storage_root / "llm_models.json"),
+        "voice_profiles": _read_json(storage_root / "voice_profiles.json"),
+        "live2d_models": _read_json(storage_root / "live2d_models.json"),
         "character_profiles": _read_json(storage_root / "character_profiles.json"),
         "channels": _export_channels(storage_root / "channels.json"),
         "notes": [

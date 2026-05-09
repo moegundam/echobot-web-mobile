@@ -513,6 +513,12 @@ class CreateModelProfileRequest(StrictSchemaModel):
     source_profile_id: str | None = None
 
 
+class CreateRuntimeProfileRequest(StrictSchemaModel):
+    name: str
+    source_profile_id: str | None = None
+    source_model_id: str | None = None
+
+
 class SetRoleModelProfileBindingRequest(StrictSchemaModel):
     profile_id: str
 
@@ -551,6 +557,28 @@ class UpdateModelProfileRequest(StrictSchemaModel):
     tts: UpdateTTSModelProfileConfigRequest | None = None
     asr: UpdateASRModelProfileConfigRequest | None = None
     live2d: Live2DModelProfileConfigModel | None = None
+
+
+class UpdateLLMModelRequest(StrictSchemaModel):
+    name: str | None = None
+    provider: str | None = None
+    model: str | None = None
+    base_url: str | None = None
+    temperature: float | None = Field(default=None, ge=0, le=2)
+    max_tokens: int | None = Field(default=None, ge=1, le=200000)
+    api_key: str | None = None
+    clear_api_key: bool | None = None
+
+
+class UpdateVoiceProfileRequest(StrictSchemaModel):
+    name: str | None = None
+    tts: UpdateTTSModelProfileConfigRequest | None = None
+    stt: UpdateASRModelProfileConfigRequest | None = None
+
+
+class UpdateLive2DModelRequest(StrictSchemaModel):
+    name: str | None = None
+    selection_key: str | None = None
 
 
 class TTSRequest(BaseModel):

@@ -9,10 +9,17 @@ from ...orchestration import role_name_from_metadata, route_mode_from_metadata
 from ..schemas import (
     CharacterProfileModel,
     ChannelIntegrationsResponse,
+    CreateRuntimeProfileRequest,
+    LLMModelAdminModel,
     LLMModelsResponse,
+    Live2DModelAdminModel,
     Live2DModelsResponse,
     SessionRuntimeContextResponse,
+    UpdateLLMModelRequest,
+    UpdateLive2DModelRequest,
     UpdateSessionRuntimeOverridesRequest,
+    UpdateVoiceProfileRequest,
+    VoiceProfileAdminModel,
     VoiceProfilesResponse,
 )
 from ..services.session_catalog import (
@@ -23,10 +30,18 @@ from ..services.session_catalog import (
     llm_model_from_profile,
     profile_lookup,
     project_channel_integrations,
-    project_live2d_models,
-    project_llm_models,
-    project_voice_profiles,
     voice_profile_from_profile,
+)
+from ..services.runtime_profile_composer import (
+    live2d_runtime_profile,
+    llm_runtime_profile,
+    model_profile_id_for_role,
+    runtime_profile_with_overrides,
+    voice_runtime_profile,
+)
+from ..services.model_profile_compat import (
+    live2d_catalog as compat_live2d_catalog,
+    model_profiles_payload,
 )
 from ..session_metadata import channel_integration_id_from_metadata
 from ..state import get_app_runtime, require_admin_user
@@ -37,31 +52,247 @@ router = APIRouter(tags=["session-catalog"])
 
 @router.get("/llm-models", response_model=LLMModelsResponse)
 async def list_llm_models(runtime=Depends(get_app_runtime)) -> LLMModelsResponse:
-    profile_payload = await _profile_payload(runtime)
-    return LLMModelsResponse(
-        active_model_id=str(profile_payload.get("active_profile_id") or "a"),
-        models=project_llm_models(profile_payload),
-    )
+    _ensure_runtime_model_services_ready(runtime)
+    return LLMModelsResponse(**await asyncio.to_thread(runtime.llm_model_service.list_models))
+
+
+@router.post("/llm-models", response_model=LLMModelAdminModel)
+async def create_llm_model(
+    request: CreateRuntimeProfileRequest,
+    runtime=Depends(get_app_runtime),
+    _admin_user: str = Depends(require_admin_user),
+) -> LLMModelAdminModel:
+    _ensure_runtime_model_services_ready(runtime)
+    try:
+        payload = await asyncio.to_thread(
+            runtime.llm_model_service.create_model,
+            name=request.name,
+            source_model_id=request.source_model_id or request.source_profile_id,
+        )
+    except ValueError as exc:
+        raise _runtime_profile_http_exception(exc) from exc
+    return LLMModelAdminModel(**payload)
+
+
+@router.patch("/llm-models/{model_id}", response_model=LLMModelAdminModel)
+async def update_llm_model(
+    model_id: str,
+    request: UpdateLLMModelRequest,
+    runtime=Depends(get_app_runtime),
+    _admin_user: str = Depends(require_admin_user),
+) -> LLMModelAdminModel:
+    _ensure_runtime_model_services_ready(runtime)
+    try:
+        payload = await asyncio.to_thread(
+            runtime.llm_model_service.update_model,
+            model_id,
+            request.model_dump(exclude_unset=True),
+        )
+        if model_id == await _active_llm_model_id(runtime):
+            await _apply_runtime_profile(runtime)
+    except ValueError as exc:
+        raise _runtime_profile_http_exception(exc) from exc
+    return LLMModelAdminModel(**payload)
+
+
+@router.post("/llm-models/{model_id}/activate", response_model=LLMModelsResponse)
+async def activate_llm_model(
+    model_id: str,
+    runtime=Depends(get_app_runtime),
+    _admin_user: str = Depends(require_admin_user),
+) -> LLMModelsResponse:
+    _ensure_runtime_model_services_ready(runtime)
+    try:
+        payload = await asyncio.to_thread(runtime.llm_model_service.activate_model, model_id)
+        await _apply_runtime_profile(runtime)
+    except ValueError as exc:
+        raise _runtime_profile_http_exception(exc) from exc
+    return LLMModelsResponse(**payload)
+
+
+@router.delete("/llm-models/{model_id}", response_model=LLMModelsResponse)
+async def delete_llm_model(
+    model_id: str,
+    runtime=Depends(get_app_runtime),
+    _admin_user: str = Depends(require_admin_user),
+) -> LLMModelsResponse:
+    _ensure_runtime_model_services_ready(runtime)
+    try:
+        payload = await asyncio.to_thread(runtime.llm_model_service.delete_model, model_id)
+        if runtime.character_profile_settings_service is not None:
+            await asyncio.to_thread(
+                runtime.character_profile_settings_service.clear_model_profile_bindings_for_profile,
+                model_id,
+            )
+        await _delete_legacy_model_profile_if_present(runtime, model_id)
+    except ValueError as exc:
+        raise _runtime_profile_http_exception(exc) from exc
+    return LLMModelsResponse(**payload)
 
 
 @router.get("/voice-models", response_model=VoiceProfilesResponse)
 async def list_voice_models(runtime=Depends(get_app_runtime)) -> VoiceProfilesResponse:
-    profile_payload = await _profile_payload(runtime)
-    return VoiceProfilesResponse(
-        active_voice_profile_id=str(profile_payload.get("active_profile_id") or "a"),
-        profiles=project_voice_profiles(profile_payload),
-    )
+    _ensure_runtime_model_services_ready(runtime)
+    return VoiceProfilesResponse(**await asyncio.to_thread(runtime.voice_model_service.list_profiles))
+
+
+@router.post("/voice-models", response_model=VoiceProfileAdminModel)
+async def create_voice_model(
+    request: CreateRuntimeProfileRequest,
+    runtime=Depends(get_app_runtime),
+    _admin_user: str = Depends(require_admin_user),
+) -> VoiceProfileAdminModel:
+    _ensure_runtime_model_services_ready(runtime)
+    try:
+        payload = await asyncio.to_thread(
+            runtime.voice_model_service.create_profile,
+            name=request.name,
+            source_profile_id=request.source_profile_id or request.source_model_id,
+        )
+    except ValueError as exc:
+        raise _runtime_profile_http_exception(exc) from exc
+    return VoiceProfileAdminModel(**payload)
+
+
+@router.patch("/voice-models/{profile_id}", response_model=VoiceProfileAdminModel)
+async def update_voice_model(
+    profile_id: str,
+    request: UpdateVoiceProfileRequest,
+    runtime=Depends(get_app_runtime),
+    _admin_user: str = Depends(require_admin_user),
+) -> VoiceProfileAdminModel:
+    _ensure_runtime_model_services_ready(runtime)
+    try:
+        payload = await asyncio.to_thread(
+            runtime.voice_model_service.update_profile,
+            profile_id,
+            request.model_dump(exclude_unset=True),
+        )
+        if profile_id == await _active_voice_profile_id(runtime):
+            await _apply_runtime_profile(runtime)
+    except ValueError as exc:
+        raise _runtime_profile_http_exception(exc) from exc
+    return VoiceProfileAdminModel(**payload)
+
+
+@router.post("/voice-models/{profile_id}/activate", response_model=VoiceProfilesResponse)
+async def activate_voice_model(
+    profile_id: str,
+    runtime=Depends(get_app_runtime),
+    _admin_user: str = Depends(require_admin_user),
+) -> VoiceProfilesResponse:
+    _ensure_runtime_model_services_ready(runtime)
+    try:
+        payload = await asyncio.to_thread(runtime.voice_model_service.activate_profile, profile_id)
+        await _apply_runtime_profile(runtime)
+    except ValueError as exc:
+        raise _runtime_profile_http_exception(exc) from exc
+    return VoiceProfilesResponse(**payload)
+
+
+@router.delete("/voice-models/{profile_id}", response_model=VoiceProfilesResponse)
+async def delete_voice_model(
+    profile_id: str,
+    runtime=Depends(get_app_runtime),
+    _admin_user: str = Depends(require_admin_user),
+) -> VoiceProfilesResponse:
+    _ensure_runtime_model_services_ready(runtime)
+    try:
+        payload = await asyncio.to_thread(runtime.voice_model_service.delete_profile, profile_id)
+    except ValueError as exc:
+        raise _runtime_profile_http_exception(exc) from exc
+    return VoiceProfilesResponse(**payload)
 
 
 @router.get("/live2d-models", response_model=Live2DModelsResponse)
 async def list_live2d_models(runtime=Depends(get_app_runtime)) -> Live2DModelsResponse:
-    profile_payload = await _profile_payload(runtime)
+    _ensure_runtime_model_services_ready(runtime)
     catalog = await _live2d_catalog(runtime)
     return Live2DModelsResponse(
-        active_live2d_model_id=str(profile_payload.get("active_profile_id") or "a"),
-        models=project_live2d_models(profile_payload, catalog),
-        catalog=catalog,
+        **await asyncio.to_thread(runtime.live2d_model_service.list_models, catalog),
     )
+
+
+@router.post("/live2d-models", response_model=Live2DModelAdminModel)
+async def create_live2d_model(
+    request: CreateRuntimeProfileRequest,
+    runtime=Depends(get_app_runtime),
+    _admin_user: str = Depends(require_admin_user),
+) -> Live2DModelAdminModel:
+    _ensure_runtime_model_services_ready(runtime)
+    catalog = await _live2d_catalog(runtime)
+    try:
+        payload = await asyncio.to_thread(
+            runtime.live2d_model_service.create_model,
+            name=request.name,
+            source_model_id=request.source_model_id or request.source_profile_id,
+            catalog=catalog,
+        )
+    except ValueError as exc:
+        raise _runtime_profile_http_exception(exc) from exc
+    return Live2DModelAdminModel(**payload)
+
+
+@router.patch("/live2d-models/{model_id}", response_model=Live2DModelAdminModel)
+async def update_live2d_model(
+    model_id: str,
+    request: UpdateLive2DModelRequest,
+    runtime=Depends(get_app_runtime),
+    _admin_user: str = Depends(require_admin_user),
+) -> Live2DModelAdminModel:
+    _ensure_runtime_model_services_ready(runtime)
+    catalog = await _live2d_catalog(runtime)
+    try:
+        payload = await asyncio.to_thread(
+            runtime.live2d_model_service.update_model,
+            model_id,
+            request.model_dump(exclude_unset=True),
+            catalog=catalog,
+        )
+        if model_id == await _active_live2d_model_id(runtime):
+            await _apply_runtime_profile(runtime)
+    except ValueError as exc:
+        raise _runtime_profile_http_exception(exc) from exc
+    return Live2DModelAdminModel(**payload)
+
+
+@router.post("/live2d-models/{model_id}/activate", response_model=Live2DModelsResponse)
+async def activate_live2d_model(
+    model_id: str,
+    runtime=Depends(get_app_runtime),
+    _admin_user: str = Depends(require_admin_user),
+) -> Live2DModelsResponse:
+    _ensure_runtime_model_services_ready(runtime)
+    catalog = await _live2d_catalog(runtime)
+    try:
+        payload = await asyncio.to_thread(
+            runtime.live2d_model_service.activate_model,
+            model_id,
+            catalog,
+        )
+        await _apply_runtime_profile(runtime)
+    except ValueError as exc:
+        raise _runtime_profile_http_exception(exc) from exc
+    return Live2DModelsResponse(**payload)
+
+
+@router.delete("/live2d-models/{model_id}", response_model=Live2DModelsResponse)
+async def delete_live2d_model(
+    model_id: str,
+    runtime=Depends(get_app_runtime),
+    _admin_user: str = Depends(require_admin_user),
+) -> Live2DModelsResponse:
+    _ensure_runtime_model_services_ready(runtime)
+    catalog = await _live2d_catalog(runtime)
+    try:
+        payload = await asyncio.to_thread(
+            runtime.live2d_model_service.delete_model,
+            model_id,
+            catalog,
+        )
+    except ValueError as exc:
+        raise _runtime_profile_http_exception(exc) from exc
+    return Live2DModelsResponse(**payload)
 
 
 @router.get("/channel-integrations", response_model=ChannelIntegrationsResponse)
@@ -162,25 +393,42 @@ async def _session_runtime_context_response(
     profile_payload = await _profile_payload(runtime)
     profiles = profile_lookup(profile_payload)
     live_override = await _session_runtime_override(runtime, session.name)
+    bound_profile_id = await model_profile_id_for_role(runtime, role_name)
     base_profile_id = str(
         live_override.get("model_profile_id")
+        or bound_profile_id
         or effective_profile_id(profile_payload, role_name),
     )
     runtime_bindings = await _runtime_bindings_for_role(runtime, role_name)
-    llm_profile = profiles.get(
+    llm_profile_id = (
         str(live_override.get("llm_model_id") or "")
         or runtime_bindings.get("llm_model_id")
-        or base_profile_id,
+        or base_profile_id
     )
-    voice_profile = profiles.get(
+    voice_profile_id = (
         str(live_override.get("voice_profile_id") or "")
         or runtime_bindings.get("voice_profile_id")
-        or base_profile_id,
+        or base_profile_id
     )
-    live2d_profile = profiles.get(
+    live2d_profile_id = (
         str(live_override.get("live2d_model_id") or "")
         or runtime_bindings.get("live2d_model_id")
-        or base_profile_id,
+        or base_profile_id
+    )
+    llm_profile = await _runtime_llm_profile(
+        runtime,
+        llm_profile_id,
+        profiles.get(llm_profile_id, {}),
+    )
+    voice_profile = await _runtime_voice_profile(
+        runtime,
+        voice_profile_id,
+        profiles.get(voice_profile_id, {}),
+    )
+    live2d_profile = await _runtime_live2d_profile(
+        runtime,
+        live2d_profile_id,
+        profiles.get(live2d_profile_id, {}),
     )
     catalog = await _live2d_catalog(runtime)
     catalog_by_key = {
@@ -225,23 +473,49 @@ async def _session_runtime_context_response(
 async def _profile_payload(runtime) -> dict[str, Any]:
     if runtime.model_profile_service is None:
         raise HTTPException(status_code=503, detail="Model profile service is not ready")
-    return await asyncio.to_thread(runtime.model_profile_service.list_profiles)
+    return await model_profiles_payload(runtime)
+
+
+def _ensure_runtime_model_services_ready(runtime) -> None:
+    if runtime.model_profile_service is None:
+        raise HTTPException(status_code=503, detail="Model profile service is not ready")
+    if runtime.llm_model_service is None:
+        raise HTTPException(status_code=503, detail="LLM model service is not ready")
+    if runtime.voice_model_service is None:
+        raise HTTPException(status_code=503, detail="Voice model service is not ready")
+    if runtime.live2d_model_service is None:
+        raise HTTPException(status_code=503, detail="Live2D model service is not ready")
+
+
+async def _active_llm_model_id(runtime) -> str:
+    payload = await asyncio.to_thread(runtime.llm_model_service.list_models)
+    return str(payload.get("active_model_id") or "a")
+
+
+async def _active_voice_profile_id(runtime) -> str:
+    payload = await asyncio.to_thread(runtime.voice_model_service.list_profiles)
+    return str(payload.get("active_voice_profile_id") or "a")
+
+
+async def _active_live2d_model_id(runtime) -> str:
+    catalog = await _live2d_catalog(runtime)
+    payload = await asyncio.to_thread(runtime.live2d_model_service.list_models, catalog)
+    return str(payload.get("active_live2d_model_id") or "a")
+
+
+async def _apply_runtime_profile(runtime) -> None:
+    await runtime.apply_active_model_profile()
+
+
+def _runtime_profile_http_exception(exc: ValueError) -> HTTPException:
+    message = str(exc)
+    if "unknown model profile" in message.lower():
+        return HTTPException(status_code=404, detail=message)
+    return HTTPException(status_code=400, detail=message)
 
 
 async def _live2d_catalog(runtime) -> list[dict[str, Any]]:
-    if runtime.web_console_service is None:
-        return []
-    config = await runtime.web_console_service.build_frontend_config(
-        session_name="default",
-        role_name="default",
-        route_mode="chat_only",
-        runtime_config={},
-    )
-    live2d = config.get("live2d", {})
-    if not isinstance(live2d, dict):
-        return []
-    models = live2d.get("models", [])
-    return [item for item in models if isinstance(item, dict)]
+    return await compat_live2d_catalog(runtime)
 
 
 async def _channel_integrations(runtime):
@@ -276,11 +550,8 @@ async def _character_for_role(
     except ValueError:
         return None
 
-    bindings = profile_payload.get("role_bindings")
-    if not isinstance(bindings, dict):
-        bindings = {}
     live_override = live_override or {}
-    bound_profile_id = str(bindings.get(role.name) or "")
+    bound_profile_id = await model_profile_id_for_role(runtime, role.name)
     resolved_profile_id = str(
         live_override.get("model_profile_id")
         or bound_profile_id
@@ -359,6 +630,48 @@ async def _runtime_bindings_for_role(runtime, role_name: str) -> dict[str, str]:
     )
 
 
+async def _runtime_llm_profile(
+    runtime,
+    profile_id: str,
+    fallback_profile: dict[str, Any],
+) -> dict[str, Any]:
+    normalized_id = str(profile_id or "").strip()
+    if not normalized_id:
+        return fallback_profile
+    try:
+        return await llm_runtime_profile(runtime, normalized_id)
+    except ValueError:
+        return fallback_profile
+
+
+async def _runtime_voice_profile(
+    runtime,
+    profile_id: str,
+    fallback_profile: dict[str, Any],
+) -> dict[str, Any]:
+    normalized_id = str(profile_id or "").strip()
+    if not normalized_id:
+        return fallback_profile
+    try:
+        return await voice_runtime_profile(runtime, normalized_id)
+    except ValueError:
+        return fallback_profile
+
+
+async def _runtime_live2d_profile(
+    runtime,
+    profile_id: str,
+    fallback_profile: dict[str, Any],
+) -> dict[str, Any]:
+    normalized_id = str(profile_id or "").strip()
+    if not normalized_id:
+        return fallback_profile
+    try:
+        return await live2d_runtime_profile(runtime, normalized_id)
+    except ValueError:
+        return fallback_profile
+
+
 async def _session_runtime_override(runtime, session_name: str) -> dict[str, Any]:
     service = getattr(runtime, "session_runtime_override_service", None)
     if service is None:
@@ -396,9 +709,12 @@ async def _apply_runtime_override_if_current_session(runtime, session_name: str)
         live_override.get("model_profile_id")
         or effective_profile_id(profile_payload, role_name),
     )
+    runtime_bindings = await _runtime_bindings_for_role(runtime, role_name)
     runtime_profile = await _runtime_profile_with_live_override(
         runtime,
+        role_name=role_name,
         base_profile_id=base_profile_id,
+        runtime_bindings=runtime_bindings,
         live_override=live_override,
     )
     if runtime_profile:
@@ -408,58 +724,18 @@ async def _apply_runtime_override_if_current_session(runtime, session_name: str)
 async def _runtime_profile_with_live_override(
     runtime,
     *,
+    role_name: str = "",
     base_profile_id: str,
+    runtime_bindings: dict[str, str] | None = None,
     live_override: dict[str, Any],
 ) -> dict[str, Any] | None:
-    if runtime.model_profile_service is None:
-        return None
-
-    base_profile_id = str(base_profile_id or "").strip()
-    if not base_profile_id:
-        state = await asyncio.to_thread(runtime.model_profile_service.list_profiles)
-        base_profile_id = str(state.get("active_profile_id") or "a")
-
-    profile = dict(
-        await asyncio.to_thread(
-            runtime.model_profile_service.get_profile_for_runtime,
-            base_profile_id,
-        ),
+    return await runtime_profile_with_overrides(
+        runtime,
+        role_name=role_name,
+        base_profile_id=base_profile_id,
+        runtime_bindings=runtime_bindings,
+        live_override=live_override,
     )
-
-    llm_model_id = str(live_override.get("llm_model_id") or "").strip()
-    if llm_model_id:
-        llm_profile = await asyncio.to_thread(
-            runtime.model_profile_service.get_profile_for_runtime,
-            llm_model_id,
-        )
-        profile["chat"] = _section(llm_profile, "chat")
-
-    voice_profile_id = str(live_override.get("voice_profile_id") or "").strip()
-    if voice_profile_id:
-        voice_profile = await asyncio.to_thread(
-            runtime.model_profile_service.get_profile_for_runtime,
-            voice_profile_id,
-        )
-        profile["tts"] = _section(voice_profile, "tts")
-        profile["asr"] = _section(voice_profile, "asr")
-
-    live2d_model_id = str(live_override.get("live2d_model_id") or "").strip()
-    if live2d_model_id:
-        live2d_profile = await asyncio.to_thread(
-            runtime.model_profile_service.get_profile_for_runtime,
-            live2d_model_id,
-        )
-        profile["live2d"] = _section(live2d_profile, "live2d")
-
-    for section_name in ("tts", "asr", "live2d"):
-        section_override = _section(live_override, section_name)
-        if not section_override:
-            continue
-        current_section = dict(_section(profile, section_name))
-        current_section.update(section_override)
-        profile[section_name] = current_section
-
-    return profile
 
 
 def _apply_voice_override(voice_model, live_override: dict[str, Any]):
@@ -505,6 +781,16 @@ def _stage_context_from_override(live_override: dict[str, Any]) -> dict[str, Any
     if not background:
         return None
     return {"background": background}
+
+
+async def _delete_legacy_model_profile_if_present(runtime, profile_id: str) -> None:
+    service = getattr(runtime, "model_profile_service", None)
+    if service is None:
+        return
+    try:
+        await asyncio.to_thread(service.delete_profile, profile_id)
+    except ValueError:
+        return
 
 
 def _section(profile: dict[str, Any], section_name: str) -> dict[str, Any]:

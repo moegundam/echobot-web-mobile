@@ -23,10 +23,7 @@ async def apply_runtime_profile_for_role(
     normalized_role_name = str(role_name or "").strip()
     profile_id = str(preferred_profile_id or "").strip()
     if not profile_id:
-        profile_id = await asyncio.to_thread(
-            runtime.model_profile_service.profile_id_for_role,
-            normalized_role_name,
-        )
+        profile_id = await model_profile_id_for_role(runtime, normalized_role_name)
 
     runtime_bindings = await runtime_bindings_for_role(runtime, normalized_role_name)
     has_split_bindings = has_split_runtime_bindings(runtime_bindings)
@@ -38,9 +35,15 @@ async def apply_runtime_profile_for_role(
             runtime.model_profile_service.activate_profile,
             profile_id,
         )
-        active_profile = await asyncio.to_thread(
-            runtime.model_profile_service.get_profile_for_runtime,
-            activated["active_profile_id"],
+        active_profile = await composed_runtime_profile(
+            runtime,
+            role_name=normalized_role_name,
+            base_profile_id=str(activated.get("active_profile_id") or profile_id),
+            runtime_bindings={
+                "llm_model_id": profile_id,
+                "voice_profile_id": profile_id,
+                "live2d_model_id": profile_id,
+            },
         )
         await runtime.apply_model_profile(active_profile)
         return activated
@@ -72,22 +75,10 @@ async def composed_runtime_profile(
     llm_profile_id = str(runtime_bindings.get("llm_model_id") or base_profile_id)
     voice_profile_id = str(runtime_bindings.get("voice_profile_id") or base_profile_id)
     live2d_profile_id = str(runtime_bindings.get("live2d_model_id") or base_profile_id)
-    base_profile = await asyncio.to_thread(
-        runtime.model_profile_service.get_profile_for_runtime,
-        base_profile_id,
-    )
-    llm_profile = await asyncio.to_thread(
-        runtime.model_profile_service.get_profile_for_runtime,
-        llm_profile_id,
-    )
-    voice_profile = await asyncio.to_thread(
-        runtime.model_profile_service.get_profile_for_runtime,
-        voice_profile_id,
-    )
-    live2d_profile = await asyncio.to_thread(
-        runtime.model_profile_service.get_profile_for_runtime,
-        live2d_profile_id,
-    )
+    base_profile = await _legacy_runtime_profile(runtime, base_profile_id)
+    llm_profile = await llm_runtime_profile(runtime, llm_profile_id)
+    voice_profile = await voice_runtime_profile(runtime, voice_profile_id)
+    live2d_profile = await live2d_runtime_profile(runtime, live2d_profile_id)
     composed_profile = dict(base_profile)
     composed_profile["profile_id"] = llm_profile_id
     composed_profile["label"] = str(base_profile.get("label") or role_name)
@@ -98,11 +89,101 @@ async def composed_runtime_profile(
     return composed_profile
 
 
+async def runtime_profile_with_overrides(
+    runtime,
+    *,
+    role_name: str = "",
+    base_profile_id: str = "",
+    runtime_bindings: dict[str, str] | None = None,
+    live_override: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    if runtime.model_profile_service is None:
+        return None
+
+    live_override = live_override or {}
+    base_profile_id = str(
+        live_override.get("model_profile_id")
+        or base_profile_id
+        or "",
+    ).strip()
+    if not base_profile_id:
+        state = await asyncio.to_thread(runtime.model_profile_service.list_profiles)
+        base_profile_id = str(state.get("active_profile_id") or "a")
+
+    bindings = dict(runtime_bindings or {})
+    for field_name in SPLIT_RUNTIME_PROFILE_FIELDS:
+        override_value = str(live_override.get(field_name) or "").strip()
+        if override_value:
+            bindings[field_name] = override_value
+
+    profile = await composed_runtime_profile(
+        runtime,
+        role_name=role_name,
+        base_profile_id=base_profile_id,
+        runtime_bindings=bindings,
+    )
+    for section_name in ("tts", "asr", "live2d"):
+        section_override = _section(live_override, section_name)
+        if not section_override:
+            continue
+        current_section = dict(_section(profile, section_name))
+        current_section.update(section_override)
+        profile[section_name] = current_section
+    return profile
+
+
+async def llm_runtime_profile(runtime, profile_id: str) -> dict[str, Any]:
+    service = getattr(runtime, "llm_model_service", None)
+    if service is not None:
+        return await asyncio.to_thread(service.get_runtime_profile, profile_id)
+    return await _legacy_runtime_profile(runtime, profile_id)
+
+
+async def voice_runtime_profile(runtime, profile_id: str) -> dict[str, Any]:
+    service = getattr(runtime, "voice_model_service", None)
+    if service is not None:
+        return await asyncio.to_thread(service.get_runtime_profile, profile_id)
+    return await _legacy_runtime_profile(runtime, profile_id)
+
+
+async def live2d_runtime_profile(runtime, profile_id: str) -> dict[str, Any]:
+    service = getattr(runtime, "live2d_model_service", None)
+    if service is not None:
+        return await asyncio.to_thread(service.get_runtime_profile, profile_id)
+    return await _legacy_runtime_profile(runtime, profile_id)
+
+
+async def _legacy_runtime_profile(runtime, profile_id: str) -> dict[str, Any]:
+    return await asyncio.to_thread(
+        runtime.model_profile_service.get_profile_for_runtime,
+        profile_id,
+    )
+
+
 async def runtime_bindings_for_role(runtime, role_name: str) -> dict[str, str]:
     if runtime.character_profile_settings_service is None:
         return {}
     return await asyncio.to_thread(
         runtime.character_profile_settings_service.runtime_bindings_for_role,
+        role_name,
+    )
+
+
+async def model_profile_id_for_role(runtime, role_name: str) -> str:
+    service = getattr(runtime, "character_profile_settings_service", None)
+    if service is not None:
+        profile_id = await asyncio.to_thread(
+            service.model_profile_id_for_role,
+            role_name,
+        )
+        if profile_id:
+            return profile_id
+
+    model_profile_service = getattr(runtime, "model_profile_service", None)
+    if model_profile_service is None:
+        return ""
+    return await asyncio.to_thread(
+        model_profile_service.profile_id_for_role,
         role_name,
     )
 

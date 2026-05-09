@@ -34,6 +34,10 @@ class ModelProfileService:
         self._secret_path = storage_root / "model_profile_secrets.json"
         self._lock = threading.Lock()
 
+    @property
+    def storage_root(self) -> Path:
+        return self._path.parent
+
     def list_profiles(self) -> dict[str, Any]:
         with self._lock:
             state = self._load_state_unlocked()

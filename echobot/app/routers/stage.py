@@ -15,6 +15,8 @@ from ..services.stage_events import (
     stage_event_to_sse,
 )
 from ..services.stage_event_enrichment import apply_character_emotion_map
+from ..services.runtime_profile_composer import model_profile_id_for_role
+from ..services.model_profile_compat import model_profiles_payload
 from ..state import get_app_runtime
 
 
@@ -38,11 +40,12 @@ async def get_stage_context(
     model_profile_source = ""
 
     if runtime.model_profile_service is not None:
-        payload = await asyncio.to_thread(runtime.model_profile_service.list_profiles)
+        payload = await model_profiles_payload(runtime)
         role_bindings = dict(payload.get("role_bindings", {}))
         active_profile_id = str(payload.get("active_profile_id") or "")
-        model_profile_id = str(role_bindings.get(role_name) or active_profile_id)
-        model_profile_source = "role_binding" if role_bindings.get(role_name) else "active"
+        bound_profile_id = await model_profile_id_for_role(runtime, role_name)
+        model_profile_id = str(bound_profile_id or active_profile_id)
+        model_profile_source = "role_binding" if bound_profile_id or role_bindings.get(role_name) else "active"
         model_profile_label = _model_profile_label(
             payload.get("profiles", []),
             model_profile_id,

@@ -24,6 +24,7 @@ from ..schemas import (
     WebStageConfigModel,
 )
 from ..services.web_console import Live2DUploadFile
+from ..services.model_profile_compat import model_profiles_payload
 from ..state import get_app_runtime, get_app_runtime_for_websocket, require_admin_user
 from ...runtime.settings import RuntimeSettingsManager
 
@@ -56,9 +57,7 @@ async def get_web_config(
     )
     payload["model_profile_scope"] = _model_profile_scope(runtime)
     if runtime.model_profile_service is not None:
-        payload["model_profiles"] = await asyncio.to_thread(
-            runtime.model_profile_service.list_profiles,
-        )
+        payload["model_profiles"] = await model_profiles_payload(runtime)
     return WebConfigResponse(**payload)
 
 

@@ -25,6 +25,7 @@ from ..services.runtime_profile_composer import (
     SPLIT_RUNTIME_PROFILE_FIELDS,
     apply_runtime_profile_for_role,
 )
+from ..services.model_profile_compat import model_profiles_payload
 from ..state import get_app_runtime, require_admin_user
 
 
@@ -86,7 +87,7 @@ async def get_character_profile(
         card = await runtime.role_service.get_role(role_name)
     except ValueError as exc:
         raise _character_profile_http_exception(exc) from exc
-    profile_payload = await asyncio.to_thread(runtime.model_profile_service.list_profiles)
+    profile_payload = await model_profiles_payload(runtime)
     return _character_model_from_role_card(
         card,
         profile_payload,
@@ -105,7 +106,7 @@ async def export_character_profile_package(
         card = await runtime.role_service.get_role(role_name)
     except ValueError as exc:
         raise _character_profile_http_exception(exc) from exc
-    profile_payload = await asyncio.to_thread(runtime.model_profile_service.list_profiles)
+    profile_payload = await model_profiles_payload(runtime)
     emotion_maps = await _emotion_maps_for_role(runtime, card.name)
     character = _character_model_from_role_card(
         card,
@@ -208,7 +209,7 @@ async def update_character_profile(
                 old_role_name,
             )
             existing_model_profile_id = await asyncio.to_thread(
-                runtime.model_profile_service.profile_id_for_role,
+                runtime.character_profile_settings_service.model_profile_id_for_role,
                 old_role_name,
             )
             card = await runtime.role_service.rename_role(
@@ -238,10 +239,7 @@ async def update_character_profile(
         await _set_runtime_bindings_from_request(runtime, card.name, request)
 
         if request.clear_model_profile_binding:
-            profile_payload = await asyncio.to_thread(
-                runtime.model_profile_service.clear_role_binding,
-                card.name,
-            )
+            profile_payload = await _clear_model_profile_binding(runtime, card.name)
         elif request.model_profile_id is not None:
             profile_payload = await _set_or_clear_binding(
                 runtime,
@@ -249,9 +247,7 @@ async def update_character_profile(
                 request.model_profile_id,
             )
         else:
-            profile_payload = await asyncio.to_thread(
-                runtime.model_profile_service.list_profiles,
-            )
+            profile_payload = await model_profiles_payload(runtime)
         profile_payload = await _activate_binding_for_current_role(
             runtime,
             card.name,
@@ -278,10 +274,7 @@ async def delete_character_profile(
     try:
         card = await runtime.role_service.get_role(role_name)
         deleted_name = await runtime.role_service.delete_role(card.name)
-        await asyncio.to_thread(
-            runtime.model_profile_service.clear_role_binding,
-            deleted_name,
-        )
+        await _clear_model_profile_binding(runtime, deleted_name)
         await asyncio.to_thread(
             runtime.character_profile_settings_service.clear_role,
             deleted_name,
@@ -297,7 +290,7 @@ async def delete_character_profile(
 async def _load_character_profile_sources(runtime) -> tuple[list[RoleCard], dict[str, Any]]:
     _ensure_character_services_ready(runtime)
     roles = await runtime.role_service.list_roles()
-    profile_payload = await asyncio.to_thread(runtime.model_profile_service.list_profiles)
+    profile_payload = await model_profiles_payload(runtime)
     return roles, profile_payload
 
 
@@ -317,13 +310,10 @@ async def _set_or_clear_binding(
 ) -> dict[str, Any]:
     normalized_profile_id = str(model_profile_id or "").strip()
     if not normalized_profile_id:
-        return await asyncio.to_thread(
-            runtime.model_profile_service.clear_role_binding,
-            role_name,
-        )
+        return await _clear_model_profile_binding(runtime, role_name)
 
-    payload = await asyncio.to_thread(
-        runtime.model_profile_service.set_role_binding,
+    payload = await _set_model_profile_binding(
+        runtime,
         role_name,
         normalized_profile_id,
     )
@@ -428,6 +418,10 @@ async def _migrate_character_settings(
         old_role_name,
     )
     await asyncio.to_thread(
+        runtime.character_profile_settings_service.clear_model_profile_binding,
+        old_role_name,
+    )
+    await asyncio.to_thread(
         runtime.model_profile_service.clear_role_binding,
         old_role_name,
     )
@@ -499,7 +493,7 @@ def _character_model_from_role_card(
     bindings = profile_payload.get("role_bindings")
     if not isinstance(bindings, dict):
         bindings = {}
-    profile_id = str(bindings.get(card.name) or "")
+    profile_id = str(runtime_bindings.get("model_profile_id") or bindings.get(card.name) or "")
     active_profile_id = str(profile_payload.get("active_profile_id") or "a")
     effective_profile_id = profile_id or active_profile_id
     profiles = _profile_lookup(profile_payload)
@@ -559,6 +553,35 @@ def _profiles_list(profile_payload: dict[str, Any]) -> list[dict[str, Any]]:
     if not isinstance(profiles, list):
         return []
     return [profile for profile in profiles if isinstance(profile, dict)]
+
+
+async def _set_model_profile_binding(
+    runtime,
+    role_name: str,
+    profile_id: str,
+) -> dict[str, Any]:
+    await asyncio.to_thread(
+        runtime.character_profile_settings_service.set_model_profile_binding,
+        role_name,
+        profile_id,
+    )
+    # Keep the legacy model profile payload stable for existing clients.
+    return await asyncio.to_thread(
+        runtime.model_profile_service.set_role_binding,
+        role_name,
+        profile_id,
+    )
+
+
+async def _clear_model_profile_binding(runtime, role_name: str) -> dict[str, Any]:
+    await asyncio.to_thread(
+        runtime.character_profile_settings_service.clear_model_profile_binding,
+        role_name,
+    )
+    return await asyncio.to_thread(
+        runtime.model_profile_service.clear_role_binding,
+        role_name,
+    )
 
 
 def _section(profile: dict[str, Any], section_name: str) -> dict[str, Any]:

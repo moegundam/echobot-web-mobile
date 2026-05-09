@@ -21,6 +21,12 @@ from echobot.attachments import AttachmentStore
 from echobot.asr import ASRStatusSnapshot, ProviderStatusSnapshot, TranscriptionResult
 from echobot.app import create_app
 from echobot.app.auth import DEFAULT_TRUSTED_USER_HEADER, user_storage_key
+from echobot.app.services.model_profiles import ModelProfileService
+from echobot.app.services.runtime_model_repositories import (
+    LLMModelRepository,
+    Live2DModelRepository,
+    VoiceModelRepository,
+)
 from echobot.app.web_pages import WEB_PAGE_ROUTES
 from echobot.channels import ChannelAddress
 from echobot.orchestration import (
@@ -961,6 +967,147 @@ def write_test_heartbeat_file(workspace: Path, content: str) -> None:
     heartbeat_file_path = workspace / ".echobot" / "HEARTBEAT.md"
     heartbeat_file_path.parent.mkdir(parents=True, exist_ok=True)
     heartbeat_file_path.write_text(content, encoding="utf-8")
+
+
+def update_split_model_profile(
+    client: TestClient,
+    profile_id: str,
+    *,
+    label: str | None = None,
+    chat: dict[str, object] | None = None,
+    tts: dict[str, object] | None = None,
+    asr: dict[str, object] | None = None,
+    live2d: dict[str, object] | None = None,
+    headers: dict[str, str] | None = None,
+):
+    if label is not None or chat is not None:
+        body: dict[str, object] = {}
+        if label is not None:
+            body["name"] = label
+        if chat:
+            body.update(chat)
+        response = client.patch(
+            f"/api/llm-models/{profile_id}",
+            headers=headers,
+            json=body,
+        )
+        if response.status_code >= 400:
+            return response
+
+    if label is not None or tts is not None or asr is not None:
+        body = {}
+        if label is not None:
+            body["name"] = label
+        if tts is not None:
+            body["tts"] = tts
+        if asr is not None:
+            body["stt"] = asr
+        response = client.patch(
+            f"/api/voice-models/{profile_id}",
+            headers=headers,
+            json=body,
+        )
+        if response.status_code >= 400:
+            return response
+
+    if label is not None or live2d is not None:
+        body = {}
+        if label is not None:
+            body["name"] = label
+        if live2d is not None:
+            body["selection_key"] = live2d.get("selection_key", "")
+        response = client.patch(
+            f"/api/live2d-models/{profile_id}",
+            headers=headers,
+            json=body,
+        )
+        if response.status_code >= 400:
+            return response
+
+    return client.get(f"/api/model-profiles/{profile_id}", headers=headers)
+
+
+def create_split_model_profile(
+    client: TestClient,
+    *,
+    name: str,
+    source_profile_id: str | None = None,
+    headers: dict[str, str] | None = None,
+):
+    body = {"name": name, "source_profile_id": source_profile_id}
+    llm = client.post("/api/llm-models", headers=headers, json=body)
+    if llm.status_code >= 400:
+        return llm
+    voice = client.post("/api/voice-models", headers=headers, json=body)
+    if voice.status_code >= 400:
+        return voice
+    live2d = client.post("/api/live2d-models", headers=headers, json=body)
+    if live2d.status_code >= 400:
+        return live2d
+    return client.get(f"/api/model-profiles/{llm.json()['id']}", headers=headers)
+
+
+def activate_split_model_profile(
+    client: TestClient,
+    profile_id: str,
+    *,
+    headers: dict[str, str] | None = None,
+):
+    llm = client.post(f"/api/llm-models/{profile_id}/activate", headers=headers)
+    if llm.status_code >= 400:
+        return llm
+    voice = client.post(f"/api/voice-models/{profile_id}/activate", headers=headers)
+    if voice.status_code >= 400:
+        return voice
+    live2d = client.post(f"/api/live2d-models/{profile_id}/activate", headers=headers)
+    if live2d.status_code >= 400:
+        return live2d
+    return client.get("/api/model-profiles", headers=headers)
+
+
+def delete_split_model_profile(
+    client: TestClient,
+    profile_id: str,
+    *,
+    headers: dict[str, str] | None = None,
+):
+    llm = client.delete(f"/api/llm-models/{profile_id}", headers=headers)
+    if llm.status_code >= 400:
+        return llm
+    voice = client.delete(f"/api/voice-models/{profile_id}", headers=headers)
+    if voice.status_code >= 400:
+        return voice
+    live2d = client.delete(f"/api/live2d-models/{profile_id}", headers=headers)
+    if live2d.status_code >= 400:
+        return live2d
+    return client.get("/api/model-profiles", headers=headers)
+
+
+def set_character_model_binding(
+    client: TestClient,
+    role_name: str,
+    profile_id: str,
+    *,
+    headers: dict[str, str] | None = None,
+):
+    return client.patch(
+        f"/api/character-profiles/{role_name}",
+        headers=headers,
+        json={"model_profile_id": profile_id},
+    )
+
+
+def clear_character_model_binding(
+    client: TestClient,
+    role_name: str,
+    *,
+    headers: dict[str, str] | None = None,
+):
+    return client.patch(
+        f"/api/character-profiles/{role_name}",
+        headers=headers,
+        json={"clear_model_profile_binding": True},
+    )
 
 
 class AppApiTests(unittest.TestCase):
@@ -1976,75 +2123,72 @@ class AppApiTests(unittest.TestCase):
                     initial = client.get("/api/model-profiles", headers=alpha_headers)
                     base_config = client.get("/api/web/config", headers=alpha_headers)
                     live2d_key = base_config.json()["live2d"]["models"][0]["selection_key"]
-                    updated = client.patch(
-                        "/api/model-profiles/b",
+                    updated = update_split_model_profile(
+                        client,
+                        "b",
                         headers=alpha_headers,
-                        json={
-                            "label": "Streamer B",
-                            "chat": {
-                                "provider": "private-litellm",
-                                "model": "profile-chat-model",
-                                "base_url": "http://provider.test/v1",
-                                "temperature": 0.4,
-                                "max_tokens": 2048,
-                                "api_key": "profile-chat-key",
-                            },
-                            "tts": {
-                                "provider": "openai-compatible",
-                                "model": "tts-profile-model",
-                                "base_url": "http://tts.test/v1",
-                                "voice": "voice-profile",
-                                "api_key": "profile-tts-key",
-                            },
-                            "asr": {
-                                "provider": "openai-transcriptions",
-                                "model": "asr-profile-model",
-                                "base_url": "http://asr.test/v1",
-                                "language": "zh",
-                                "api_key": "profile-asr-key",
-                            },
-                            "live2d": {
-                                "selection_key": live2d_key,
-                            },
+                        label="Streamer B",
+                        chat={
+                            "provider": "private-litellm",
+                            "model": "profile-chat-model",
+                            "base_url": "http://provider.test/v1",
+                            "temperature": 0.4,
+                            "max_tokens": 2048,
+                            "api_key": "profile-chat-key",
+                        },
+                        tts={
+                            "provider": "openai-compatible",
+                            "model": "tts-profile-model",
+                            "base_url": "http://tts.test/v1",
+                            "voice": "voice-profile",
+                            "api_key": "profile-tts-key",
+                        },
+                        asr={
+                            "provider": "openai-transcriptions",
+                            "model": "asr-profile-model",
+                            "base_url": "http://asr.test/v1",
+                            "language": "zh",
+                            "api_key": "profile-asr-key",
+                        },
+                        live2d={
+                            "selection_key": live2d_key,
                         },
                     )
-                    created = client.post(
-                        "/api/model-profiles",
+                    created = create_split_model_profile(
+                        client,
                         headers=alpha_headers,
-                        json={
-                            "label": "Streamer Custom",
-                            "source_profile_id": "b",
+                        name="Streamer Custom",
+                        source_profile_id="b",
+                    )
+                    duplicate = create_split_model_profile(
+                        client,
+                        headers=alpha_headers,
+                        name="Streamer Custom",
+                    )
+                    duplicate_secret_update = update_split_model_profile(
+                        client,
+                        duplicate.json()["profile_id"],
+                        headers=alpha_headers,
+                        chat={
+                            "provider": "openai-compatible",
+                            "model": "duplicate-chat-model",
+                            "base_url": "http://duplicate-provider.test/v1",
+                            "api_key": "duplicate-chat-key",
                         },
                     )
-                    duplicate = client.post(
-                        "/api/model-profiles",
-                        headers=alpha_headers,
-                        json={
-                            "label": "Streamer Custom",
-                        },
-                    )
-                    duplicate_secret_update = client.patch(
-                        f"/api/model-profiles/{duplicate.json()['profile_id']}",
-                        headers=alpha_headers,
-                        json={
-                            "chat": {
-                                "provider": "openai-compatible",
-                                "model": "duplicate-chat-model",
-                                "base_url": "http://duplicate-provider.test/v1",
-                                "api_key": "duplicate-chat-key",
-                            },
-                        },
-                    )
-                    activated = client.post(
-                        f"/api/model-profiles/{created.json()['profile_id']}/activate",
+                    activated = activate_split_model_profile(
+                        client,
+                        created.json()["profile_id"],
                         headers=alpha_headers,
                     )
-                    delete_active = client.delete(
-                        f"/api/model-profiles/{created.json()['profile_id']}",
+                    delete_active = delete_split_model_profile(
+                        client,
+                        created.json()["profile_id"],
                         headers=alpha_headers,
                     )
-                    deleted_duplicate = client.delete(
-                        f"/api/model-profiles/{duplicate.json()['profile_id']}",
+                    deleted_duplicate = delete_split_model_profile(
+                        client,
+                        duplicate.json()["profile_id"],
                         headers=alpha_headers,
                     )
                     console_config = client.get("/api/web/config", headers=alpha_headers)
@@ -2052,7 +2196,7 @@ class AppApiTests(unittest.TestCase):
                     runtime = app.state.runtime
                     alpha_runtime = next(
                         item
-                        for item in runtime._user_runtimes.values()
+                        for item in runtime.user_runtime_factory.cached_runtimes()
                         if item.user_id == "alpha@example.test"
                     )
                     alpha_provider_model = (
@@ -2064,6 +2208,8 @@ class AppApiTests(unittest.TestCase):
                     alpha_provider_api_key = (
                         alpha_runtime.context.agent.provider.settings.api_key
                     )
+                    parent_applier_ready = runtime.runtime_profile_applier is not None
+                    user_applier_ready = alpha_runtime.runtime_profile_applier is not None
 
             self.assertEqual(200, initial.status_code)
             self.assertEqual("a", initial.json()["active_profile_id"])
@@ -2136,17 +2282,22 @@ class AppApiTests(unittest.TestCase):
             self.assertNotIn("profile-asr-key", stored_text)
             self.assertNotIn("duplicate-chat-key", stored_text)
             self.assertNotIn("api_key", stored_text)
-            secret_text = (alpha_storage / "model_profile_secrets.json").read_text(
+            llm_secret_text = (alpha_storage / "llm_model_secrets.json").read_text(
                 encoding="utf-8",
             )
-            self.assertIn("profile-chat-key", secret_text)
-            self.assertIn("profile-tts-key", secret_text)
-            self.assertIn("profile-asr-key", secret_text)
-            self.assertNotIn("duplicate-chat-key", secret_text)
+            voice_secret_text = (alpha_storage / "voice_profile_secrets.json").read_text(
+                encoding="utf-8",
+            )
+            self.assertIn("profile-chat-key", llm_secret_text)
+            self.assertIn("profile-tts-key", voice_secret_text)
+            self.assertIn("profile-asr-key", voice_secret_text)
+            self.assertNotIn("duplicate-chat-key", llm_secret_text)
 
             self.assertEqual("profile-chat-model", alpha_provider_model)
             self.assertEqual("http://provider.test/v1", alpha_provider_base_url)
             self.assertEqual("test-key", alpha_provider_api_key)
+            self.assertTrue(parent_applier_ready)
+            self.assertTrue(user_applier_ready)
 
             self.assertEqual(200, beta_profiles.status_code)
             self.assertEqual("a", beta_profiles.json()["active_profile_id"])
@@ -2211,7 +2362,7 @@ class AppApiTests(unittest.TestCase):
                     runtime = app.state.runtime
                     user_runtime = next(
                         item
-                        for item in runtime._user_runtimes.values()
+                        for item in runtime.user_runtime_factory.cached_runtimes()
                         if item.user_id == "fresh@example.test"
                     )
 
@@ -2232,6 +2383,49 @@ class AppApiTests(unittest.TestCase):
             self.assertEqual("parent-gb10-model", provider_settings.model)
             self.assertEqual("http://parent-gb10.test/v1", provider_settings.base_url)
             self.assertEqual("parent-gb10-key", provider_settings.api_key)
+
+    def test_legacy_model_profile_write_endpoints_are_retired(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            app = create_app(
+                runtime_options=RuntimeOptions(
+                    workspace=workspace,
+                    no_tools=True,
+                    no_skills=True,
+                    no_memory=True,
+                    no_heartbeat=True,
+                ),
+                channel_config_path=workspace / ".echobot" / "channels.json",
+                context_builder=build_test_context,
+            )
+
+            with TestClient(app) as client:
+                responses = [
+                    client.post("/api/model-profiles", json={"label": "Legacy"}),
+                    client.patch(
+                        "/api/model-profiles/b",
+                        json={"chat": {"model": "legacy-write"}},
+                    ),
+                    client.post("/api/model-profiles/b/activate"),
+                    client.delete("/api/model-profiles/b"),
+                    client.put(
+                        "/api/model-profiles/role-bindings/default",
+                        json={"profile_id": "b"},
+                    ),
+                    client.delete("/api/model-profiles/role-bindings/default"),
+                ]
+
+            for response in responses:
+                self.assertEqual(410, response.status_code)
+                self.assertEqual("true", response.headers.get("Deprecation"))
+                self.assertEqual(
+                    "model-profiles",
+                    response.headers.get("X-EchoBot-Compatibility-Path"),
+                )
+                self.assertEqual(
+                    "domain-runtime-profiles",
+                    response.headers.get("X-EchoBot-Replacement-Path"),
+                )
 
     def test_model_profile_role_bindings_apply_on_role_switch(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -2272,23 +2466,23 @@ class AppApiTests(unittest.TestCase):
                 )
 
                 with TestClient(app) as client:
-                    updated_profile = client.patch(
-                        "/api/model-profiles/b",
+                    updated_profile = update_split_model_profile(
+                        client,
+                        "b",
                         headers=alpha_headers,
-                        json={
-                            "label": "Helper Voice",
-                            "chat": {
-                                "provider": "private-litellm",
-                                "model": "role-bound-chat-model",
-                                "base_url": "http://role-bound.test/v1",
-                                "api_key": "role-bound-key",
-                            },
+                        label="Helper Voice",
+                        chat={
+                            "provider": "private-litellm",
+                            "model": "role-bound-chat-model",
+                            "base_url": "http://role-bound.test/v1",
+                            "api_key": "role-bound-key",
                         },
                     )
-                    unknown_role = client.put(
-                        "/api/model-profiles/role-bindings/missing-role",
+                    unknown_role = set_character_model_binding(
+                        client,
+                        "missing-role",
+                        "b",
                         headers=alpha_headers,
-                        json={"profile_id": "b"},
                     )
                     created_role = client.post(
                         "/api/roles",
@@ -2298,15 +2492,17 @@ class AppApiTests(unittest.TestCase):
                             "prompt": "# Helper Cat\n\nStay concise.",
                         },
                     )
-                    unknown_profile = client.put(
-                        "/api/model-profiles/role-bindings/helper-cat",
+                    unknown_profile = set_character_model_binding(
+                        client,
+                        "helper-cat",
+                        "missing-profile",
                         headers=alpha_headers,
-                        json={"profile_id": "missing-profile"},
                     )
-                    bound = client.put(
-                        "/api/model-profiles/role-bindings/helper-cat",
+                    bound = set_character_model_binding(
+                        client,
+                        "helper-cat",
+                        "b",
                         headers=alpha_headers,
-                        json={"profile_id": "b"},
                     )
                     binding_list = client.get(
                         "/api/model-profiles/role-bindings",
@@ -2328,7 +2524,7 @@ class AppApiTests(unittest.TestCase):
                     runtime = app.state.runtime
                     alpha_runtime = next(
                         item
-                        for item in runtime._user_runtimes.values()
+                        for item in runtime.user_runtime_factory.cached_runtimes()
                         if item.user_id == "alpha@example.test"
                     )
                     alpha_provider_model = (
@@ -2340,12 +2536,14 @@ class AppApiTests(unittest.TestCase):
                     alpha_provider_api_key = (
                         alpha_runtime.context.agent.provider.settings.api_key
                     )
-                    activated_default = client.post(
-                        "/api/model-profiles/a/activate",
+                    activated_default = activate_split_model_profile(
+                        client,
+                        "a",
                         headers=alpha_headers,
                     )
-                    deleted_bound_profile = client.delete(
-                        "/api/model-profiles/b",
+                    deleted_bound_profile = delete_split_model_profile(
+                        client,
+                        "b",
                         headers=alpha_headers,
                     )
                     after_delete = client.get(
@@ -2366,8 +2564,7 @@ class AppApiTests(unittest.TestCase):
             self.assertIn("Unknown model profile", unknown_profile.json()["detail"])
 
             self.assertEqual(200, bound.status_code)
-            self.assertEqual("a", bound.json()["active_profile_id"])
-            self.assertEqual({"helper-cat": "b"}, bound.json()["role_bindings"])
+            self.assertEqual("b", bound.json()["model_profile_id"])
 
             self.assertEqual(200, binding_list.status_code)
             self.assertEqual({"helper-cat": "b"}, binding_list.json())
@@ -2397,10 +2594,6 @@ class AppApiTests(unittest.TestCase):
 
             self.assertEqual(200, deleted_bound_profile.status_code)
             self.assertNotIn(
-                "helper-cat",
-                deleted_bound_profile.json()["role_bindings"],
-            )
-            self.assertNotIn(
                 "b",
                 [item["profile_id"] for item in deleted_bound_profile.json()["profiles"]],
             )
@@ -2418,6 +2611,97 @@ class AppApiTests(unittest.TestCase):
             stored_payload = json.loads(stored_text)
             self.assertNotIn("b", stored_payload["profiles"])
             self.assertNotIn("role-bound-key", stored_text)
+
+    def test_character_owned_model_profile_binding_projects_without_legacy_binding(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            app = create_app(
+                runtime_options=RuntimeOptions(
+                    workspace=workspace,
+                    no_tools=True,
+                    no_skills=True,
+                    no_memory=True,
+                    no_heartbeat=True,
+                ),
+                channel_config_path=workspace / ".echobot" / "channels.json",
+                context_builder=build_test_context,
+            )
+
+            with TestClient(app) as client:
+                updated_profile = update_split_model_profile(
+                    client,
+                    "b",
+                    label="Migrated Binding LLM",
+                    chat={
+                        "provider": "private-litellm",
+                        "model": "migrated-binding-model",
+                        "base_url": "http://migrated-binding.test/v1",
+                        "api_key": "migrated-binding-key",
+                    },
+                )
+                created_role = client.post(
+                    "/api/roles",
+                    json={
+                        "name": "Migrated Host",
+                        "prompt": "# Migrated Host\n\nUse migrated binding.",
+                    },
+                )
+                runtime = app.state.runtime
+                runtime.character_profile_settings_service.set_model_profile_binding(
+                    "migrated-host",
+                    "b",
+                )
+                legacy_payload = runtime.model_profile_service.list_profiles()
+                listed_profiles = client.get("/api/model-profiles")
+                role_bindings = client.get("/api/model-profiles/role-bindings")
+                switched = client.put(
+                    "/api/sessions/default/role",
+                    json={"role_name": "migrated-host"},
+                )
+                web_config = client.get("/api/web/config")
+                runtime_context = client.get("/api/sessions/default/runtime-context")
+                stage_context = client.get("/api/stage/context?session_name=default")
+                provider_settings = runtime.context.agent.provider.settings
+
+            self.assertEqual(200, updated_profile.status_code)
+            self.assertEqual(200, created_role.status_code)
+            self.assertEqual({}, legacy_payload["role_bindings"])
+
+            self.assertEqual(200, listed_profiles.status_code)
+            self.assertEqual(
+                {"migrated-host": "b"},
+                listed_profiles.json()["role_bindings"],
+            )
+            self.assertEqual(200, role_bindings.status_code)
+            self.assertEqual({"migrated-host": "b"}, role_bindings.json())
+
+            self.assertEqual(200, switched.status_code)
+            self.assertEqual("migrated-host", switched.json()["role_name"])
+            self.assertEqual(200, web_config.status_code)
+            self.assertEqual(
+                {"migrated-host": "b"},
+                web_config.json()["model_profiles"]["role_bindings"],
+            )
+            self.assertEqual(200, runtime_context.status_code)
+            self.assertEqual(
+                "b",
+                runtime_context.json()["character"]["model_profile_id"],
+            )
+            self.assertEqual(
+                "b",
+                runtime_context.json()["character"]["effective_model_profile_id"],
+            )
+            self.assertEqual(
+                "migrated-binding-model",
+                runtime_context.json()["llm_model"]["model"],
+            )
+            self.assertEqual(200, stage_context.status_code)
+            self.assertEqual("b", stage_context.json()["model_profile_id"])
+            self.assertEqual("role_binding", stage_context.json()["model_profile_source"])
+            self.assertEqual("migrated-binding-model", provider_settings.model)
+            self.assertEqual("migrated-binding-key", provider_settings.api_key)
 
     def test_stage_context_exposes_current_role_and_safe_model_profile(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -2456,17 +2740,16 @@ class AppApiTests(unittest.TestCase):
                         "/api/stage/context?session_name=demo",
                         headers=alpha_headers,
                     )
-                    updated_profile = client.patch(
-                        "/api/model-profiles/b",
+                    updated_profile = update_split_model_profile(
+                        client,
+                        "b",
                         headers=alpha_headers,
-                        json={
-                            "label": "Stage Voice",
-                            "chat": {
-                                "provider": "private-litellm",
-                                "model": "stage-chat-model",
-                                "base_url": "http://stage-model.test/v1",
-                                "api_key": "stage-profile-secret",
-                            },
+                        label="Stage Voice",
+                        chat={
+                            "provider": "private-litellm",
+                            "model": "stage-chat-model",
+                            "base_url": "http://stage-model.test/v1",
+                            "api_key": "stage-profile-secret",
                         },
                     )
                     created_role = client.post(
@@ -2477,10 +2760,11 @@ class AppApiTests(unittest.TestCase):
                             "prompt": "# Stage Host\n\nSpeak clearly.",
                         },
                     )
-                    bound = client.put(
-                        "/api/model-profiles/role-bindings/stage-host",
+                    bound = set_character_model_binding(
+                        client,
+                        "stage-host",
+                        "b",
                         headers=alpha_headers,
-                        json={"profile_id": "b"},
                     )
                     switched = client.put(
                         "/api/sessions/demo/role",
@@ -2571,35 +2855,34 @@ class AppApiTests(unittest.TestCase):
             with TestClient(app) as client:
                 web_config = client.get("/api/web/config")
                 live2d_key = web_config.json()["live2d"]["models"][0]["selection_key"]
-                updated_profile = client.patch(
-                    "/api/model-profiles/b",
-                    json={
-                        "label": "Session Runtime B",
-                        "chat": {
-                            "provider": "private-litellm",
-                            "model": "session-chat-model",
-                            "base_url": "http://session-llm.test/v1",
-                            "temperature": 0.3,
-                            "max_tokens": 1234,
-                            "api_key": "session-chat-secret",
-                        },
-                        "tts": {
-                            "provider": "openai-compatible",
-                            "model": "session-tts-model",
-                            "base_url": "http://session-tts.test/v1",
-                            "voice": "session-voice",
-                            "api_key": "session-tts-secret",
-                        },
-                        "asr": {
-                            "provider": "openai-transcriptions",
-                            "model": "session-stt-model",
-                            "base_url": "http://session-stt.test/v1",
-                            "language": "zh-TW",
-                            "api_key": "session-stt-secret",
-                        },
-                        "live2d": {
-                            "selection_key": live2d_key,
-                        },
+                updated_profile = update_split_model_profile(
+                    client,
+                    "b",
+                    label="Session Runtime B",
+                    chat={
+                        "provider": "private-litellm",
+                        "model": "session-chat-model",
+                        "base_url": "http://session-llm.test/v1",
+                        "temperature": 0.3,
+                        "max_tokens": 1234,
+                        "api_key": "session-chat-secret",
+                    },
+                    tts={
+                        "provider": "openai-compatible",
+                        "model": "session-tts-model",
+                        "base_url": "http://session-tts.test/v1",
+                        "voice": "session-voice",
+                        "api_key": "session-tts-secret",
+                    },
+                    asr={
+                        "provider": "openai-transcriptions",
+                        "model": "session-stt-model",
+                        "base_url": "http://session-stt.test/v1",
+                        "language": "zh-TW",
+                        "api_key": "session-stt-secret",
+                    },
+                    live2d={
+                        "selection_key": live2d_key,
                     },
                 )
                 client.post(
@@ -2609,10 +2892,7 @@ class AppApiTests(unittest.TestCase):
                         "prompt": "# Session Host\n\nUse session settings.",
                     },
                 )
-                client.put(
-                    "/api/model-profiles/role-bindings/session-host",
-                    json={"profile_id": "b"},
-                )
+                set_character_model_binding(client, "session-host", "b")
                 switched = client.put(
                     "/api/sessions/default/role",
                     json={"role_name": "session-host"},
@@ -2634,7 +2914,7 @@ class AppApiTests(unittest.TestCase):
             self.assertEqual(200, route_mode.status_code)
 
             self.assertEqual(200, llm_models.status_code)
-            self.assertEqual("b", llm_models.json()["active_model_id"])
+            self.assertEqual("a", llm_models.json()["active_model_id"])
             llm_model = next(
                 item for item in llm_models.json()["models"] if item["id"] == "b"
             )
@@ -2650,7 +2930,7 @@ class AppApiTests(unittest.TestCase):
             self.assertNotIn("asr", llm_model)
 
             self.assertEqual(200, voice_models.status_code)
-            self.assertEqual("b", voice_models.json()["active_voice_profile_id"])
+            self.assertEqual("a", voice_models.json()["active_voice_profile_id"])
             voice_profile = next(
                 item for item in voice_models.json()["profiles"] if item["id"] == "b"
             )
@@ -2662,7 +2942,7 @@ class AppApiTests(unittest.TestCase):
             self.assertTrue(voice_profile["stt"]["api_key_configured"])
 
             self.assertEqual(200, live2d_models.status_code)
-            self.assertEqual("b", live2d_models.json()["active_live2d_model_id"])
+            self.assertEqual("a", live2d_models.json()["active_live2d_model_id"])
             live2d_profile = next(
                 item for item in live2d_models.json()["models"] if item["id"] == "b"
             )
@@ -2722,28 +3002,27 @@ class AppApiTests(unittest.TestCase):
             with TestClient(app) as client:
                 web_config = client.get("/api/web/config")
                 live2d_key = web_config.json()["live2d"]["models"][0]["selection_key"]
-                profile = client.patch(
-                    "/api/model-profiles/b",
-                    json={
-                        "label": "Console Preview B",
-                        "chat": {
-                            "provider": "litellm",
-                            "model": "admin-profile-chat",
-                            "base_url": "http://admin-profile.test/v1",
-                            "api_key": "admin-profile-secret",
-                        },
-                        "tts": {
-                            "provider": "openai-compatible",
-                            "model": "admin-profile-tts",
-                            "voice": "admin-profile-voice",
-                        },
-                        "asr": {
-                            "provider": "openai-transcriptions",
-                            "model": "admin-profile-asr",
-                        },
-                        "live2d": {
-                            "selection_key": live2d_key,
-                        },
+                profile = update_split_model_profile(
+                    client,
+                    "b",
+                    label="Console Preview B",
+                    chat={
+                        "provider": "litellm",
+                        "model": "admin-profile-chat",
+                        "base_url": "http://admin-profile.test/v1",
+                        "api_key": "admin-profile-secret",
+                    },
+                    tts={
+                        "provider": "openai-compatible",
+                        "model": "admin-profile-tts",
+                        "voice": "admin-profile-voice",
+                    },
+                    asr={
+                        "provider": "openai-transcriptions",
+                        "model": "admin-profile-asr",
+                    },
+                    live2d={
+                        "selection_key": live2d_key,
                     },
                 )
                 applied = client.put(
@@ -2857,16 +3136,15 @@ class AppApiTests(unittest.TestCase):
                 fake_generate,
             ):
                 with TestClient(app) as client:
-                    client.patch(
-                        "/api/model-profiles/b",
-                        json={
-                            "label": "Local LiteLLM",
-                            "chat": {
-                                "provider": "litellm",
-                                "model": "local/echo",
-                                "base_url": "http://127.0.0.1:4000/v1",
-                                "api_key": "local-litellm-secret",
-                            },
+                    update_split_model_profile(
+                        client,
+                        "b",
+                        label="Local LiteLLM",
+                        chat={
+                            "provider": "litellm",
+                            "model": "local/echo",
+                            "base_url": "http://127.0.0.1:4000/v1",
+                            "api_key": "local-litellm-secret",
                         },
                     )
                     smoke = client.post("/api/llm-models/b/smoke")
@@ -2878,6 +3156,245 @@ class AppApiTests(unittest.TestCase):
             self.assertEqual("local-litellm-alias", smoke.json()["model"])
             smoke_text = json.dumps(smoke.json())
             self.assertNotIn("local-litellm-secret", smoke_text)
+
+    def test_runtime_model_repositories_map_domain_updates_to_compatibility_store(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage_root = Path(temp_dir) / ".echobot"
+            model_profiles = ModelProfileService(storage_root)
+            llm_repository = LLMModelRepository(model_profiles)
+            voice_repository = VoiceModelRepository(model_profiles)
+            live2d_repository = Live2DModelRepository(model_profiles)
+
+            llm_profile = llm_repository.create(name="Repo LLM")
+            llm_profile = llm_repository.update(
+                llm_profile["profile_id"],
+                {
+                    "provider": "litellm",
+                    "model": "repo-chat",
+                    "base_url": "http://repo-chat.test/v1",
+                    "api_key": "repo-chat-secret",
+                },
+            )
+            llm_repository.activate(llm_profile["profile_id"])
+
+            voice_profile = voice_repository.create(name="Repo Voice")
+            voice_profile = voice_repository.update(
+                voice_profile["profile_id"],
+                {
+                    "tts": {
+                        "provider": "openai-compatible",
+                        "model": "repo-tts",
+                        "voice": "repo-voice",
+                        "api_key": "repo-tts-secret",
+                    },
+                    "stt": {
+                        "provider": "openai-transcriptions",
+                        "model": "repo-stt",
+                        "language": "zh-TW",
+                        "api_key": "repo-stt-secret",
+                    },
+                },
+            )
+            voice_repository.activate(voice_profile["profile_id"])
+
+            live2d_profile = live2d_repository.create(name="Repo Live2D")
+            live2d_profile = live2d_repository.update(
+                live2d_profile["profile_id"],
+                {"selection_key": "repo-live2d"},
+            )
+            payload = llm_repository.list_payload()
+            voice_payload = voice_repository.list_payload()
+            live2d_payload = live2d_repository.list_payload()
+            runtime_llm = llm_repository.get_runtime_profile(llm_profile["profile_id"])
+            runtime_voice = voice_repository.active_runtime_profile()
+            stored_text = (storage_root / "model_profiles.json").read_text(
+                encoding="utf-8",
+            )
+            llm_store_text = (storage_root / "llm_models.json").read_text(
+                encoding="utf-8",
+            )
+            voice_store_text = (storage_root / "voice_profiles.json").read_text(
+                encoding="utf-8",
+            )
+            live2d_store_text = (storage_root / "live2d_models.json").read_text(
+                encoding="utf-8",
+            )
+
+            self.assertEqual("repo-chat", llm_profile["chat"]["model"])
+            self.assertEqual("litellm", llm_profile["chat"]["provider"])
+            self.assertTrue(llm_profile["chat"]["api_key_configured"])
+            self.assertNotIn("api_key", llm_profile["chat"])
+
+            self.assertEqual("repo-tts", voice_profile["tts"]["model"])
+            self.assertEqual("repo-stt", voice_profile["asr"]["model"])
+            self.assertEqual("zh-TW", voice_profile["asr"]["language"])
+            self.assertTrue(voice_profile["tts"]["api_key_configured"])
+            self.assertTrue(voice_profile["asr"]["api_key_configured"])
+
+            self.assertEqual("repo-live2d", live2d_profile["live2d"]["selection_key"])
+            self.assertEqual(llm_profile["profile_id"], payload["active_profile_id"])
+            self.assertTrue(
+                any(
+                    item["profile_id"] == voice_profile["profile_id"]
+                    for item in voice_payload["profiles"]
+                ),
+            )
+            self.assertTrue(
+                any(
+                    item["profile_id"] == live2d_profile["profile_id"]
+                    for item in live2d_payload["profiles"]
+                ),
+            )
+            self.assertEqual("repo-chat-secret", runtime_llm["chat"]["api_key"])
+            self.assertEqual("repo-tts-secret", runtime_voice["tts"]["api_key"])
+            self.assertEqual("repo-stt-secret", runtime_voice["asr"]["api_key"])
+            self.assertNotIn("repo-chat-secret", stored_text)
+            self.assertNotIn("repo-tts-secret", stored_text)
+            self.assertNotIn("repo-stt-secret", stored_text)
+            self.assertNotIn("repo-chat-secret", llm_store_text)
+            self.assertNotIn("repo-tts-secret", voice_store_text)
+            self.assertNotIn("repo-stt-secret", voice_store_text)
+            self.assertIn("repo-live2d", live2d_store_text)
+
+    def test_split_runtime_model_domain_endpoints_crud_without_returning_secrets(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            app = create_app(
+                runtime_options=RuntimeOptions(
+                    workspace=workspace,
+                    no_tools=True,
+                    no_skills=True,
+                    no_memory=True,
+                    no_heartbeat=True,
+                ),
+                channel_config_path=workspace / ".echobot" / "channels.json",
+                context_builder=build_test_context,
+            )
+
+            with TestClient(app) as client:
+                live2d_key = client.get("/api/web/config").json()["live2d"]["models"][0]["selection_key"]
+                llm = client.post(
+                    "/api/llm-models",
+                    json={"name": "Domain LLM", "source_model_id": "a"},
+                )
+                llm_update = client.patch(
+                    f"/api/llm-models/{llm.json()['id']}",
+                    json={
+                        "name": "Domain LLM Updated",
+                        "provider": "litellm",
+                        "model": "domain-chat",
+                        "base_url": "http://domain-chat.test/v1",
+                        "api_key": "domain-chat-secret",
+                    },
+                )
+                llm_activate = client.post(f"/api/llm-models/{llm.json()['id']}/activate")
+                voice = client.post(
+                    "/api/voice-models",
+                    json={"name": "Domain Voice", "source_profile_id": "a"},
+                )
+                voice_update = client.patch(
+                    f"/api/voice-models/{voice.json()['id']}",
+                    json={
+                        "name": "Domain Voice Updated",
+                        "tts": {
+                            "provider": "openai-compatible",
+                            "model": "domain-tts",
+                            "voice": "domain-voice",
+                            "api_key": "domain-tts-secret",
+                        },
+                        "stt": {
+                            "provider": "openai-transcriptions",
+                            "model": "domain-stt",
+                            "language": "zh-TW",
+                            "api_key": "domain-stt-secret",
+                        },
+                    },
+                )
+                voice_active = client.post(
+                    "/api/voice-models",
+                    json={"name": "Domain Voice Active", "source_profile_id": "a"},
+                )
+                live2d = client.post(
+                    "/api/live2d-models",
+                    json={"name": "Domain Live2D", "source_model_id": "a"},
+                )
+                live2d_update = client.patch(
+                    f"/api/live2d-models/{live2d.json()['id']}",
+                    json={
+                        "name": "Domain Live2D Updated",
+                        "selection_key": live2d_key,
+                    },
+                )
+                llm_models = client.get("/api/llm-models")
+                voice_models = client.get("/api/voice-models")
+                live2d_models = client.get("/api/live2d-models")
+                model_profiles = client.get("/api/model-profiles")
+                voice_activate = client.post(
+                    f"/api/voice-models/{voice_active.json()['id']}/activate",
+                )
+                live2d_activate = client.post(f"/api/live2d-models/{live2d.json()['id']}/activate")
+                deleted_voice = client.delete(f"/api/voice-models/{voice.json()['id']}")
+                llm_after_voice_delete = client.get("/api/llm-models")
+                live2d_after_voice_delete = client.get("/api/live2d-models")
+
+            self.assertEqual(200, llm.status_code)
+            self.assertEqual("domain-llm", llm.json()["id"])
+            self.assertEqual(200, llm_update.status_code)
+            self.assertEqual("Domain LLM Updated", llm_update.json()["name"])
+            self.assertEqual("litellm", llm_update.json()["provider"])
+            self.assertEqual("domain-chat", llm_update.json()["model"])
+            self.assertTrue(llm_update.json()["api_key_configured"])
+            self.assertNotIn("tts", llm_update.json())
+            self.assertNotIn("asr", llm_update.json())
+            self.assertNotIn("domain-chat-secret", json.dumps(llm_update.json()))
+
+            self.assertEqual(200, llm_activate.status_code)
+            self.assertEqual("domain-llm", llm_activate.json()["active_model_id"])
+            self.assertEqual("domain-llm", model_profiles.json()["active_profile_id"])
+
+            self.assertEqual(200, voice_update.status_code)
+            self.assertEqual("Domain Voice Updated", voice_update.json()["name"])
+            self.assertEqual("domain-voice", voice_update.json()["tts"]["voice"])
+            self.assertEqual("domain-stt", voice_update.json()["stt"]["model"])
+            voice_text = json.dumps(voice_update.json())
+            self.assertNotIn("domain-tts-secret", voice_text)
+            self.assertNotIn("domain-stt-secret", voice_text)
+
+            self.assertEqual(200, live2d_update.status_code)
+            self.assertEqual("Domain Live2D Updated", live2d_update.json()["name"])
+            self.assertEqual(live2d_key, live2d_update.json()["selection_key"])
+            self.assertTrue(live2d_update.json()["available"])
+
+            self.assertEqual(200, llm_models.status_code)
+            self.assertTrue(
+                any(item["id"] == "domain-llm" for item in llm_models.json()["models"]),
+            )
+            self.assertEqual(200, voice_models.status_code)
+            self.assertTrue(
+                any(item["id"] == "domain-voice" for item in voice_models.json()["profiles"]),
+            )
+            self.assertEqual(200, live2d_models.status_code)
+            self.assertTrue(
+                any(item["id"] == "domain-live2d" for item in live2d_models.json()["models"]),
+            )
+            self.assertEqual(200, deleted_voice.status_code)
+            self.assertFalse(
+                any(item["id"] == "domain-voice" for item in deleted_voice.json()["profiles"]),
+            )
+            self.assertEqual(200, voice_activate.status_code)
+            self.assertEqual("domain-voice-active", voice_activate.json()["active_voice_profile_id"])
+            self.assertEqual(200, live2d_activate.status_code)
+            self.assertEqual("domain-live2d", live2d_activate.json()["active_live2d_model_id"])
+            self.assertTrue(
+                any(item["id"] == "domain-llm" for item in llm_after_voice_delete.json()["models"]),
+            )
+            self.assertTrue(
+                any(item["id"] == "domain-live2d" for item in live2d_after_voice_delete.json()["models"]),
+            )
 
     def test_character_profiles_bind_llm_voice_and_live2d_for_session_runtime(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -2898,21 +3415,19 @@ class AppApiTests(unittest.TestCase):
                 web_config = client.get("/api/web/config")
                 live2d_key = web_config.json()["live2d"]["models"][0]["selection_key"]
                 llm_profile = client.patch(
-                    "/api/model-profiles/b",
+                    "/api/llm-models/b",
                     json={
-                        "label": "Split LLM",
-                        "chat": {
-                            "provider": "private-litellm",
-                            "model": "split-llm-model",
-                            "base_url": "http://split-llm.test/v1",
-                            "api_key": "split-llm-secret",
-                        },
+                        "name": "Split LLM",
+                        "provider": "private-litellm",
+                        "model": "split-llm-model",
+                        "base_url": "http://split-llm.test/v1",
+                        "api_key": "split-llm-secret",
                     },
                 )
                 voice_profile = client.patch(
-                    "/api/model-profiles/c",
+                    "/api/voice-models/c",
                     json={
-                        "label": "Split Voice",
+                        "name": "Split Voice",
                         "tts": {
                             "provider": "openai-compatible",
                             "model": "split-tts-model",
@@ -2920,7 +3435,7 @@ class AppApiTests(unittest.TestCase):
                             "voice": "split-voice",
                             "api_key": "split-tts-secret",
                         },
-                        "asr": {
+                        "stt": {
                             "provider": "openai-transcriptions",
                             "model": "split-stt-model",
                             "base_url": "http://split-stt.test/v1",
@@ -2930,12 +3445,10 @@ class AppApiTests(unittest.TestCase):
                     },
                 )
                 live2d_profile = client.patch(
-                    "/api/model-profiles/d",
+                    "/api/live2d-models/d",
                     json={
-                        "label": "Split Live2D",
-                        "live2d": {
-                            "selection_key": live2d_key,
-                        },
+                        "name": "Split Live2D",
+                        "selection_key": live2d_key,
                     },
                 )
                 created = client.post(
@@ -2953,6 +3466,8 @@ class AppApiTests(unittest.TestCase):
                     json={"role_name": "split-host"},
                 )
                 context = client.get("/api/sessions/default/runtime-context")
+                runtime = app.state.runtime
+                provider_settings = runtime.context.agent.provider.settings
 
             self.assertEqual(200, llm_profile.status_code)
             self.assertEqual(200, voice_profile.status_code)
@@ -2976,6 +3491,9 @@ class AppApiTests(unittest.TestCase):
             self.assertEqual("split-stt-model", context.json()["voice_profile"]["stt"]["model"])
             self.assertEqual(live2d_key, context.json()["live2d_model"]["selection_key"])
             self.assertTrue(context.json()["live2d_model"]["model_url"].endswith(".model3.json"))
+            self.assertEqual("split-llm-model", provider_settings.model)
+            self.assertEqual("http://split-llm.test/v1", provider_settings.base_url)
+            self.assertEqual("split-llm-secret", provider_settings.api_key)
             context_text = json.dumps(context.json())
             self.assertNotIn("split-llm-secret", context_text)
             self.assertNotIn("split-tts-secret", context_text)
@@ -2999,32 +3517,31 @@ class AppApiTests(unittest.TestCase):
             role_file = workspace / ".echobot" / "roles" / "stage-host.md"
 
             with TestClient(app) as client:
-                profile = client.patch(
-                    "/api/model-profiles/b",
-                    json={
-                        "label": "Stage Host Voice",
-                        "chat": {
-                            "provider": "private-litellm",
-                            "model": "stage-host-chat",
-                            "base_url": "http://stage-host.test/v1",
-                            "api_key": "stage-host-key",
-                        },
-                        "tts": {
-                            "provider": "openai-compatible",
-                            "model": "tts-stage",
-                            "base_url": "http://tts.test/v1",
-                            "voice": "alloy-stage",
-                            "api_key": "tts-secret",
-                        },
-                        "asr": {
-                            "provider": "openai-transcriptions",
-                            "model": "whisper-stage",
-                            "base_url": "http://asr.test/v1",
-                            "language": "zh",
-                        },
-                        "live2d": {
-                            "selection_key": "builtin:hiyori_pro_en",
-                        },
+                profile = update_split_model_profile(
+                    client,
+                    "b",
+                    label="Stage Host Voice",
+                    chat={
+                        "provider": "private-litellm",
+                        "model": "stage-host-chat",
+                        "base_url": "http://stage-host.test/v1",
+                        "api_key": "stage-host-key",
+                    },
+                    tts={
+                        "provider": "openai-compatible",
+                        "model": "tts-stage",
+                        "base_url": "http://tts.test/v1",
+                        "voice": "alloy-stage",
+                        "api_key": "tts-secret",
+                    },
+                    asr={
+                        "provider": "openai-transcriptions",
+                        "model": "whisper-stage",
+                        "base_url": "http://asr.test/v1",
+                        "language": "zh",
+                    },
+                    live2d={
+                        "selection_key": "builtin:hiyori_pro_en",
                     },
                 )
                 created = client.post(
@@ -3071,10 +3588,17 @@ class AppApiTests(unittest.TestCase):
                     },
                 )
                 console_config = client.get("/api/web/config")
+                role_bindings = client.get("/api/model-profiles/role-bindings")
+                character_settings_after_update = json.loads(
+                    (workspace / ".echobot" / "character_profiles.json").read_text(
+                        encoding="utf-8",
+                    ),
+                )
                 cleared = client.patch(
                     "/api/character-profiles/stage-host",
                     json={"clear_model_profile_binding": True},
                 )
+                role_bindings_after_clear = client.get("/api/model-profiles/role-bindings")
                 deleted = client.delete("/api/character-profiles/stage-host")
                 listed_after_delete = client.get("/api/character-profiles")
 
@@ -3132,9 +3656,17 @@ class AppApiTests(unittest.TestCase):
 
             self.assertEqual(200, console_config.status_code)
             self.assertEqual("c", console_config.json()["model_profiles"]["active_profile_id"])
+            self.assertEqual(200, role_bindings.status_code)
+            self.assertEqual("c", role_bindings.json()["stage-host"])
+            self.assertEqual(
+                "c",
+                character_settings_after_update["roles"]["stage-host"]["model_profile_id"],
+            )
 
             self.assertEqual(200, cleared.status_code)
             self.assertEqual("", cleared.json()["model_profile_id"])
+            self.assertEqual(200, role_bindings_after_clear.status_code)
+            self.assertNotIn("stage-host", role_bindings_after_clear.json())
 
             self.assertEqual(200, deleted.status_code)
             self.assertTrue(deleted.json()["deleted"])
@@ -3166,15 +3698,14 @@ class AppApiTests(unittest.TestCase):
             new_role_file = workspace / ".echobot" / "roles" / "renamed-host.md"
 
             with TestClient(app) as client:
-                client.patch(
-                    "/api/model-profiles/b",
-                    json={
-                        "label": "Rename LLM",
-                        "chat": {
-                            "provider": "private-litellm",
-                            "model": "rename-chat",
-                            "base_url": "http://rename.test/v1",
-                        },
+                update_split_model_profile(
+                    client,
+                    "b",
+                    label="Rename LLM",
+                    chat={
+                        "provider": "private-litellm",
+                        "model": "rename-chat",
+                        "base_url": "http://rename.test/v1",
                     },
                 )
                 created = client.post(
@@ -3265,26 +3796,25 @@ class AppApiTests(unittest.TestCase):
             )
 
             with TestClient(app) as client:
-                profile = client.patch(
-                    "/api/model-profiles/b",
-                    json={
-                        "label": "Package Voice",
-                        "chat": {
-                            "provider": "private-litellm",
-                            "model": "package-chat",
-                            "base_url": "http://package.test/v1",
-                            "api_key": "package-secret-key",
-                        },
-                        "tts": {
-                            "provider": "openai-compatible",
-                            "model": "tts-package",
-                            "base_url": "http://tts-package.test/v1",
-                            "voice": "alloy-package",
-                            "api_key": "tts-package-secret",
-                        },
-                        "live2d": {
-                            "selection_key": "builtin:hiyori_pro_en",
-                        },
+                profile = update_split_model_profile(
+                    client,
+                    "b",
+                    label="Package Voice",
+                    chat={
+                        "provider": "private-litellm",
+                        "model": "package-chat",
+                        "base_url": "http://package.test/v1",
+                        "api_key": "package-secret-key",
+                    },
+                    tts={
+                        "provider": "openai-compatible",
+                        "model": "tts-package",
+                        "base_url": "http://tts-package.test/v1",
+                        "voice": "alloy-package",
+                        "api_key": "tts-package-secret",
+                    },
+                    live2d={
+                        "selection_key": "builtin:hiyori_pro_en",
                     },
                 )
                 created = client.post(

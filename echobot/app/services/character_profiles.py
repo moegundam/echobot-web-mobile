@@ -13,6 +13,7 @@ from ...orchestration import normalize_role_name
 MAX_CHARACTER_EMOTION_MAPS = 64
 MAX_CHARACTER_MAP_VALUE_LENGTH = 256
 CHARACTER_RUNTIME_BINDING_FIELDS = (
+    "model_profile_id",
     "llm_model_id",
     "voice_profile_id",
     "live2d_model_id",
@@ -60,6 +61,55 @@ class CharacterProfileSettingsService:
             return {
                 field_name: str(role_settings.get(field_name) or "")
                 for field_name in CHARACTER_RUNTIME_BINDING_FIELDS
+            }
+
+    def model_profile_id_for_role(self, role_name: str) -> str:
+        return self.runtime_bindings_for_role(role_name).get("model_profile_id", "")
+
+    def model_profile_bindings(self) -> dict[str, str]:
+        with self._lock:
+            state = self._load_state_unlocked()
+            return {
+                role_name: str(role_settings.get("model_profile_id") or "")
+                for role_name, role_settings in state["roles"].items()
+                if isinstance(role_settings, dict)
+                and str(role_settings.get("model_profile_id") or "")
+            }
+
+    def set_model_profile_binding(
+        self,
+        role_name: str,
+        profile_id: str,
+    ) -> dict[str, str]:
+        return self.set_runtime_bindings(
+            role_name,
+            {"model_profile_id": profile_id},
+        )
+
+    def clear_model_profile_binding(self, role_name: str) -> dict[str, str]:
+        return self.set_runtime_bindings(role_name, {"model_profile_id": ""})
+
+    def clear_model_profile_bindings_for_profile(self, profile_id: str) -> dict[str, str]:
+        normalized_profile_id = _clean_map_value(profile_id)
+        if not normalized_profile_id:
+            return self.model_profile_bindings()
+        with self._lock:
+            state = self._load_state_unlocked()
+            for role_name in list(state["roles"].keys()):
+                role_settings = state["roles"].get(role_name, {})
+                if not isinstance(role_settings, dict):
+                    continue
+                if str(role_settings.get("model_profile_id") or "") != normalized_profile_id:
+                    continue
+                role_settings.pop("model_profile_id", None)
+                if not role_settings:
+                    state["roles"].pop(role_name, None)
+            self._save_state_unlocked(state)
+            return {
+                role_name: str(role_settings.get("model_profile_id") or "")
+                for role_name, role_settings in state["roles"].items()
+                if isinstance(role_settings, dict)
+                and str(role_settings.get("model_profile_id") or "")
             }
 
     def set_runtime_bindings(
