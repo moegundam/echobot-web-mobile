@@ -11,21 +11,75 @@
 
 > Traditional Chinese version: [README.md](./README.md)
 
-`moegundam/echobot-web-mobile` is a Web/Mobile management edition based on [KdaiP/EchoBot](https://github.com/KdaiP/EchoBot). Its goal is to extend the original EchoBot into a version suitable for local development, mobile testing, 10-user private testing, Stage display, Messenger chat entry, Console operations, and Admin management.
+`moegundam/echobot-web-mobile` is a Web/Mobile management edition rebuilt on top of [KdaiP/EchoBot](https://github.com/KdaiP/EchoBot). This is not only a visual reskin: this fork turns the original mostly single `/web` operation surface into a local-development, mobile-testing, 10-user private-test, Stage, Messenger, Console, and Admin management build.
 
-EchoBot remains the implementation base. [Open-LLM-VTuber/Open-LLM-VTuber](https://github.com/Open-LLM-VTuber/Open-LLM-VTuber) is not merged into this backend. It is used only as a reference for Live2D, ASR/TTS, VTuber interaction design, and desktop-companion style UX.
+## How Much This Fork Changes
 
-## Sources And Attribution
+Based on the currently verifiable pages, APIs, tests, documentation, and smoke scripts, this fork adds or refactors **12 feature groups** compared with the original EchoBot, and fixes or tightens **9 categories of public-readiness issues**. This is counted by feature group, not by commit count, line diff, or individual button count.
+
+### 12 Added Or Refactored Feature Groups
+
+| # | Feature group | Description |
+|---:|---|---|
+| 1 | Stage frontend | `/stage` is now the formal interaction display for character, subtitles, TTS, Live2D, and stage state |
+| 2 | Messenger entry | `/messenger` is an internal Web Chat that continues a Session without requiring manual bot/session text entry |
+| 3 | Console operations | `/console` is the operator workbench, with `/web` compatibility and cross-page navigation |
+| 4 | Admin backend | `/admin` now links guide, structure, deployment, models, voice, Live2D, characters, channels, and other setup pages |
+| 5 | Session-centered runtime | Session drives character, model, voice, Live2D, channel entry, and conversation state resolution |
+| 6 | Three-language i18n | English, Traditional Chinese, and Simplified Chinese switching for the main static and dynamic UI |
+| 7 | Device/display modes | Auto, mobile, portrait, landscape, desktop/dense modes for phone, tablet, and desktop usability |
+| 8 | Trusted-user namespace | Cloudflare Access / reverse-proxy trusted-header mode plus `.echobot/users/<user_id>` isolation |
+| 9 | Stage Event Broker | user/session scoped SSE broker for subtitles, emotion, expression, motion, and Stage replay |
+| 10 | Runtime profiles | LLM, Voice, and Live2D Admin pages; characters bind a full interaction config and support package import/export |
+| 11 | Channel gateways | Telegram/Discord setup, smoke checks, stage target projection, and deterministic `/ping` verification |
+| 12 | Open WebUI / deployment / CI | Narrow OpenAPI bridge, deployment readiness, public safety scan, browser smoke, and CI verification |
+
+### 9 Fixed Or Tightened Issue Categories
+
+| # | Category | What changed |
+|---:|---|---|
+| 1 | Public information leakage | `/api/health` no longer exposes local absolute paths, and README avoids private hosts or tokens |
+| 2 | Secret exposure | API keys, bot tokens, bridge tokens, and webhook secrets only expose configured status, never plaintext |
+| 3 | Console/Admin responsibility split | Admin owns persistent setup; Console owns testing and temporary runtime overrides that can apply to Stage |
+| 4 | Mixed model settings | `/admin/models` is LLM-only; Voice and Live2D moved to dedicated pages |
+| 5 | Hardcoded language text | Main buttons, placeholders, status text, and dynamic copy moved into i18n |
+| 6 | Session/platform confusion | Users primarily select Sessions; Channel is an entry point and metadata, not the core logic |
+| 7 | Mobile/desktop layout issues | 360/390/430/768 viewports and desktop split operations were tightened |
+| 8 | Unstable gateway tests | `/ping` / `/smoke` deterministic commands avoid relying on exact LLM output for E2E checks |
+| 9 | Weak public-readiness verification | Added public safety scan, browser smoke, targeted tests, and GitHub Actions status checks |
+
+## Screenshots
+
+| Admin backend | Site structure |
+|---|---|
+| ![Admin overview](./docs/assets/screenshots/admin-overview.png) | ![Site structure](./docs/assets/screenshots/site-structure.png) |
+| Operation guide | Mobile Stage |
+| ![Operation guide](./docs/assets/screenshots/operation-guide.png) | ![Mobile Stage](./docs/assets/screenshots/stage-mobile.png) |
+
+## License And Commercial Use
+
+This repository currently follows the MIT License and preserves the original EchoBot license notice. In practical terms:
+
+- **Other people may use this public repository commercially, sell it, modify it, redistribute it, or integrate it into products**, as long as they keep the MIT license text and copyright notice.
+- **You may also turn this project into a Web App, iOS App, Android App, desktop app, or internal service**, with the same attribution requirement.
+- If you do not want others to commercialize the public version, this MIT public repo is not the right restriction mechanism; keep the project private, or separately evaluate stricter licensing for your own additions. The upstream MIT-covered parts still retain their MIT rights.
+- This only covers this repository's code license. Live2D assets, model weights, TTS/STT providers, OpenAI-compatible APIs, Telegram/Discord platform rules, and App Store / Google Play policies may have separate terms that must be checked before commercial use or app-store release.
+
+Short answer: **yes, this can be used commercially and turned into an app; but public MIT also means others can legally commercialize the public version if they preserve the license notice.**
+
+## Upstream Sources And Attribution
 
 | Type | Project | How this edition uses it |
 |---|---|---|
 | Upstream base | [KdaiP/EchoBot](https://github.com/KdaiP/EchoBot) | Main repository source for Agent/runtime/WebUI/Live2D/ASR/TTS/Channel foundations |
 | Interaction reference | [Open-LLM-VTuber/Open-LLM-VTuber](https://github.com/Open-LLM-VTuber/Open-LLM-VTuber) | Reference only for Live2D, voice interaction, and VTuber UX; its backend is not merged |
-| Original license | MIT License | The original `LICENSE` is preserved; copyright belongs to KdaiP |
+| Original license | MIT License | The original `LICENSE` is preserved; original copyright belongs to KdaiP, and this fork's additions are maintained by `moegundam` |
 
 Any future third-party project, model, asset, or document reference must state its source, license, and purpose in the README, the relevant documentation, or the asset directory.
 
-## What This Edition Adds To Original EchoBot
+EchoBot remains the implementation base. [Open-LLM-VTuber/Open-LLM-VTuber](https://github.com/Open-LLM-VTuber/Open-LLM-VTuber) is not merged into this backend. It is used only as a reference for Live2D, ASR/TTS, VTuber interaction design, and desktop-companion style UX.
+
+## Feature Details
 
 ### 1. Layered Web Product Entrances
 
@@ -40,8 +94,11 @@ Original EchoBot mainly used `/web` as the operation page. This edition adds and
 | Admin | `/admin` | Admin index, health, API docs, jobs, and management pages |
 | Operation Guide | `/admin/guide` | Operation, setup, expected outcomes, failure signs, and troubleshooting |
 | Site Structure | `/admin/structure` | Route map, Console sections, and API namespace boundaries |
+| Sessions | `/admin/sessions` | Create, inspect, and maintain Sessions; Session is the core entity for character, model, channel entry, and conversation state |
 | Characters | `/admin/characters` | Manage role prompts, LLM / Voice / Live2D bindings, emotion maps, and character package import/export |
 | LLM Models | `/admin/models` | Manage LLM provider, model, base URL, API key, and inference parameters |
+| Voice Models | `/admin/voice-models` | Manage STT/TTS provider, voice, language, and voice profiles |
+| Live2D | `/admin/live2d` | Manage Live2D selection, asset catalog, and visual profiles |
 | Channels | `/admin/channels` | Telegram / Discord setup and smoke checks, plus QQ/LINE/WhatsApp gateway management entry |
 | Open WebUI Bridge | `/admin/openwebui` | Narrow OpenAPI bridge instructions for Open WebUI |
 | Deployment | `/admin/deployment` | Readiness checks for local service, Cloudflare, GitHub Actions, and the Open WebUI bridge |
@@ -268,10 +325,13 @@ This branch has repeatable verification for:
 
 ## License
 
-This project follows the upstream EchoBot MIT License. See [`LICENSE`](./LICENSE).
+This project follows the MIT License. See [`LICENSE`](./LICENSE). The upstream EchoBot copyright remains KdaiP's, and this fork's additional modifications are marked under `moegundam` in the same MIT license file.
 
-Original copyright:
+MIT permits use, modification, distribution, sublicensing, and sale, so this project can be used in commercial products or apps. Distributed copies must preserve the MIT license text and copyright notice, and third-party assets, models, and platform terms still need separate review.
+
+License notices:
 
 ```text
 Copyright (c) 2026 KdaiP
+Additional modifications Copyright (c) 2026 moegundam
 ```

@@ -11,21 +11,75 @@
 
 > English version: [README_EN.md](./README_EN.md)
 
-`moegundam/echobot-web-mobile` 是基於 [KdaiP/EchoBot](https://github.com/KdaiP/EchoBot) 的 Web/Mobile 管理版，目標是把原始 EchoBot 擴充成可做本機開發、手機測試、10 人內測、Stage 展示、Messenger 通訊入口、Console 中台與 Admin 後台管理的版本。
+`moegundam/echobot-web-mobile` 是在 [KdaiP/EchoBot](https://github.com/KdaiP/EchoBot) 基礎上重整出的 Web/Mobile 管理版。這不是單純換皮：本 fork 把原本偏單一 `/web` 操作面的 EchoBot，改成可做本機開發、手機測試、10 人內測、Stage 展示、Messenger 通訊入口、Console 中台與 Admin 後台管理的版本。
 
-本專案保留 EchoBot 作為主架構，不直接合併 [Open-LLM-VTuber/Open-LLM-VTuber](https://github.com/Open-LLM-VTuber/Open-LLM-VTuber) 後端。Open-LLM-VTuber 目前只作為 Live2D、ASR/TTS、VTuber 互動體驗與桌寵式介面的參考來源。
+## 本 fork 改了多少
 
-## 專案來源與引用
+以目前可驗證的頁面、API、測試、文件與 smoke script 來計算，本 fork 相對原始 EchoBot 已新增或重構 **12 個功能群組**，並修正/收斂 **9 類公開前會影響使用與安全的問題**。這裡用的是「功能群組」計算，不是 commit 數、逐行 diff 或單一按鈕數量。
+
+### 新增或重構的 12 個功能群組
+
+| # | 功能群組 | 說明 |
+|---:|---|---|
+| 1 | Stage 前台 | `/stage` 變成正式互動顯示面，負責角色、字幕、TTS、Live2D 與舞台狀態 |
+| 2 | Messenger 通訊入口 | `/messenger` 作為內部 Web Chat，可依 Session 繼續對話，不需要手動輸入平台 bot |
+| 3 | Console 中台 | `/console` 作為操作員工作台，保留 `/web` 相容入口並補跨頁導覽 |
+| 4 | Admin 後台 | `/admin` 拆出 guide、structure、deployment、models、voice、Live2D、characters、channels 等頁面 |
+| 5 | Session-centered runtime | 以 Session 為核心，把角色、模型、語音、Live2D、通訊入口與 conversation state 串起來 |
+| 6 | 三語 i18n | 英文、繁體中文、簡體中文切換，涵蓋主要靜態與動態 UI |
+| 7 | 裝置/顯示模式 | 加入自動、手機、直向、橫向、桌面/密集等模式，修正手機和平板顯示 |
+| 8 | Trusted-user namespace | Cloudflare Access / reverse proxy trusted header 模式與 `.echobot/users/<user_id>` 隔離 |
+| 9 | Stage Event Broker | user/session scoped SSE event broker，支援字幕、emotion、expression、motion 與 Stage replay |
+| 10 | Runtime profiles | LLM、Voice、Live2D 分頁管理，角色可綁定完整互動配置並匯入/匯出 package |
+| 11 | Channel gateways | Telegram/Discord 設定、smoke、stage target projection 與 deterministic `/ping` 驗證入口 |
+| 12 | Open WebUI / 部署 / CI | Narrow OpenAPI bridge、deployment readiness、public safety scan、browser smoke、CI 驗證 |
+
+### 修正/收斂的 9 類問題
+
+| # | 類型 | 已處理方向 |
+|---:|---|---|
+| 1 | 公開資訊外洩 | `/api/health` 不再輸出本機絕對路徑，README 避免放私有主機或 token |
+| 2 | Secret 顯示 | API key、bot token、bridge token、webhook secret 僅顯示 configured 狀態，不回傳明文 |
+| 3 | 中台/後台責任混亂 | 後台負責持久設定；中台負責測試與臨時 runtime override，並可套用到前台 |
+| 4 | 模型設定混在一起 | `/admin/models` 限縮為 LLM；Voice 與 Live2D 拆到專頁 |
+| 5 | 硬編碼語言 | 主要按鈕、placeholder、狀態、動態文案納入 i18n |
+| 6 | Session/平台概念混亂 | 使用者主要選 Session；Channel 只是入口與 metadata，不當核心邏輯 |
+| 7 | 手機/桌面版面問題 | 修正 360/390/430/768 viewport 與桌面雙欄操作面 |
+| 8 | Gateway 測試不穩 | 加入 `/ping` / `/smoke` deterministic command，避免 E2E 依賴 LLM 精準回覆 |
+| 9 | 公開前驗證不足 | 加入 public safety scan、browser smoke、targeted tests 與 GitHub Actions 狀態檢查 |
+
+## 截圖
+
+| Admin 後台 | 網站結構 |
+|---|---|
+| ![Admin overview](./docs/assets/screenshots/admin-overview.png) | ![Site structure](./docs/assets/screenshots/site-structure.png) |
+| 操作說明 | 手機 Stage |
+| ![Operation guide](./docs/assets/screenshots/operation-guide.png) | ![Mobile Stage](./docs/assets/screenshots/stage-mobile.png) |
+
+## 授權與商用結論
+
+本 repo 目前沿用 MIT License，並保留原始 EchoBot 授權聲明。MIT 授權的重點是：
+
+- **別人可以拿這個公開 repo 做商業用途、販售、修改、再散布或整合到產品中**，前提是保留 MIT 授權文字與 copyright notice。
+- **你也可以把這個專案做成 Web App、iOS App、Android App、桌面 App 或內部服務**，同樣要保留上游授權聲明。
+- 如果不希望別人拿來商用，不能把目前公開 MIT repo 當成限制來源；應維持 private，或針對你新增的部分另行評估更嚴格授權。但上游 MIT 部分仍保有原 MIT 權利。
+- 這裡只確認本 repo 程式碼授權。Live2D 素材、模型權重、TTS/STT provider、OpenAI-compatible API、Telegram/Discord 平台、App Store / Google Play 規範可能有各自條款，商用或上架前要逐項確認。
+
+簡短結論：**可以商用，也可以做成 App；但公開 MIT 也代表別人可以合法商用你的公開版本，只要他們保留授權聲明。**
+
+## 上游來源與引用
 
 | 類型 | 專案 | 本版本使用方式 |
 |---|---|---|
 | 上游主專案 | [KdaiP/EchoBot](https://github.com/KdaiP/EchoBot) | 本 repo 的主體來源、Agent/runtime/WebUI/Live2D/ASR/TTS/Channel 基礎 |
 | 互動設計參考 | [Open-LLM-VTuber/Open-LLM-VTuber](https://github.com/Open-LLM-VTuber/Open-LLM-VTuber) | 僅作 Live2D、語音互動、VTuber UX 參考，不搬整套 backend |
-| 原始授權 | MIT License | 保留原始 `LICENSE`，copyright 屬於 KdaiP |
+| 原始授權 | MIT License | 保留原始 `LICENSE`；原始 copyright 屬於 KdaiP，本 fork 的新增修改由 `moegundam` 維護 |
 
 如果後續引用新的第三方專案、模型、素材或文件，必須在 README、對應文件或素材目錄中標示來源、授權與用途。
 
-## 相對原始 EchoBot 新增的功能
+本專案保留 EchoBot 作為主架構，不直接合併 [Open-LLM-VTuber/Open-LLM-VTuber](https://github.com/Open-LLM-VTuber/Open-LLM-VTuber) 後端。Open-LLM-VTuber 目前只作為 Live2D、ASR/TTS、VTuber 互動體驗與桌寵式介面的參考來源。
+
+## 功能細節
 
 ### 1. Web 產品入口分層
 
@@ -40,8 +94,11 @@
 | 後台 Admin | `/admin` | 後台索引、health、API docs、jobs 與管理頁入口 |
 | 操作說明 | `/admin/guide` | 操作、設定、預期成果、故障判斷與排除流程 |
 | 網站結構 | `/admin/structure` | Route map、Console 分區、API namespace 邊界 |
+| Sessions | `/admin/sessions` | 建立、檢視與維護 Session；Session 是角色、模型、通訊入口與對話狀態的核心 |
 | 角色設定 | `/admin/characters` | 管理角色 prompt、LLM / Voice / Live2D 綁定、emotion map 與角色 package 匯入/匯出 |
 | LLM 模型 | `/admin/models` | 管理 LLM provider、model、base URL、API key 與推理參數 |
+| 語音模型 | `/admin/voice-models` | 管理 STT/TTS provider、voice、language 與語音 profile |
+| Live2D | `/admin/live2d` | 管理 Live2D 選擇、asset catalog 與視覺 profile |
 | 通訊平台 | `/admin/channels` | Telegram / Discord 設定與 smoke 驗證，QQ/LINE/WhatsApp 等 gateway 管理入口 |
 | Open WebUI Bridge | `/admin/openwebui` | Open WebUI narrow OpenAPI bridge 接線說明 |
 | 部署檢查 | `/admin/deployment` | 本機服務、Cloudflare、GitHub Actions 與 Open WebUI bridge readiness 檢查 |
@@ -268,10 +325,13 @@ python -m pytest
 
 ## License
 
-本專案沿用上游 EchoBot 的 MIT License。請見 [`LICENSE`](./LICENSE)。
+本專案沿用 MIT License。請見 [`LICENSE`](./LICENSE)。上游 EchoBot copyright 保留為 KdaiP，本 fork 的新增修改以 `moegundam` 名義標示在同一份 MIT 授權中。
 
-原始 copyright：
+MIT 允許使用、修改、散布、再授權與販售，因此本專案可用於商業產品或 App；但散布時必須保留 MIT 授權文字與 copyright notice，且第三方素材、模型與平台條款需另外確認。
+
+授權標示：
 
 ```text
 Copyright (c) 2026 KdaiP
+Additional modifications Copyright (c) 2026 moegundam
 ```
