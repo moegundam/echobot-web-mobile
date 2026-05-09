@@ -56,17 +56,6 @@
 | 操作說明 | 手機 Stage |
 | ![Operation guide](./docs/assets/screenshots/operation-guide.png) | ![Mobile Stage](./docs/assets/screenshots/stage-mobile.png) |
 
-## 授權與商用結論
-
-本 repo 目前沿用 MIT License，並保留原始 EchoBot 授權聲明。MIT 授權的重點是：
-
-- **別人可以拿這個公開 repo 做商業用途、販售、修改、再散布或整合到產品中**，前提是保留 MIT 授權文字與 copyright notice。
-- **你也可以把這個專案做成 Web App、iOS App、Android App、桌面 App 或內部服務**，同樣要保留上游授權聲明。
-- 如果不希望別人拿來商用，不能把目前公開 MIT repo 當成限制來源；應維持 private，或針對你新增的部分另行評估更嚴格授權。但上游 MIT 部分仍保有原 MIT 權利。
-- 這裡只確認本 repo 程式碼授權。Live2D 素材、模型權重、TTS/STT provider、OpenAI-compatible API、Telegram/Discord 平台、App Store / Google Play 規範可能有各自條款，商用或上架前要逐項確認。
-
-簡短結論：**可以商用，也可以做成 App；但公開 MIT 也代表別人可以合法商用你的公開版本，只要他們保留授權聲明。**
-
 ## 上游來源與引用
 
 | 類型 | 專案 | 本版本使用方式 |

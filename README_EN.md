@@ -56,17 +56,6 @@ Based on the currently verifiable pages, APIs, tests, documentation, and smoke s
 | Operation guide | Mobile Stage |
 | ![Operation guide](./docs/assets/screenshots/operation-guide.png) | ![Mobile Stage](./docs/assets/screenshots/stage-mobile.png) |
 
-## License And Commercial Use
-
-This repository currently follows the MIT License and preserves the original EchoBot license notice. In practical terms:
-
-- **Other people may use this public repository commercially, sell it, modify it, redistribute it, or integrate it into products**, as long as they keep the MIT license text and copyright notice.
-- **You may also turn this project into a Web App, iOS App, Android App, desktop app, or internal service**, with the same attribution requirement.
-- If you do not want others to commercialize the public version, this MIT public repo is not the right restriction mechanism; keep the project private, or separately evaluate stricter licensing for your own additions. The upstream MIT-covered parts still retain their MIT rights.
-- This only covers this repository's code license. Live2D assets, model weights, TTS/STT providers, OpenAI-compatible APIs, Telegram/Discord platform rules, and App Store / Google Play policies may have separate terms that must be checked before commercial use or app-store release.
-
-Short answer: **yes, this can be used commercially and turned into an app; but public MIT also means others can legally commercialize the public version if they preserve the license notice.**
-
 ## Upstream Sources And Attribution
 
 | Type | Project | How this edition uses it |
