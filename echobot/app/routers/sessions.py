@@ -15,16 +15,7 @@ from ..schemas import (
     session_summary_model_from_info,
 )
 from ..state import get_app_runtime
-from ..services.runtime_profile_composer import (
-    apply_runtime_profile_for_role,
-    runtime_bindings_for_role,
-)
-from ..session_metadata import (
-    channel_integration_id_from_metadata,
-    channel_type_from_metadata,
-    set_channel_binding,
-)
-from ...orchestration import role_name_from_metadata
+from ..services.session_application import SessionApplicationService
 
 
 router = APIRouter(tags=["sessions"])
@@ -32,13 +23,13 @@ router = APIRouter(tags=["sessions"])
 
 @router.get("/sessions", response_model=list[SessionSummaryModel])
 async def list_sessions(runtime=Depends(get_app_runtime)) -> list[SessionSummaryModel]:
-    sessions = await runtime.session_service.list_sessions()
+    sessions = await _session_app(runtime).list_sessions()
     return [session_summary_model_from_info(item) for item in sessions]
 
 
 @router.get("/sessions/current", response_model=SessionDetailModel)
 async def get_current_session(runtime=Depends(get_app_runtime)) -> SessionDetailModel:
-    session = await runtime.session_service.load_current_session()
+    session = await _session_app(runtime).current_session()
     return session_detail_model_from_session(session)
 
 
@@ -48,7 +39,7 @@ async def set_current_session(
     runtime=Depends(get_app_runtime),
 ) -> SessionDetailModel:
     try:
-        session = await runtime.session_service.switch_session(request.name)
+        session = await _session_app(runtime).switch_session(request.name)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return session_detail_model_from_session(session)
@@ -60,37 +51,13 @@ async def create_session(
     runtime=Depends(get_app_runtime),
 ) -> SessionDetailModel:
     try:
-        session = await runtime.session_service.create_session(request.name)
-        if request.role_name:
-            session = await runtime.chat_service.set_role(
-                session.name,
-                request.role_name,
-            )
-            await _apply_bound_model_profile_for_role(
-                runtime,
-                role_name_from_metadata(session.metadata),
-            )
-        if request.route_mode is not None:
-            session = await runtime.chat_service.set_route_mode(
-                session.name,
-                request.route_mode,
-            )
-        channel_type = request.channel_type or ""
-        channel_integration_id = request.channel_integration_id or ""
-        if not channel_type and not channel_integration_id and request.role_name:
-            channel_type, channel_integration_id = await _default_channel_binding_for_role(
-                runtime,
-                role_name_from_metadata(session.metadata),
-            )
-        if channel_type or channel_integration_id:
-            session = await runtime.session_service.update_session_metadata(
-                session.name,
-                lambda metadata: set_channel_binding(
-                    metadata,
-                    channel_type=channel_type,
-                    channel_integration_id=channel_integration_id,
-                ),
-            )
+        session = await _session_app(runtime).create_session(
+            name=request.name,
+            role_name=request.role_name,
+            route_mode=request.route_mode,
+            channel_type=request.channel_type,
+            channel_integration_id=request.channel_integration_id,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return session_detail_model_from_session(session)
@@ -102,7 +69,7 @@ async def get_session(
     runtime=Depends(get_app_runtime),
 ) -> SessionDetailModel:
     try:
-        session = await runtime.session_service.load_session(session_name)
+        session = await _session_app(runtime).load_session(session_name)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return session_detail_model_from_session(session)
@@ -115,7 +82,7 @@ async def rename_session(
     runtime=Depends(get_app_runtime),
 ) -> SessionDetailModel:
     try:
-        session = await runtime.session_service.rename_session(session_name, request.name)
+        session = await _session_app(runtime).rename_session(session_name, request.name)
     except ValueError as exc:
         status_code = 404 if "not found" in str(exc).lower() else 400
         raise HTTPException(status_code=status_code, detail=str(exc)) from exc
@@ -129,19 +96,7 @@ async def set_session_role(
     runtime=Depends(get_app_runtime),
 ) -> SessionDetailModel:
     try:
-        session = await runtime.chat_service.set_role(
-            session_name,
-            request.role_name,
-        )
-        await _apply_bound_model_profile_for_role(
-            runtime,
-            role_name_from_metadata(session.metadata),
-        )
-        session = await _apply_character_channel_defaults_if_unbound(
-            runtime,
-            session.name,
-            role_name_from_metadata(session.metadata),
-        )
+        session = await _session_app(runtime).set_role(session_name, request.role_name)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return session_detail_model_from_session(session)
@@ -154,7 +109,7 @@ async def set_session_route_mode(
     runtime=Depends(get_app_runtime),
 ) -> SessionDetailModel:
     try:
-        session = await runtime.chat_service.set_route_mode(
+        session = await _session_app(runtime).set_route_mode(
             session_name,
             request.route_mode,
         )
@@ -170,13 +125,10 @@ async def set_session_channel_binding(
     runtime=Depends(get_app_runtime),
 ) -> SessionDetailModel:
     try:
-        session = await runtime.session_service.update_session_metadata(
+        session = await _session_app(runtime).set_channel_binding(
             session_name,
-            lambda metadata: set_channel_binding(
-                metadata,
-                channel_type=request.channel_type,
-                channel_integration_id=request.channel_integration_id,
-            ),
+            channel_type=request.channel_type,
+            channel_integration_id=request.channel_integration_id,
         )
     except ValueError as exc:
         status_code = 404 if "not found" in str(exc).lower() else 400
@@ -189,53 +141,11 @@ async def delete_session(
     session_name: str,
     runtime=Depends(get_app_runtime),
 ) -> dict[str, bool]:
-    deleted = await runtime.session_service.delete_session(session_name)
+    deleted = await _session_app(runtime).delete_session(session_name)
     if not deleted:
         raise HTTPException(status_code=404, detail=f"Session not found: {session_name}")
     return {"deleted": True}
 
 
-async def _apply_bound_model_profile_for_role(runtime, role_name: str) -> None:
-    await apply_runtime_profile_for_role(
-        runtime,
-        role_name,
-    )
-
-
-async def _apply_character_channel_defaults_if_unbound(
-    runtime,
-    session_name: str,
-    role_name: str,
-):
-    session = await runtime.session_service.load_session(session_name)
-    if channel_type_from_metadata(session.metadata) or channel_integration_id_from_metadata(
-        session.metadata,
-    ):
-        return session
-
-    channel_type, channel_integration_id = await _default_channel_binding_for_role(
-        runtime,
-        role_name,
-    )
-    if not channel_type and not channel_integration_id:
-        return session
-
-    return await runtime.session_service.update_session_metadata(
-        session.name,
-        lambda metadata: set_channel_binding(
-            metadata,
-            channel_type=channel_type,
-            channel_integration_id=channel_integration_id,
-        ),
-    )
-
-
-async def _default_channel_binding_for_role(
-    runtime,
-    role_name: str,
-) -> tuple[str, str]:
-    bindings = await runtime_bindings_for_role(runtime, role_name)
-    return (
-        str(bindings.get("default_channel_type") or "").strip(),
-        str(bindings.get("default_channel_integration_id") or "").strip(),
-    )
+def _session_app(runtime) -> SessionApplicationService:
+    return SessionApplicationService(runtime)
