@@ -78,3 +78,9 @@ jobs:
 
       - name: Run tests
         run: pytest
+
+      - name: Validate Compose config
+        run: docker compose config
+
+      - name: Build Docker image
+        run: docker build --tag echobot-web-mobile:ci .

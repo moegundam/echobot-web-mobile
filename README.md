@@ -32,7 +32,7 @@
 | 9 | Stage Event Broker | user/session scoped SSE event broker，支援字幕、emotion、expression、motion 與 Stage replay |
 | 10 | Runtime profiles | LLM、Voice、Live2D 分頁管理，角色可綁定完整互動配置並匯入/匯出 package |
 | 11 | Channel gateways | Telegram/Discord 設定、smoke、stage target projection 與 deterministic `/ping` 驗證入口 |
-| 12 | Open WebUI / 部署 / CI | Narrow OpenAPI bridge、deployment readiness、public safety scan、browser smoke、CI 驗證 |
+| 12 | Open WebUI / 部署 / CI | Narrow OpenAPI bridge、Docker package、deployment readiness、public safety scan、browser smoke、CI 驗證 |
 
 ### 修正/收斂的 9 類問題
 
@@ -116,6 +116,7 @@
 相關文件與範本：
 
 - [`docs/deployment/local-tunnel.md`](./docs/deployment/local-tunnel.md)
+- [`docs/deployment/docker.md`](./docs/deployment/docker.md)
 - [`docs/deployment/openwebui-stable-entry.md`](./docs/deployment/openwebui-stable-entry.md)
 - [`docs/deployment/cloudflared-local-tunnel.example.yml`](./docs/deployment/cloudflared-local-tunnel.example.yml)
 - [`.env.local-tunnel.example`](./.env.local-tunnel.example)
@@ -276,6 +277,19 @@ python -m echobot app --host 127.0.0.1 --port 8000
 ```shell
 python -m echobot app --host 127.0.0.1 --port 8001
 ```
+
+### Docker / Compose 啟動
+
+本版本也提供單 container 的升級版打包：
+
+```shell
+cp docker.env.example docker.env.local
+docker compose build
+docker compose up -d
+curl -fsS http://127.0.0.1:8000/api/health
+```
+
+詳細說明請見 [`docs/deployment/docker.md`](./docs/deployment/docker.md)。
 
 ### 4. 開啟頁面
 

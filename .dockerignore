@@ -1,0 +1,50 @@
+# Git and local metadata
+.git/
+.github/
+.DS_Store
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+
+# Python environments and caches
+__pycache__/
+*.py[cod]
+*.pyd
+*.so
+.venv/
+venv/
+env/
+ENV/
+.uv-cache/
+
+# Runtime data and logs
+.echobot/
+logs/
+*.log
+
+# Local secrets and machine-specific config
+.env
+.env.*
+!.env.example
+!.env.local-tunnel.example
+docker.env.local
+
+# Build/test artifacts
+build/
+dist/
+*.egg-info/
+.coverage
+.coverage.*
+htmlcov/
+
+# Editor files
+.vscode/
+.idea/
+Thumbs.db
+
+# Files not required in the runtime image
+docs/
+tests/
+scripts/
+example_projects/

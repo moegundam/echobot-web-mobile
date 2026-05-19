@@ -32,7 +32,7 @@ Based on the currently verifiable pages, APIs, tests, documentation, and smoke s
 | 9 | Stage Event Broker | user/session scoped SSE broker for subtitles, emotion, expression, motion, and Stage replay |
 | 10 | Runtime profiles | LLM, Voice, and Live2D Admin pages; characters bind a full interaction config and support package import/export |
 | 11 | Channel gateways | Telegram/Discord setup, smoke checks, stage target projection, and deterministic `/ping` verification |
-| 12 | Open WebUI / deployment / CI | Narrow OpenAPI bridge, deployment readiness, public safety scan, browser smoke, and CI verification |
+| 12 | Open WebUI / deployment / CI | Narrow OpenAPI bridge, Docker package, deployment readiness, public safety scan, browser smoke, and CI verification |
 
 ### 9 Fixed Or Tightened Issue Categories
 
@@ -116,6 +116,7 @@ A Local Tunnel profile was added for private testing: EchoBot runs locally or on
 Related files:
 
 - [`docs/deployment/local-tunnel.md`](./docs/deployment/local-tunnel.md)
+- [`docs/deployment/docker.md`](./docs/deployment/docker.md)
 - [`docs/deployment/openwebui-stable-entry.md`](./docs/deployment/openwebui-stable-entry.md)
 - [`docs/deployment/cloudflared-local-tunnel.example.yml`](./docs/deployment/cloudflared-local-tunnel.example.yml)
 - [`.env.local-tunnel.example`](./.env.local-tunnel.example)
@@ -276,6 +277,19 @@ If port 8000 is already in use:
 ```shell
 python -m echobot app --host 127.0.0.1 --port 8001
 ```
+
+### Docker / Compose Startup
+
+This edition also provides an upgraded single-container package:
+
+```shell
+cp docker.env.example docker.env.local
+docker compose build
+docker compose up -d
+curl -fsS http://127.0.0.1:8000/api/health
+```
+
+See [`docs/deployment/docker.md`](./docs/deployment/docker.md) for details.
 
 ### 4. Open The Pages
 

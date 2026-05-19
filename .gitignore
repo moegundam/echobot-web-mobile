@@ -30,6 +30,8 @@ htmlcov/
 .env.*
 !.env.example
 !.env.local-tunnel.example
+docker.env.local
+docker.env
 
 # Logs
 *.log
