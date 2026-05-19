@@ -1,0 +1,48 @@
+name: Container
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/echobot-web-mobile
+
+jobs:
+  publish:
+    name: Build and publish image
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Log in to GitHub Container Registry
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Build image
+        run: |
+          short_sha="${GITHUB_SHA::7}"
+          docker build \
+            --tag "${IMAGE_NAME}:upgrade" \
+            --tag "${IMAGE_NAME}:sha-${short_sha}" \
+            .
+
+      - name: Push image
+        run: |
+          short_sha="${GITHUB_SHA::7}"
+          docker push "${IMAGE_NAME}:upgrade"
+          docker push "${IMAGE_NAME}:sha-${short_sha}"
+
+      - name: Publish latest tag on main
+        if: github.ref == 'refs/heads/main'
+        run: |
+          docker tag "${IMAGE_NAME}:upgrade" "${IMAGE_NAME}:latest"
+          docker push "${IMAGE_NAME}:latest"

@@ -3,7 +3,7 @@ services:
     build:
       context: .
       target: runtime
-    image: moegundam/echobot-web-mobile:upgrade
+    image: ghcr.io/moegundam/echobot-web-mobile:upgrade
     ports:
       - "127.0.0.1:${ECHOBOT_HOST_PORT:-8000}:8000"
     env_file:

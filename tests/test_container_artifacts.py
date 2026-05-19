@@ -25,7 +25,7 @@ def test_compose_uses_loopback_volume_and_restricted_runtime() -> None:
     compose = yaml.safe_load((ROOT / "compose.yaml").read_text(encoding="utf-8"))
     service = compose["services"]["echobot"]
 
-    assert service["image"] == "moegundam/echobot-web-mobile:upgrade"
+    assert service["image"] == "ghcr.io/moegundam/echobot-web-mobile:upgrade"
     assert service["ports"] == ["127.0.0.1:${ECHOBOT_HOST_PORT:-8000}:8000"]
     assert "echobot_data:/app/.echobot" in service["volumes"]
     assert "LLM_API_KEY" not in service["environment"]

@@ -289,6 +289,12 @@ docker compose up -d
 curl -fsS http://127.0.0.1:8000/api/health
 ```
 
+GitHub Container Registry image:
+
+```text
+ghcr.io/moegundam/echobot-web-mobile:upgrade
+```
+
 See [`docs/deployment/docker.md`](./docs/deployment/docker.md) for details.
 
 ### 4. Open The Pages

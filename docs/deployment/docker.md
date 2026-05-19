@@ -30,6 +30,28 @@ docker compose up -d
 curl -fsS http://127.0.0.1:8000/api/health
 ```
 
+### 使用已發佈 image
+
+`main` 分支會把 image 發佈到你自己的 GitHub Container Registry：
+
+```text
+ghcr.io/moegundam/echobot-web-mobile:upgrade
+ghcr.io/moegundam/echobot-web-mobile:latest
+ghcr.io/moegundam/echobot-web-mobile:sha-<commit>
+```
+
+可直接拉取：
+
+```shell
+docker pull ghcr.io/moegundam/echobot-web-mobile:upgrade
+```
+
+若要在 compose 中使用 registry image 而不是本機 build，可移除或忽略 `build:` 區塊，保留：
+
+```yaml
+image: ghcr.io/moegundam/echobot-web-mobile:upgrade
+```
+
 開啟：
 
 ```text
@@ -128,6 +150,28 @@ cp docker.env.example docker.env.local
 docker compose build
 docker compose up -d
 curl -fsS http://127.0.0.1:8000/api/health
+```
+
+### Using The Published Image
+
+The `main` branch publishes the image to your own GitHub Container Registry:
+
+```text
+ghcr.io/moegundam/echobot-web-mobile:upgrade
+ghcr.io/moegundam/echobot-web-mobile:latest
+ghcr.io/moegundam/echobot-web-mobile:sha-<commit>
+```
+
+Pull it directly:
+
+```shell
+docker pull ghcr.io/moegundam/echobot-web-mobile:upgrade
+```
+
+To use the registry image in Compose instead of a local build, remove or ignore the `build:` block and keep:
+
+```yaml
+image: ghcr.io/moegundam/echobot-web-mobile:upgrade
 ```
 
 Open:
