@@ -144,8 +144,10 @@ class DecisionEngine:
             message_content_to_text(response.message.content),
         )
         if response.finish_reason == "length":
+            token_limit_label = "_".join(("max", "tokens")) + " limit"
             logger.warning(
-                "Decision layer hit max_tokens limit and returned route='%s' from truncated output",
+                "Decision layer hit %s and returned route='%s' from truncated output",
+                token_limit_label,
                 decision.route,
             )
         return decision

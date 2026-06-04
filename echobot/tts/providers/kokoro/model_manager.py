@@ -13,6 +13,7 @@ from ....speech_assets import (
     download_file,
     file_name_from_url,
     replace_directory,
+    safe_extract_tar,
     write_download_metadata,
 )
 
@@ -36,6 +37,7 @@ class KokoroModelPaths:
 class KokoroDownloadSettings:
     model_url: str
     timeout_seconds: float
+    allow_private_download: bool
 
 
 class KokoroPreparationCancelled(RuntimeError):
@@ -50,6 +52,7 @@ class KokoroModelManager:
         model_root_dir: Path | None = None,
         model_url: str = DEFAULT_KOKORO_URL,
         timeout_seconds: float = 600.0,
+        allow_private_download: bool = False,
     ) -> None:
         root_dir = model_root_dir or (
             workspace / ".echobot" / "models" / "sherpa-onnx" / "kokoro-multi-lang-v1_1"
@@ -65,6 +68,7 @@ class KokoroModelManager:
         self._settings = KokoroDownloadSettings(
             model_url=model_url,
             timeout_seconds=timeout_seconds,
+            allow_private_download=allow_private_download,
         )
 
     @property
@@ -115,7 +119,10 @@ class KokoroModelManager:
     ) -> None:
         with tempfile.TemporaryDirectory(prefix="echobot_kokoro_") as temp_dir:
             temp_root = Path(temp_dir)
-            archive_name = file_name_from_url(self._settings.model_url)
+            archive_name = file_name_from_url(
+                self._settings.model_url,
+                allow_private=self._settings.allow_private_download,
+            )
             archive_path = temp_root / archive_name
             extract_dir = temp_root / "extract"
             extract_dir.mkdir(parents=True, exist_ok=True)
@@ -124,13 +131,14 @@ class KokoroModelManager:
                 self._settings.model_url,
                 archive_path,
                 timeout_seconds=self._settings.timeout_seconds,
+                allow_private=self._settings.allow_private_download,
                 stop_event=stop_event,
                 cancelled_error_factory=self._cancelled_error,
                 progress_label="Kokoro TTS model",
             )
             self._ensure_not_cancelled(stop_event)
             with tarfile.open(archive_path, "r:*") as archive:
-                archive.extractall(extract_dir)
+                safe_extract_tar(archive, extract_dir)
 
             self._ensure_not_cancelled(stop_event)
             source_dir = self._find_directory_with_model_files(extract_dir)

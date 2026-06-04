@@ -1,5 +1,7 @@
 services:
   echobot:
+    # Keep this container as the lightweight EchoBot app runtime. Run GPU
+    # inference in a separate GB10 / LiteLLM / Ollama / vLLM provider stack.
     build:
       context: .
       target: runtime

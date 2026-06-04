@@ -106,6 +106,7 @@ def main() -> int:
 
 
 def _request_json(method: str, url: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    url = _validate_http_url(url)
     data = None if payload is None else json.dumps(payload).encode("utf-8")
     request = urllib.request.Request(
         url,
@@ -113,7 +114,7 @@ def _request_json(method: str, url: str, payload: dict[str, Any] | None = None) 
         headers={"Content-Type": "application/json"} if payload is not None else {},
         method=method,
     )
-    with urllib.request.urlopen(request, timeout=30) as response:
+    with urllib.request.urlopen(request, timeout=30) as response:  # nosec B310  # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
         raw = response.read().decode("utf-8")
     loaded = json.loads(raw)
     if not isinstance(loaded, dict):
@@ -122,10 +123,18 @@ def _request_json(method: str, url: str, payload: dict[str, Any] | None = None) 
 
 
 def _fetch_some_bytes(url: str) -> None:
-    with urllib.request.urlopen(urllib.request.Request(url, method="GET"), timeout=30) as response:
+    url = _validate_http_url(url)
+    with urllib.request.urlopen(urllib.request.Request(url, method="GET"), timeout=30) as response:  # nosec B310  # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
         sample = response.read(1)
     if not sample:
         raise RuntimeError(f"asset returned no bytes: {url}")
+
+
+def _validate_http_url(url: str) -> str:
+    parsed = urllib.parse.urlparse(str(url or "").strip())
+    if parsed.scheme.lower() not in {"http", "https"} or not parsed.netloc:
+        raise ValueError("smoke-test URL must be an absolute HTTP(S) URL")
+    return parsed.geturl()
 
 
 def _select_catalog_item(

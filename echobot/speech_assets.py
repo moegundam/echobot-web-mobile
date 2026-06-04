@@ -1,22 +1,27 @@
 from __future__ import annotations
 
+import ipaddress
 import json
 import os
 import shutil
+import socket
 import sys
+import tarfile
 import threading
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from urllib.parse import urlparse
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 
 
 CancelledErrorFactory = Callable[[], Exception] | None
 _DOWNLOAD_PROGRESS_UPDATE_INTERVAL_SECONDS = 1.0
 _DOWNLOAD_PROGRESS_PERCENT_STEP = 10.0
 _PROGRESS_OUTPUT_LOCK = threading.Lock()
+_HTTP_URL_SCHEMES = {"http", "https"}
+_BLOCKED_HOSTNAMES = {"localhost", "metadata", "metadata.google.internal"}
 
 
 def relative_to_root(path: Path, root_dir: Path) -> str:
@@ -26,12 +31,103 @@ def relative_to_root(path: Path, root_dir: Path) -> str:
         return path.name
 
 
-def file_name_from_url(url: str) -> str:
-    parsed = urlparse(url)
+def file_name_from_url(url: str, *, allow_private: bool = False) -> str:
+    parsed = urlparse(
+        validate_http_url(
+            url,
+            field_name="download URL",
+            allow_private=allow_private,
+        ),
+    )
     file_name = Path(parsed.path).name
     if not file_name:
         raise ValueError(f"Unable to determine file name from URL: {url}")
     return file_name
+
+
+def validate_http_url(
+    url: str,
+    *,
+    field_name: str = "URL",
+    allow_private: bool = False,
+) -> str:
+    cleaned_url = str(url or "").strip()
+    parsed = urlparse(cleaned_url)
+    if parsed.scheme.lower() not in _HTTP_URL_SCHEMES or not parsed.netloc:
+        raise ValueError(f"{field_name} must be an absolute HTTP(S) URL")
+    if not allow_private and _is_private_http_target(parsed.hostname or ""):
+        raise ValueError(f"{field_name} must not target a private network host")
+    return cleaned_url
+
+
+def open_http_url(
+    url_or_request: str | Request,
+    *,
+    timeout_seconds: float,
+    allow_private: bool = False,
+):
+    raw_url = url_or_request.full_url if isinstance(url_or_request, Request) else url_or_request
+    validate_http_url(
+        str(raw_url),
+        field_name="request URL",
+        allow_private=allow_private,
+    )
+    return urlopen(url_or_request, timeout=timeout_seconds)  # nosec B310  # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
+
+
+def safe_extract_tar(archive: tarfile.TarFile, destination: Path) -> None:
+    destination_root = destination.resolve()
+    for member in archive.getmembers():
+        member_path = (destination / member.name).resolve()
+        if not _is_within_directory(member_path, destination_root):
+            raise ValueError(f"Archive member escapes extraction directory: {member.name}")
+        if member.issym() or member.islnk():
+            link_path = (member_path.parent / member.linkname).resolve()
+            if not _is_within_directory(link_path, destination_root):
+                raise ValueError(f"Archive link escapes extraction directory: {member.name}")
+    archive.extractall(destination)  # nosec B202
+
+
+def _is_within_directory(path: Path, root: Path) -> bool:
+    try:
+        path.relative_to(root)
+    except ValueError:
+        return False
+    return True
+
+
+def _is_private_http_target(hostname: str) -> bool:
+    host = hostname.strip().strip("[]").lower().rstrip(".")
+    if not host:
+        return True
+    if host in _BLOCKED_HOSTNAMES or host.endswith(".localhost") or host.endswith(".local"):
+        return True
+    if "." not in host and ":" not in host:
+        return True
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        return _hostname_resolves_to_private_address(host)
+    return not address.is_global
+
+
+def _hostname_resolves_to_private_address(hostname: str) -> bool:
+    try:
+        addresses = socket.getaddrinfo(hostname, None, type=socket.SOCK_STREAM)
+    except socket.gaierror:
+        return True
+
+    for item in addresses:
+        sockaddr = item[4]
+        if not sockaddr:
+            return True
+        try:
+            address = ipaddress.ip_address(str(sockaddr[0]))
+        except ValueError:
+            return True
+        if not address.is_global:
+            return True
+    return False
 
 
 def write_download_metadata(path: Path, *, name: str, source_url: str) -> None:
@@ -62,13 +158,23 @@ def download_file(
     destination: Path,
     *,
     timeout_seconds: float,
+    allow_private: bool = False,
     stop_event: threading.Event | None = None,
     cancelled_error_factory: CancelledErrorFactory = None,
     chunk_size: int = 64 * 1024,
     progress_label: str | None = None,
 ) -> None:
+    url = validate_http_url(
+        url,
+        field_name="download URL",
+        allow_private=allow_private,
+    )
     destination.parent.mkdir(parents=True, exist_ok=True)
-    with urlopen(url, timeout=timeout_seconds) as response:
+    with open_http_url(
+        url,
+        timeout_seconds=timeout_seconds,
+        allow_private=allow_private,
+    ) as response:
         reporter = _DownloadProgressReporter(
             progress_label or file_name_from_url(url),
             total_bytes=_content_length_from_response(response),

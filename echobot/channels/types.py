@@ -33,12 +33,14 @@ class ChannelAddress:
     @property
     def route_key(self) -> str:
         payload = self.to_dict()
-        digest = hashlib.sha1(
+        # Stable route suffix only; not used for security decisions.
+        digest = hashlib.sha1(  # nosemgrep: python.lang.security.insecure-hash-algorithms.insecure-hash-algorithm-sha1
             json.dumps(
                 payload,
                 ensure_ascii=False,
                 sort_keys=True,
-            ).encode("utf-8")
+            ).encode("utf-8"),
+            usedforsecurity=False,
         ).hexdigest()[:8]
         parts = [_slug(self.channel), _slug(self.chat_id)]
         if self.thread_id:

@@ -21,7 +21,9 @@ DEFAULT_LOCAL_PORT = 8001
 DEFAULT_REMOTE_HOST = os.environ.get("ECHOBOT_OPENWEBUI_REMOTE_HOST", "")
 DEFAULT_REMOTE_BIND = "127.0.0.1"
 DEFAULT_REMOTE_PORT = int(os.environ.get("ECHOBOT_OPENWEBUI_REMOTE_PORT", "18001"))
-DEFAULT_TOKEN_FILE = "/tmp/echobot_openwebui_bridge_token"
+DEFAULT_STATE_DIR = Path(os.environ.get("ECHOBOT_LOCAL_STATE_DIR", "~/.echobot")).expanduser()
+DEFAULT_LOG_DIR = DEFAULT_STATE_DIR / "logs"
+DEFAULT_TOKEN_FILE = str(DEFAULT_STATE_DIR / "openwebui_bridge_token")
 DEFAULT_TARGET_USER_ID = "echobot-smoke@local"
 
 
@@ -151,6 +153,7 @@ def _config_from_args(args: argparse.Namespace) -> dict[str, object]:
         "remote_port": int(args.remote_port),
         "python": str(python_path),
         "ssh": str(args.ssh),
+        "log_dir": DEFAULT_LOG_DIR,
         "launch_agent_dir": Path.home() / "Library" / "LaunchAgents",
     }
 
@@ -188,7 +191,9 @@ def _doctor(config: dict[str, object]) -> int:
 
 def _write_launchd(config: dict[str, object], component: str) -> None:
     agent_dir = Path(config["launch_agent_dir"])
+    log_dir = Path(config["log_dir"])
     agent_dir.mkdir(parents=True, exist_ok=True)
+    log_dir.mkdir(parents=True, exist_ok=True)
     for label, plist in _selected_plists(config, component):
         path = agent_dir / f"{label}.plist"
         with path.open("wb") as handle:
@@ -211,6 +216,7 @@ def _selected_plists(config: dict[str, object], component: str) -> list[tuple[st
 
 def _build_app_plist(config: dict[str, object]) -> dict[str, object]:
     repo_root = Path(config["repo_root"])
+    log_dir = Path(config.get("log_dir") or DEFAULT_LOG_DIR)
     python_path = str(config["python"])
     command = " ".join(
         [
@@ -241,13 +247,14 @@ def _build_app_plist(config: dict[str, object]) -> dict[str, object]:
         "WorkingDirectory": str(repo_root),
         "RunAtLoad": True,
         "KeepAlive": True,
-        "StandardOutPath": "/tmp/echobot-app.launchd.out.log",
-        "StandardErrorPath": "/tmp/echobot-app.launchd.err.log",
+        "StandardOutPath": str(log_dir / "echobot-app.launchd.out.log"),
+        "StandardErrorPath": str(log_dir / "echobot-app.launchd.err.log"),
         "EnvironmentVariables": _launchd_env(config),
     }
 
 
 def _build_openwebui_tunnel_plist(config: dict[str, object]) -> dict[str, object]:
+    log_dir = Path(config.get("log_dir") or DEFAULT_LOG_DIR)
     remote_spec = (
         f"{config['remote_bind']}:{config['remote_port']}:"
         f"{config['host']}:{config['port']}"
@@ -269,8 +276,8 @@ def _build_openwebui_tunnel_plist(config: dict[str, object]) -> dict[str, object
         ],
         "RunAtLoad": True,
         "KeepAlive": True,
-        "StandardOutPath": "/tmp/echobot-openwebui-tunnel.out.log",
-        "StandardErrorPath": "/tmp/echobot-openwebui-tunnel.err.log",
+        "StandardOutPath": str(log_dir / "echobot-openwebui-tunnel.out.log"),
+        "StandardErrorPath": str(log_dir / "echobot-openwebui-tunnel.err.log"),
     }
 
 
@@ -521,10 +528,18 @@ def _remote_base_url(config: dict[str, object]) -> str:
 
 def _http_ok(url: str) -> bool:
     try:
-        with request.urlopen(url, timeout=3.0) as response:
+        url = _validate_http_url(url)
+        with request.urlopen(url, timeout=3.0) as response:  # nosec B310  # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
             return 200 <= response.status < 300
     except (OSError, error.URLError, error.HTTPError):
         return False
+
+
+def _validate_http_url(url: str) -> str:
+    parsed = parse.urlparse(str(url or "").strip())
+    if parsed.scheme.lower() not in {"http", "https"} or not parsed.netloc:
+        raise ValueError("URL must be an absolute HTTP(S) URL")
+    return parsed.geturl()
 
 
 def _remote_http_ok(config: dict[str, object], url: str) -> bool:

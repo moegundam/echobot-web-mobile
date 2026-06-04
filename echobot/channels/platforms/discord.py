@@ -7,6 +7,7 @@ import mimetypes
 from typing import TYPE_CHECKING, Any
 from urllib import error, request
 
+from ...speech_assets import open_http_url, validate_http_url
 from ..base import BaseChannel
 from ..types import OutboundMessage
 from ...models import message_content_to_text
@@ -151,6 +152,7 @@ class DiscordChannel(BaseChannel):
 
 
 def _post_webhook_message(webhook_url: str, content: str) -> None:
+    webhook_url = validate_http_url(webhook_url, field_name="Discord webhook URL")
     payload = json.dumps({"content": content}, ensure_ascii=False).encode("utf-8")
     http_request = request.Request(
         webhook_url,
@@ -159,7 +161,7 @@ def _post_webhook_message(webhook_url: str, content: str) -> None:
         method="POST",
     )
     try:
-        with request.urlopen(http_request, timeout=10.0):
+        with open_http_url(http_request, timeout_seconds=10.0):
             return
     except error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")

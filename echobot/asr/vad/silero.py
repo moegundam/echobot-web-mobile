@@ -42,6 +42,7 @@ class SileroModelPaths:
 class SileroDownloadSettings:
     model_url: str
     timeout_seconds: float
+    allow_private_download: bool
 
 
 class SileroModelManager:
@@ -52,6 +53,7 @@ class SileroModelManager:
         model_root_dir: Path | None = None,
         model_url: str = DEFAULT_SILERO_VAD_MODEL_URL,
         timeout_seconds: float = 600.0,
+        allow_private_download: bool = False,
     ) -> None:
         root_dir = model_root_dir or (
             workspace / ".echobot" / "models" / "vad" / "silero"
@@ -63,6 +65,7 @@ class SileroModelManager:
         self._settings = SileroDownloadSettings(
             model_url=model_url,
             timeout_seconds=timeout_seconds,
+            allow_private_download=allow_private_download,
         )
 
     @property
@@ -100,6 +103,7 @@ class SileroModelManager:
                 self._settings.model_url,
                 target_path,
                 timeout_seconds=self._settings.timeout_seconds,
+                allow_private=self._settings.allow_private_download,
                 progress_label="Silero VAD model",
             )
             write_download_metadata(
@@ -183,6 +187,7 @@ class SileroVADProvider(VADProvider):
         execution_provider: str = "cpu",
         model_url: str = DEFAULT_SILERO_VAD_MODEL_URL,
         download_timeout_seconds: float = 600.0,
+        allow_private_download: bool = False,
         threshold: float = 0.5,
         min_silence_duration: float = 0.4,
         min_speech_duration: float = 0.2,
@@ -202,6 +207,7 @@ class SileroVADProvider(VADProvider):
             model_root_dir=model_root_dir,
             model_url=model_url,
             timeout_seconds=download_timeout_seconds,
+            allow_private_download=allow_private_download,
         )
         self._status_lock = asyncio.Lock()
         self._prepare_task: asyncio.Task[None] | None = None

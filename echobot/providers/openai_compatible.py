@@ -23,6 +23,7 @@ from ..models import (
     message_content_to_text,
     normalize_message_content,
 )
+from ..speech_assets import open_http_url
 from .base import LLMProvider
 
 logger = logging.getLogger(__name__)
@@ -294,7 +295,11 @@ class OpenAICompatibleProvider(LLMProvider):
         )
 
         try:
-            with request.urlopen(http_request, timeout=self.settings.timeout) as response:
+            with open_http_url(
+                http_request,
+                timeout_seconds=self.settings.timeout,
+                allow_private=True,
+            ) as response:
                 return json.loads(response.read().decode("utf-8"))
         except error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")
@@ -315,7 +320,11 @@ class OpenAICompatibleProvider(LLMProvider):
         )
 
         try:
-            with request.urlopen(http_request, timeout=self.settings.timeout) as response:
+            with open_http_url(
+                http_request,
+                timeout_seconds=self.settings.timeout,
+                allow_private=True,
+            ) as response:
                 for raw_line in response:
                     line = raw_line.decode("utf-8", errors="replace").strip()
                     if not line or not line.startswith("data:"):
@@ -410,7 +419,7 @@ class OpenAICompatibleProvider(LLMProvider):
         choice = choices[0]
         if choice.get("finish_reason") == "length":
             logger.warning(
-                "LLM stream hit max_tokens limit for model '%s'",
+                "LLM stream hit output limit for model '%s'",
                 self.settings.model,
             )
         delta = choice.get("delta")

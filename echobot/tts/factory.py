@@ -45,6 +45,10 @@ def build_default_kokoro_tts_provider(workspace: Path) -> KokoroTTSProvider:
             30.0,
             _env_float("ECHOBOT_TTS_KOKORO_DOWNLOAD_TIMEOUT_SECONDS", 600.0),
         ),
+        allow_private_download=_env_flag(
+            "ECHOBOT_TTS_KOKORO_ALLOW_PRIVATE_DOWNLOAD",
+            False,
+        ),
         length_scale=max(0.1, _env_float("ECHOBOT_TTS_KOKORO_LENGTH_SCALE", 1.0)),
         lang=_env_text("ECHOBOT_TTS_KOKORO_LANG", ""),
     )

@@ -9,6 +9,7 @@ import mimetypes
 from typing import TYPE_CHECKING, Any
 from urllib import error, request
 
+from ...speech_assets import validate_http_url
 from ..base import BaseChannel
 from ..types import OutboundMessage
 from ...models import (
@@ -512,7 +513,8 @@ def _download_image_as_attachment(
     filename: str,
 ) -> dict[str, str] | None:
     try:
-        with request.urlopen(url, timeout=30.0) as response:
+        validated_url = validate_http_url(url)
+        with request.urlopen(validated_url, timeout=30.0) as response:  # nosec B310  # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
             image_bytes = _read_response_bytes_with_limit(
                 response,
                 max_bytes=attachment_store.image_budget.max_input_bytes,
@@ -542,7 +544,8 @@ def _download_file_as_attachment(
     filename: str,
 ) -> dict[str, str] | None:
     try:
-        with request.urlopen(url, timeout=30.0) as response:
+        validated_url = validate_http_url(url)
+        with request.urlopen(validated_url, timeout=30.0) as response:  # nosec B310  # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
             file_bytes = _read_response_bytes_with_limit(
                 response,
                 max_bytes=attachment_store.file_budget.max_input_bytes,

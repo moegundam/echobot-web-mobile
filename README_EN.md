@@ -266,6 +266,10 @@ LLM_BASE_URL=https://your-provider.example/v1
 
 Configure local models, remote private model services, and API keys in your own `.env` file or secret manager. Do not put real hosts, tailnet IPs, model inventories, or keys into a public repository.
 
+### Model And CUDA Deployment Strategy
+
+The EchoBot Docker image is a lightweight app runtime by default. It does not bundle LLM weights or a CUDA runtime. For GB10, LiteLLM, Ollama, vLLM, or another GPU provider, run that provider separately and connect EchoBot through an OpenAI-compatible endpoint. EchoBot should focus on sessions, characters, Stage, Messenger, Console, Admin, and channel gateways.
+
 ### 3. Start The Local Server
 
 ```shell

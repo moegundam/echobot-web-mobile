@@ -11,6 +11,7 @@ from echobot.agent import AgentCore, AgentRunResult
 from echobot import build_default_system_prompt
 from echobot.config import load_env_file
 from echobot.memory import (
+    FallbackMsg,
     MemoryPreparationResult,
     ReMeLightSettings,
     ReMeLightSupport,
@@ -906,6 +907,33 @@ class ReMeConsoleOutputPatchTests(unittest.TestCase):
 
 
 class ReMeLightMessageConversionTests(unittest.TestCase):
+    def test_fallback_message_supports_conversion_without_agentscope(self) -> None:
+        messages = [
+            FallbackMsg(
+                name="assistant",
+                role="assistant",
+                content=[
+                    {
+                        "type": "text",
+                        "text": "fallback response",
+                    }
+                ],
+            )
+        ]
+
+        converted = _agentscope_messages_to_llm(messages)
+
+        self.assertEqual("assistant", converted[0].role)
+        self.assertEqual(
+            [
+                {
+                    "type": "text",
+                    "text": "fallback response",
+                }
+            ],
+            converted[0].content,
+        )
+
     def test_tool_result_round_trip_preserves_original_json_payload(self) -> None:
         messages = [
             LLMMessage(

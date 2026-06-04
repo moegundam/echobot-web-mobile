@@ -7,6 +7,8 @@ from typing import Any
 from urllib import error, request
 from urllib.parse import urlparse
 
+from ...speech_assets import validate_http_url
+
 try:
     import openai
     from openai import OpenAI
@@ -201,7 +203,10 @@ class OpenAICompatibleTTSProvider(TTSProvider):
         return parsed.netloc.lower() == "api.openai.com"
 
     def _fetch_voice_options_sync(self) -> list[VoiceOption]:
-        url = f"{self._base_url.rstrip('/')}/audio/voices"
+        url = validate_http_url(
+            f"{self._base_url.rstrip('/')}/audio/voices",
+            allow_private=True,
+        )
         http_request = request.Request(
             url=url,
             headers=self._request_headers(),
@@ -209,7 +214,7 @@ class OpenAICompatibleTTSProvider(TTSProvider):
         )
 
         try:
-            with request.urlopen(http_request, timeout=self._timeout) as response:
+            with request.urlopen(http_request, timeout=self._timeout) as response:  # nosec B310  # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
                 payload = json.loads(response.read().decode("utf-8"))
         except error.HTTPError as exc:
             raise RuntimeError(f"TTS voices request failed: status={exc.code}") from exc

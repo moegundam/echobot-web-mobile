@@ -1,18 +1,15 @@
 # Core
 fastapi
 uvicorn
+python-multipart
 pydantic
 loguru
 PyYAML
 Pillow
 openai
 
-# Memory
-agentscope
-reme-ai[light]==0.3.1.8
-
 # Document processing
-# defusedxml
+defusedxml
 # lxml
 # openpyxl
 # pdf2image

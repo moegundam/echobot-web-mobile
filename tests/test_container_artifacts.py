@@ -11,9 +11,12 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_dockerfile_uses_hardened_runtime_defaults() -> None:
     dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
 
-    assert "FROM python:3.12-slim-bookworm AS builder" in dockerfile
-    assert "FROM python:3.12-slim-bookworm AS runtime" in dockerfile
-    assert "USER 10001:10001" in dockerfile
+    assert "FROM cgr.dev/chainguard/wolfi-base@sha256:" in dockerfile
+    assert " AS builder" in dockerfile
+    assert " AS runtime" in dockerfile
+    assert ":latest" not in dockerfile
+    assert "python-3.12" in dockerfile
+    assert "USER 65532:65532" in dockerfile
     assert "HEALTHCHECK" in dockerfile
     assert "ECHOBOT_SHELL_SAFETY_MODE=workspace-write" in dockerfile
     assert "LLM_API_KEY=" not in dockerfile

@@ -10,6 +10,8 @@ import urllib.parse
 import urllib.request
 from typing import Any
 
+_HTTP_URL_SCHEMES = {"http", "https"}
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(
@@ -129,6 +131,7 @@ def main() -> int:
 
 
 def _request_json(method: str, url: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    url = _validate_http_url(url)
     data = None if payload is None else json.dumps(payload).encode("utf-8")
     request = urllib.request.Request(
         url,
@@ -136,7 +139,7 @@ def _request_json(method: str, url: str, payload: dict[str, Any] | None = None) 
         headers={"Content-Type": "application/json"} if payload is not None else {},
         method=method,
     )
-    with urllib.request.urlopen(request, timeout=180) as response:
+    with urllib.request.urlopen(request, timeout=180) as response:  # nosec B310  # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
         raw = response.read().decode("utf-8")
     if not raw:
         return {}
@@ -191,9 +194,9 @@ def _wait_for_assistant_history(base_url: str, session_name: str, timeout: float
 
 def _read_stage_event_replay(base_url: str, session_name: str) -> None:
     encoded_session = urllib.parse.quote(session_name, safe="")
-    url = f"{base_url}/api/stage/events?session_name={encoded_session}"
+    url = _validate_http_url(f"{base_url}/api/stage/events?session_name={encoded_session}")
     request = urllib.request.Request(url, method="GET")
-    with urllib.request.urlopen(request, timeout=10) as response:
+    with urllib.request.urlopen(request, timeout=10) as response:  # nosec B310  # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
         for raw_line in response:
             line = raw_line.decode("utf-8", errors="replace").strip()
             if not line.startswith("data:"):
@@ -213,6 +216,13 @@ def _read_stage_event_replay(base_url: str, session_name: str) -> None:
                 )
                 return
     raise TimeoutError("timed out waiting for mirrored stage event replay")
+
+
+def _validate_http_url(url: str) -> str:
+    parsed = urllib.parse.urlparse(str(url or "").strip())
+    if parsed.scheme.lower() not in _HTTP_URL_SCHEMES or not parsed.netloc:
+        raise ValueError("smoke-test URL must be an absolute HTTP(S) URL")
+    return parsed.geturl()
 
 
 def _default_sender(allow_from: list[str]) -> str:

@@ -5,7 +5,7 @@ import json
 import time
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib import error, request
+from urllib import error, parse, request
 
 
 MAX_AUDIO_BYTES = 12 * 1024 * 1024
@@ -194,14 +194,15 @@ class MicSmokeHandler(BaseHTTPRequestHandler):
         print(f"{self.address_string()} - {format % args}")
 
     def _forward_to_asr(self, audio_bytes: bytes) -> dict[str, object]:
+        url = _validate_http_url(f"{self.echobot_base_url.rstrip('/')}/api/web/asr")
         http_request = request.Request(
-            f"{self.echobot_base_url.rstrip('/')}/api/web/asr",
+            url,
             data=audio_bytes,
             headers={"Content-Type": "audio/wav"},
             method="POST",
         )
         try:
-            with request.urlopen(http_request, timeout=45) as response:
+            with request.urlopen(http_request, timeout=45) as response:  # nosec B310  # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
                 payload = response.read().decode("utf-8")
         except error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")
@@ -244,6 +245,13 @@ class MicSmokeHandler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(body)
+
+
+def _validate_http_url(url: str) -> str:
+    parsed = parse.urlparse(str(url or "").strip())
+    if parsed.scheme.lower() not in {"http", "https"} or not parsed.netloc:
+        raise ValueError("smoke-test URL must be an absolute HTTP(S) URL")
+    return parsed.geturl()
 
 
 def main() -> None:

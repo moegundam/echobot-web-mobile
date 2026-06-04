@@ -47,6 +47,7 @@ class KokoroTTSProvider(TTSProvider):
         default_voice: str = "zf_001",
         model_url: str = DEFAULT_KOKORO_URL,
         download_timeout_seconds: float = 600.0,
+        allow_private_download: bool = False,
         length_scale: float = 1.0,
         lang: str = "",
     ) -> None:
@@ -58,6 +59,7 @@ class KokoroTTSProvider(TTSProvider):
             model_root_dir=model_root_dir,
             model_url=model_url,
             timeout_seconds=download_timeout_seconds,
+            allow_private_download=allow_private_download,
         )
         self._status_lock = asyncio.Lock()
         self._prepare_task: asyncio.Task[None] | None = None

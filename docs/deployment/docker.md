@@ -79,6 +79,28 @@ LLM_MODEL=your-local-model
 LLM_API_KEY=your-local-provider-key
 ```
 
+### Runtime 模式與 GPU/CUDA 策略
+
+目前 Docker image 是 `app-only` runtime：它負責 EchoBot Web、Stage、Messenger、Console、Admin、session 與 gateway，不把 LLM 權重或 CUDA runtime 包進 image。
+
+建議模式：
+
+| Mode | 用途 | 設定方式 |
+|---|---|---|
+| `app-only` | 最輕量、最容易維護的預設容器 | EchoBot container 只跑 app；LLM/ASR/TTS 走預設或外部 provider |
+| `external-provider-only` | GB10 / GPU 主機 / Open WebUI / LiteLLM / Ollama / vLLM | 將 `LLM_BASE_URL`、`ECHOBOT_TTS_OPENAI_BASE_URL`、`ECHOBOT_ASR_OPENAI_BASE_URL` 指到外部 OpenAI-compatible endpoint |
+| `local-onnx-cpu` | 小規模本機語音測試 | 使用 `sherpa-sense-voice`、`silero`、`kokoro`，預設 provider 仍是 `cpu` |
+
+若要做 NVIDIA CUDA 最佳化，請把 GPU inference 放在獨立服務或外部主機上，再讓 EchoBot 透過 OpenAI-compatible API 呼叫。對 DGX Spark / GB10 類環境，優先使用官方支援的 ARM64 / NVIDIA Container Runtime / NGC 或對應 provider stack；不要把目前這個 EchoBot web container 改成混合 CUDA image，否則 image 會變大、維護面會變複雜，且前台/中台/後台 runtime 會跟模型服務耦合。
+
+私有模型下載鏡像站預設被封鎖，避免 SSRF 或誤打內網端點。只有在你明確管理該 artifact host 時才開：
+
+```text
+ECHOBOT_TTS_KOKORO_ALLOW_PRIVATE_DOWNLOAD=true
+ECHOBOT_ASR_SHERPA_ALLOW_PRIVATE_DOWNLOAD=true
+ECHOBOT_VAD_SILERO_ALLOW_PRIVATE_DOWNLOAD=true
+```
+
 ### 安全預設
 
 Compose 預設包含：
@@ -199,6 +221,28 @@ LiteLLM, Ollama, or vLLM can be used through an OpenAI-compatible endpoint:
 LLM_BASE_URL=http://host.docker.internal:4000/v1
 LLM_MODEL=your-local-model
 LLM_API_KEY=your-local-provider-key
+```
+
+### Runtime Modes And GPU/CUDA Strategy
+
+The current Docker image is an `app-only` runtime. It runs EchoBot Web, Stage, Messenger, Console, Admin, sessions, and gateways. It does not bundle LLM weights or a CUDA runtime into the image.
+
+Recommended modes:
+
+| Mode | Purpose | Configuration |
+|---|---|---|
+| `app-only` | Smallest and easiest-to-maintain default container | EchoBot runs only the app; LLM/ASR/TTS use default or external providers |
+| `external-provider-only` | GB10 / GPU host / Open WebUI / LiteLLM / Ollama / vLLM | Point `LLM_BASE_URL`, `ECHOBOT_TTS_OPENAI_BASE_URL`, and `ECHOBOT_ASR_OPENAI_BASE_URL` at external OpenAI-compatible endpoints |
+| `local-onnx-cpu` | Small local speech testing | Use `sherpa-sense-voice`, `silero`, and `kokoro`; the default execution provider remains `cpu` |
+
+For NVIDIA CUDA optimization, keep GPU inference in a separate service or external host, then call it from EchoBot through an OpenAI-compatible API. On DGX Spark / GB10-style environments, prefer officially supported ARM64 / NVIDIA Container Runtime / NGC or matching provider stacks. Do not turn this EchoBot web container into a mixed CUDA image unless you intentionally accept a larger image, more maintenance, and tighter coupling between the web runtime and model serving.
+
+Private model download mirrors are blocked by default to avoid SSRF and accidental internal-network access. Enable them only for artifact hosts you explicitly control:
+
+```text
+ECHOBOT_TTS_KOKORO_ALLOW_PRIVATE_DOWNLOAD=true
+ECHOBOT_ASR_SHERPA_ALLOW_PRIVATE_DOWNLOAD=true
+ECHOBOT_VAD_SILERO_ALLOW_PRIVATE_DOWNLOAD=true
 ```
 
 ### Security Defaults

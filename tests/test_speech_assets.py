@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import socket
 import tempfile
 import unittest
 from pathlib import Path
@@ -32,6 +33,70 @@ class FakeDownloadResponse:
 
 
 class SpeechAssetsTests(unittest.TestCase):
+    def test_validate_http_url_rejects_private_targets_by_default(self) -> None:
+        blocked_urls = [
+            "http://127.0.0.1:8000/model.bin",
+            "http://169.254.169.254/latest/meta-data/",
+            "http://localhost:8000/model.bin",
+            "http://metadata.google.internal/computeMetadata/v1/",
+            "http://printer.local/model.bin",
+            "http://intranet/model.bin",
+        ]
+
+        for url in blocked_urls:
+            with self.subTest(url=url):
+                with self.assertRaises(ValueError):
+                    speech_assets.validate_http_url(url)
+
+    def test_validate_http_url_rejects_dns_names_that_resolve_private(self) -> None:
+        private_result = [
+            (
+                socket.AF_INET,
+                socket.SOCK_STREAM,
+                6,
+                "",
+                ("127.0.0.1", 80),
+            )
+        ]
+
+        with patch("echobot.speech_assets.socket.getaddrinfo", return_value=private_result):
+            with self.assertRaises(ValueError):
+                speech_assets.validate_http_url("https://public-name.example/model.bin")
+
+    def test_validate_http_url_rejects_unresolvable_dns_names(self) -> None:
+        with patch(
+            "echobot.speech_assets.socket.getaddrinfo",
+            side_effect=socket.gaierror,
+        ):
+            with self.assertRaises(ValueError):
+                speech_assets.validate_http_url("https://missing-name.example/model.bin")
+
+    def test_validate_http_url_allows_dns_names_that_resolve_public(self) -> None:
+        public_result = [
+            (
+                socket.AF_INET,
+                socket.SOCK_STREAM,
+                6,
+                "",
+                ("93.184.216.34", 443),
+            )
+        ]
+
+        with patch("echobot.speech_assets.socket.getaddrinfo", return_value=public_result):
+            self.assertEqual(
+                "https://example.com/model.bin",
+                speech_assets.validate_http_url("https://example.com/model.bin"),
+            )
+
+    def test_validate_http_url_allows_private_targets_when_explicit(self) -> None:
+        self.assertEqual(
+            "http://127.0.0.1:8000/v1",
+            speech_assets.validate_http_url(
+                "http://127.0.0.1:8000/v1",
+                allow_private=True,
+            ),
+        )
+
     def test_download_file_prints_progress_with_known_size(self) -> None:
         response = FakeDownloadResponse(
             [b"ab", b"cdef", b""],
@@ -43,13 +108,14 @@ class SpeechAssetsTests(unittest.TestCase):
             stderr = io.StringIO()
 
             with patch("echobot.speech_assets.urlopen", return_value=response):
-                with patch("sys.stderr", stderr):
-                    speech_assets.download_file(
-                        "https://example.com/model.bin",
-                        destination,
-                        timeout_seconds=1.0,
-                        progress_label="Test model",
-                    )
+                with patch("echobot.speech_assets._hostname_resolves_to_private_address", return_value=False):
+                    with patch("sys.stderr", stderr):
+                        speech_assets.download_file(
+                            "https://example.com/model.bin",
+                            destination,
+                            timeout_seconds=1.0,
+                            progress_label="Test model",
+                        )
 
             output = stderr.getvalue()
             downloaded_bytes = destination.read_bytes()
@@ -67,14 +133,15 @@ class SpeechAssetsTests(unittest.TestCase):
             stderr = io.StringIO()
 
             with patch("echobot.speech_assets.urlopen", return_value=response):
-                with patch("echobot.speech_assets._DOWNLOAD_PROGRESS_UPDATE_INTERVAL_SECONDS", 0.0):
-                    with patch("sys.stderr", stderr):
-                        speech_assets.download_file(
-                            "https://example.com/model.bin",
-                            destination,
-                            timeout_seconds=1.0,
-                            progress_label="Unknown model",
-                        )
+                with patch("echobot.speech_assets._hostname_resolves_to_private_address", return_value=False):
+                    with patch("echobot.speech_assets._DOWNLOAD_PROGRESS_UPDATE_INTERVAL_SECONDS", 0.0):
+                        with patch("sys.stderr", stderr):
+                            speech_assets.download_file(
+                                "https://example.com/model.bin",
+                                destination,
+                                timeout_seconds=1.0,
+                                progress_label="Unknown model",
+                            )
 
             output = stderr.getvalue()
             downloaded_bytes = destination.read_bytes()

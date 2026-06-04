@@ -266,6 +266,10 @@ LLM_BASE_URL=https://your-provider.example/v1
 
 本地模型、遠端私有模型服務與 API key 請在自己的 `.env` 或 secret manager 中設定，不要把實際主機、tailnet IP、模型清單或 key 放進公開 repo。
 
+### 模型與 CUDA 部署策略
+
+EchoBot 的 Docker image 預設是輕量 app runtime，不打包 LLM 權重或 CUDA runtime。若要用 GB10、LiteLLM、Ollama、vLLM 或其他 GPU provider，建議讓那些服務獨立執行，再用 OpenAI-compatible endpoint 接到 EchoBot；EchoBot 專注管理 session、角色、Stage、Messenger、Console、Admin 與 channel gateway。
+
 ### 3. 啟動本機服務
 
 ```shell

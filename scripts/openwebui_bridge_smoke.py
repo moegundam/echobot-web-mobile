@@ -145,11 +145,13 @@ def _read_token(raw_token: str = "", token_file: str = "") -> str:
 
 
 def _get_json(url: str, *, token: str = ""):
+    url = _validate_http_url(url)
     http_request = request.Request(url, headers=_headers(token), method="GET")
     return _read_json(http_request)
 
 
 def _post_json(url: str, payload: dict[str, object], *, token: str):
+    url = _validate_http_url(url)
     http_request = request.Request(
         url,
         data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
@@ -161,11 +163,18 @@ def _post_json(url: str, payload: dict[str, object], *, token: str):
 
 def _read_json(http_request: request.Request):
     try:
-        with request.urlopen(http_request, timeout=20.0) as response:
+        with request.urlopen(http_request, timeout=20.0) as response:  # nosec B310  # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
             return json.loads(response.read().decode("utf-8"))
     except error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
         raise RuntimeError(f"HTTP {exc.code}: {detail}") from exc
+
+
+def _validate_http_url(url: str) -> str:
+    parsed = parse.urlparse(str(url or "").strip())
+    if parsed.scheme.lower() not in {"http", "https"} or not parsed.netloc:
+        raise ValueError("smoke-test URL must be an absolute HTTP(S) URL")
+    return parsed.geturl()
 
 
 def _summary(label: str, payload) -> str:

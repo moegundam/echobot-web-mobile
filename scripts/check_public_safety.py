@@ -18,6 +18,7 @@ FORBIDDEN_TRACKED_PATHS = {
 
 FORBIDDEN_TRACKED_PREFIXES = (
     ".echobot/",
+    ".uv-cache/",
 )
 
 SCANNED_SECRET_PATTERNS = {
@@ -31,6 +32,7 @@ SCAN_EXCLUDED_PREFIXES = (
     ".git/",
     ".github/",
     ".venv/",
+    ".uv-cache/",
     "venv/",
     "node_modules/",
     "echobot/app/web/vendor/",

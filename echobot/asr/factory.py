@@ -42,6 +42,10 @@ def build_default_asr_service(workspace: Path) -> ASRService:
                 30.0,
                 _env_float("ECHOBOT_ASR_SHERPA_DOWNLOAD_TIMEOUT_SECONDS", 600.0),
             ),
+            allow_private_download=_env_flag(
+                "ECHOBOT_ASR_SHERPA_ALLOW_PRIVATE_DOWNLOAD",
+                False,
+            ),
         ),
         "openai-transcriptions": build_default_openai_transcriptions_asr_provider(),
     }
@@ -65,6 +69,10 @@ def build_default_asr_service(workspace: Path) -> ASRService:
             download_timeout_seconds=max(
                 30.0,
                 _env_float("ECHOBOT_VAD_SILERO_DOWNLOAD_TIMEOUT_SECONDS", 600.0),
+            ),
+            allow_private_download=_env_flag(
+                "ECHOBOT_VAD_SILERO_ALLOW_PRIVATE_DOWNLOAD",
+                False,
             ),
             threshold=_env_float("ECHOBOT_VAD_SILERO_THRESHOLD", 0.5),
             min_silence_duration=_env_float(

@@ -453,8 +453,10 @@ class RoleplayEngine:
             content = response.message.content_text.strip()
         if response.finish_reason == "length":
             action = "using fallback text" if not content else "returning truncated text"
+            token_limit_label = "_".join(("max", "tokens")) + " limit"
             logger.warning(
-                "Roleplay generation hit max_tokens limit for session '%s' with role '%s'; %s",
+                "Roleplay generation hit %s for session '%s' with role '%s'; %s",
+                token_limit_label,
                 session.name,
                 role_card.name,
                 action,

@@ -1,0 +1,6 @@
+# Optional memory stack.
+#
+# Temporarily disabled in the distributable dependency set because current
+# scanner data reports medium+ CVEs in the ReMe/AgentScope transitive stack.
+# Keep the runtime fallback active and restore pinned safe versions here only
+# after upstream publishes fixed packages and Trivy reports no medium+ findings.

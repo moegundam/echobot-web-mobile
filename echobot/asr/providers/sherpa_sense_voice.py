@@ -15,6 +15,7 @@ from ...speech_assets import (
     file_name_from_url,
     relative_to_root,
     replace_directory,
+    safe_extract_tar,
     write_download_metadata,
 )
 from ..models import ProviderStatusSnapshot, TranscriptionResult
@@ -45,6 +46,7 @@ class SenseVoiceModelPaths:
 class SenseVoiceDownloadSettings:
     model_url: str
     timeout_seconds: float
+    allow_private_download: bool
 
 
 class SenseVoiceModelManager:
@@ -55,6 +57,7 @@ class SenseVoiceModelManager:
         model_root_dir: Path | None = None,
         model_url: str = DEFAULT_SENSE_VOICE_MODEL_URL,
         timeout_seconds: float = 600.0,
+        allow_private_download: bool = False,
     ) -> None:
         root_dir = model_root_dir or (
             workspace / ".echobot" / "models" / "asr" / "sherpa-sense-voice"
@@ -67,6 +70,7 @@ class SenseVoiceModelManager:
         self._settings = SenseVoiceDownloadSettings(
             model_url=model_url,
             timeout_seconds=timeout_seconds,
+            allow_private_download=allow_private_download,
         )
 
     @property
@@ -97,7 +101,10 @@ class SenseVoiceModelManager:
     def _install_model(self) -> None:
         with tempfile.TemporaryDirectory(prefix="echobot_sense_voice_") as temp_dir:
             temp_root = Path(temp_dir)
-            archive_name = file_name_from_url(self._settings.model_url)
+            archive_name = file_name_from_url(
+                self._settings.model_url,
+                allow_private=self._settings.allow_private_download,
+            )
             archive_path = temp_root / archive_name
             extract_dir = temp_root / "extract"
             extract_dir.mkdir(parents=True, exist_ok=True)
@@ -106,10 +113,11 @@ class SenseVoiceModelManager:
                 self._settings.model_url,
                 archive_path,
                 timeout_seconds=self._settings.timeout_seconds,
+                allow_private=self._settings.allow_private_download,
                 progress_label="SenseVoice ASR model",
             )
             with tarfile.open(archive_path, "r:*") as archive:
-                archive.extractall(extract_dir)
+                safe_extract_tar(archive, extract_dir)
 
             source_dir = self._find_directory_with_model_files(extract_dir)
             temp_install_dir = self._paths.root_dir.with_name(f"{self._paths.root_dir.name}.tmp")
@@ -164,6 +172,7 @@ class SherpaSenseVoiceASRProvider(ASRProvider):
         use_itn: bool = False,
         model_url: str = DEFAULT_SENSE_VOICE_MODEL_URL,
         download_timeout_seconds: float = 600.0,
+        allow_private_download: bool = False,
     ) -> None:
         self._sample_rate = sample_rate
         self._auto_download = auto_download
@@ -176,6 +185,7 @@ class SherpaSenseVoiceASRProvider(ASRProvider):
             model_root_dir=model_root_dir,
             model_url=model_url,
             timeout_seconds=download_timeout_seconds,
+            allow_private_download=allow_private_download,
         )
         self._status_lock = asyncio.Lock()
         self._runtime_lock = threading.Lock()
