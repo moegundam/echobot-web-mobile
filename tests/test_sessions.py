@@ -9,6 +9,88 @@ from echobot.runtime.sessions import normalize_session_name
 
 
 class SessionStoreTests(unittest.TestCase):
+    def test_compare_and_set_current_session_preserves_newer_pointer(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            session_store = SessionStore(Path(temp_dir) / "sessions")
+            for name in ("anchor", "operation", "newer"):
+                session_store.create_session(name)
+
+            session_store.set_current_session("operation")
+            self.assertTrue(
+                session_store.compare_and_set_current_session("operation", "anchor"),
+            )
+            self.assertEqual("anchor", session_store.get_current_session_name())
+
+            session_store.set_current_session("newer")
+            self.assertFalse(
+                session_store.compare_and_set_current_session("operation", "anchor"),
+            )
+            self.assertEqual("newer", session_store.get_current_session_name())
+
+            self.assertTrue(
+                session_store.compare_and_set_current_session("newer", None),
+            )
+            self.assertIsNone(session_store.get_current_session_name())
+
+    def test_pointer_revision_rejects_same_name_aba(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            session_store = SessionStore(Path(temp_dir) / "sessions")
+            session_store.create_session("anchor")
+            session_store.create_session("target")
+            session_store.set_current_session("target")
+            pointer_name, pointer_revision = (
+                session_store.get_current_session_pointer()
+            )
+
+            session_store.set_current_session("target")
+
+            self.assertFalse(
+                session_store.compare_and_set_current_session(
+                    pointer_name,
+                    "anchor",
+                    expected_revision=pointer_revision,
+                ),
+            )
+            self.assertEqual("target", session_store.get_current_session_name())
+
+    def test_repair_current_session_after_deletion_is_atomic(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            session_store = SessionStore(Path(temp_dir) / "sessions")
+            session_store.create_session("anchor")
+            session_store.create_session("deleted")
+            session_store.set_current_session("deleted")
+            session_store.delete_session("deleted")
+
+            replacement = session_store.repair_current_session_after_deletion(
+                "deleted",
+            )
+            self.assertIsNotNone(replacement)
+            self.assertEqual("anchor", replacement.name)
+            self.assertEqual("anchor", session_store.get_current_session_name())
+
+            session_store.create_session("later-deleted")
+            session_store.create_session("newer")
+            session_store.set_current_session("later-deleted")
+            session_store.delete_session("later-deleted")
+            session_store.set_current_session("newer")
+
+            self.assertIsNone(
+                session_store.repair_current_session_after_deletion("later-deleted"),
+            )
+            self.assertEqual("newer", session_store.get_current_session_name())
+
+    def test_repair_current_session_after_last_deletion_creates_default(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            session_store = SessionStore(Path(temp_dir) / "sessions")
+            session_store.create_session("last")
+            session_store.delete_session("last")
+
+            replacement = session_store.repair_current_session_after_deletion("last")
+
+            self.assertIsNotNone(replacement)
+            self.assertEqual("default", replacement.name)
+            self.assertEqual("default", session_store.get_current_session_name())
+
     def test_load_current_session_creates_default_session(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             session_store = SessionStore(Path(temp_dir) / "sessions")

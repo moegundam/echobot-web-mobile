@@ -36,12 +36,13 @@ class DiscordChannel(BaseChannel):
         self._client: "DiscordClient | None" = None
 
     async def start(self) -> None:
+        self._running = False
         bot_token = str(getattr(self.config, "bot_token", "") or "").strip()
         if not bot_token:
             logger.info(
                 "Discord bot token is not configured; webhook-only Discord mode is available.",
             )
-            self._running = False
+            self._running = True
             return
         if not DISCORD_AVAILABLE:
             logger.error(
@@ -62,13 +63,13 @@ class DiscordChannel(BaseChannel):
 
         @client.event
         async def on_ready() -> None:
+            self._running = True
             logger.info("Discord channel started as %s", getattr(client.user, "id", "unknown"))
 
         @client.event
         async def on_message(message: Any) -> None:
             await self._on_message(message)
 
-        self._running = True
         try:
             await client.start(bot_token)
         finally:

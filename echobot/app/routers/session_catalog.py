@@ -72,13 +72,14 @@ async def update_llm_model(
 ) -> LLMModelAdminModel:
     _ensure_runtime_model_services_ready(runtime)
     try:
-        payload = await asyncio.to_thread(
-            runtime.llm_model_service.update_model,
-            model_id,
-            request.model_dump(exclude_unset=True),
-        )
-        if model_id == await _active_llm_model_id(runtime):
-            await _apply_runtime_profile(runtime)
+        async with _model_profile_lock(runtime):
+            payload = await asyncio.to_thread(
+                runtime.llm_model_service.update_model,
+                model_id,
+                request.model_dump(exclude_unset=True),
+            )
+            if model_id == await _active_llm_model_id(runtime):
+                await _apply_runtime_profile(runtime)
     except ValueError as exc:
         raise _runtime_profile_http_exception(exc) from exc
     return LLMModelAdminModel(**payload)
@@ -92,8 +93,12 @@ async def activate_llm_model(
 ) -> LLMModelsResponse:
     _ensure_runtime_model_services_ready(runtime)
     try:
-        payload = await asyncio.to_thread(runtime.llm_model_service.activate_model, model_id)
-        await _apply_runtime_profile(runtime)
+        async with _model_profile_lock(runtime):
+            payload = await asyncio.to_thread(
+                runtime.llm_model_service.activate_model,
+                model_id,
+            )
+            await _apply_runtime_profile(runtime)
     except ValueError as exc:
         raise _runtime_profile_http_exception(exc) from exc
     return LLMModelsResponse(**payload)
@@ -152,13 +157,14 @@ async def update_voice_model(
 ) -> VoiceProfileAdminModel:
     _ensure_runtime_model_services_ready(runtime)
     try:
-        payload = await asyncio.to_thread(
-            runtime.voice_model_service.update_profile,
-            profile_id,
-            request.model_dump(exclude_unset=True),
-        )
-        if profile_id == await _active_voice_profile_id(runtime):
-            await _apply_runtime_profile(runtime)
+        async with _model_profile_lock(runtime):
+            payload = await asyncio.to_thread(
+                runtime.voice_model_service.update_profile,
+                profile_id,
+                request.model_dump(exclude_unset=True),
+            )
+            if profile_id == await _active_voice_profile_id(runtime):
+                await _apply_runtime_profile(runtime)
     except ValueError as exc:
         raise _runtime_profile_http_exception(exc) from exc
     return VoiceProfileAdminModel(**payload)
@@ -172,8 +178,12 @@ async def activate_voice_model(
 ) -> VoiceProfilesResponse:
     _ensure_runtime_model_services_ready(runtime)
     try:
-        payload = await asyncio.to_thread(runtime.voice_model_service.activate_profile, profile_id)
-        await _apply_runtime_profile(runtime)
+        async with _model_profile_lock(runtime):
+            payload = await asyncio.to_thread(
+                runtime.voice_model_service.activate_profile,
+                profile_id,
+            )
+            await _apply_runtime_profile(runtime)
     except ValueError as exc:
         raise _runtime_profile_http_exception(exc) from exc
     return VoiceProfilesResponse(**payload)
@@ -232,14 +242,15 @@ async def update_live2d_model(
     _ensure_runtime_model_services_ready(runtime)
     catalog = await _live2d_catalog(runtime)
     try:
-        payload = await asyncio.to_thread(
-            runtime.live2d_model_service.update_model,
-            model_id,
-            request.model_dump(exclude_unset=True),
-            catalog=catalog,
-        )
-        if model_id == await _active_live2d_model_id(runtime):
-            await _apply_runtime_profile(runtime)
+        async with _model_profile_lock(runtime):
+            payload = await asyncio.to_thread(
+                runtime.live2d_model_service.update_model,
+                model_id,
+                request.model_dump(exclude_unset=True),
+                catalog=catalog,
+            )
+            if model_id == await _active_live2d_model_id(runtime):
+                await _apply_runtime_profile(runtime)
     except ValueError as exc:
         raise _runtime_profile_http_exception(exc) from exc
     return Live2DModelAdminModel(**payload)
@@ -254,12 +265,13 @@ async def activate_live2d_model(
     _ensure_runtime_model_services_ready(runtime)
     catalog = await _live2d_catalog(runtime)
     try:
-        payload = await asyncio.to_thread(
-            runtime.live2d_model_service.activate_model,
-            model_id,
-            catalog,
-        )
-        await _apply_runtime_profile(runtime)
+        async with _model_profile_lock(runtime):
+            payload = await asyncio.to_thread(
+                runtime.live2d_model_service.activate_model,
+                model_id,
+                catalog,
+            )
+            await _apply_runtime_profile(runtime)
     except ValueError as exc:
         raise _runtime_profile_http_exception(exc) from exc
     return Live2DModelsResponse(**payload)
@@ -403,6 +415,13 @@ def _ensure_runtime_model_services_ready(runtime) -> None:
         raise HTTPException(status_code=503, detail="Voice model service is not ready")
     if runtime.live2d_model_service is None:
         raise HTTPException(status_code=503, detail="Live2D model service is not ready")
+
+
+def _model_profile_lock(runtime):
+    lock = getattr(runtime, "model_profile_lock", None)
+    if lock is None:
+        raise HTTPException(status_code=503, detail="Model profile lock is not ready")
+    return lock
 
 
 async def _active_llm_model_id(runtime) -> str:

@@ -39,7 +39,7 @@
 | # | 類型 | 已處理方向 |
 |---:|---|---|
 | 1 | 公開資訊外洩 | `/api/health` 不再輸出本機絕對路徑，README 避免放私有主機或 token |
-| 2 | Secret 顯示 | API key、bot token、bridge token、webhook secret 僅顯示 configured 狀態，不回傳明文 |
+| 2 | Secret 顯示與儲存 | API key、bot token、bridge token、webhook secret 僅顯示 configured 狀態；channel credentials 不再寫入 `channels.json` |
 | 3 | 中台/後台責任混亂 | 後台負責持久設定；中台負責測試與臨時 runtime override，並可套用到前台 |
 | 4 | 模型設定混在一起 | `/admin/models` 限縮為 LLM；Voice 與 Live2D 拆到專頁 |
 | 5 | 硬編碼語言 | 主要按鈕、placeholder、狀態、動態文案納入 i18n |
@@ -149,7 +149,8 @@ python -m echobot app --host 127.0.0.1 --port 8001
 
 - `GET /api/stage/events?session_name=<name>`：SSE 訂閱 Stage event。
 - `POST /api/stage/events`：發布字幕與舞台事件。
-- Broker v1 為 in-memory，key 包含 trusted user 與 session。
+- 目前 app runtime 預設使用 bounded in-memory broker，key 包含 trusted user 與 session，並支援 `Last-Event-ID` cursor replay。
+- 已提供 Redis Streams adapter foundation：每個 user/session 使用獨立雜湊 key、各自保留上限與 TTL；尚未接成預設 runtime，也尚未完成真 Redis 跨 process 驗收。
 - Stage 收到 `assistant_delta` 更新字幕，收到 `assistant_final` 才做最終字幕/TTS。
 - Stage event 可攜帶 `emotion`、`expression`、`motion`；`character_state` 可只更新 Live2D 表情/動作而不改字幕。
 - `/admin/characters` 可為每個角色維護 emotion map；當事件只有 `emotion` 且目前 session 有綁定角色時，後端會自動補上對應的 Live2D `expression` / `motion`。
@@ -168,7 +169,7 @@ python -m echobot app --host 127.0.0.1 --port 8001
 - Bridge 使用 server-to-server Bearer token。
 - 不暴露全站 `/openapi.json` 給 Open WebUI。
 - 預設要求 `target_user_id` 或 `ECHOBOT_OPENWEBUI_BRIDGE_USER_ID`，避免寫入 shared root runtime。
-- 可用 `ECHOBOT_OPENWEBUI_ALLOWED_TARGET_USERS` 限制 bridge 可操作的 user namespace。
+- 必須用 `ECHOBOT_OPENWEBUI_ALLOWED_TARGET_USERS` 明確列出 bridge 可操作的 user namespace；空白 allowlist 會 fail closed 並拒絕所有具名 target。
 - 預設 `chat_only`。
 - operator-agent mode 必須明確啟用才允許更高風險路由。
 
@@ -197,13 +198,14 @@ python -m echobot app --host 127.0.0.1 --port 8001
 
 - Telegram 可設定 enabled、allow list、bot token、proxy、reply-to-message 與啟動時是否丟棄 pending updates。
 - Discord 可設定 enabled、allow list、bot token、webhook URL、webhook secret、application/guild/channel id；目前支援受 secret 保護的 `POST /api/channels/discord/webhook` inbound bridge、outbound webhook 發送，以及安裝 `discord.py` 並開啟 Message Content Intent 後的原生 Discord bot events。
-- Secret 欄位在 API 與 UI 中只顯示 configured 狀態，不回傳明文。
+- Secret 欄位在 API 與 UI 中只顯示 configured 狀態，不回傳明文。Telegram、Discord、QQ credentials 儲存在 repo 外的 `.echobot/channel_secrets.json`（`0600`）；舊 `channels.json` inline secret 會在下一次儲存時遷移。
+- 儲存 enabled channel 時會先等待 adapter 回報 ready；啟用失敗回傳去敏感的 `409`，不覆寫磁碟設定，並恢復原本仍可用的 runtime。
 - `POST /api/channels/{channel}/smoke` 提供安全的本機 readiness check，不會把 token 回傳到 response。
 - `scripts/telegram_gateway_smoke.py` 與 `scripts/discord_gateway_smoke.py` 可重跑 gateway 檢查；一般文字會驗證 session history，`/ping` / `/smoke` deterministic command 會改驗證 Stage replay，因為這類 command 不寫入一般對話 history。
 - `GET /api/channels/stage-targets` 提供無 secret 的通訊 target 清單，讓 `/stage` 與 `/messenger` 直接選擇已設定平台綁定的前台 session。
 - Telegram Bot API `getMe`、poller 啟動、Bot API outbound、session 綁定與 Stage target projection 已有可重跑 smoke path；實際 bot token 必須放在 repo 外的 ignored runtime config。
-- 正式通訊 gateway 可設定 `mirror_to_stage` 與 `stage_session_name`；維護者環境已用 Telegram `/ping TG_OK` 驗證 inbound 回覆與 `/stage` 同步。
-- Discord webhook bridge 可接收受 secret 保護的本機/反向代理 inbound request；原生 Discord bot events adapter 已完成，且維護者環境已用 Discord `/ping DISCORD_OK` 驗證 gateway 回覆與 `/stage` 同步。正式環境仍需 repo 外 bot token、Discord Developer Portal Message Content Intent，並重啟 EchoBot。
+- 正式通訊 gateway 可設定 `mirror_to_stage` 與 `stage_session_name`；Telegram 曾有維護者環境 inbound/Stage 歷史 smoke，但每次部署仍需重新執行外部 E2E 才能宣稱通過。
+- Discord webhook bridge 可接收受 secret 保護的 inbound request，原生 Discord bot events adapter 也已完成；Discord 曾有維護者環境歷史 smoke，但正式環境仍需 repo 外 bot token、Message Content Intent 與本次部署的 fresh E2E。
 - 通訊 gateway 內建 `/ping <text>` / `/smoke <text>` deterministic smoke command，避免平台 E2E 測試依賴 LLM 是否剛好遵守「精確回覆」提示。
 
 ### 11. 部署與架構文件
@@ -224,14 +226,16 @@ python -m echobot app --host 127.0.0.1 --port 8001
 - 英文、繁體中文、簡體中文語言切換已套用到靜態頁面與主要動態 UI。
 - 手機/平板/桌面顯示模式已加入，並驗證 360x800、390x844、430x932、768x1024 viewport 不應水平溢出。
 - Cloudflare Local Tunnel、trusted-user、Stage Event Broker、Open WebUI bridge API、LLM / Voice / Live2D profiles、Character Packages 與 Channels 設定/smoke 的第一版接口與文件已建立。
-- Telegram / Discord 維護者環境 E2E、Voice TTS/ASR smoke、Open WebUI bridge 本機與遠端 Open WebUI host reverse tunnel smoke 已完成。
+- Telegram / Discord 有歷史維護者 smoke，Voice TTS/ASR 與 Open WebUI bridge 有本機/歷史整合證據；這些不等於目前部署的 fresh external acceptance。
 - Console/Admin UX 已補強：route mode 不再顯示 raw enum、Messenger 讀取場次 route mode、Stage/Messenger 補跨頁導覽、Open WebUI/Channels 顯示可重跑入口與平台實測狀態。
 - 公開前安全預設已調整為 `ECHOBOT_SHELL_SAFETY_MODE=workspace-write`。
+- Compose 已使用 loopback Nginx ingress，app port 只在容器網路內可見；ingress 先執行 request-size、rate 與 stream connection 限制，並以 Docker DNS 動態重解析 app 位址與 HTTP live healthcheck 驗證實際服務。
+- Runtime/dev dependencies 使用 hash-enforced lock；CI 對 Python dependencies、EchoBot app image 與 Nginx ingress image 分別保存 SBOM/Trivy evidence，並為 app image 產生 provenance/attestation。是否完成發布仍以當次 GitHub Actions 為準。
 
 尚未完成或仍屬規劃中的部分：
 
 - LINE、WhatsApp 正式 runtime adapter 仍屬規劃中；QQ adapter 已保留 built-in 入口但尚未做真實平台長跑驗證。
-- Open WebUI bridge 已有 EchoBot 端 narrow API、說明頁、本機 smoke script，並已從遠端 Open WebUI host 透過 SSH reverse tunnel 驗證 tool spec、stage event 與 chat。新增 `scripts/echobot_entrypoint.py` 可把本機 app 與 reverse tunnel 交給 macOS launchd 管理並重跑 smoke；Cloudflare Tunnel / Access 仍是正式 HTTPS 入口。
+- Open WebUI bridge 已有 EchoBot 端 narrow API、說明頁與本機 smoke script；過往維護環境有 reverse-tunnel 驗證紀錄，但每個新部署仍必須重跑 tool spec、Stage、chat 與權限 E2E。Cloudflare Tunnel / Access 仍是正式 HTTPS 入口。
 - `/admin` 第一版偏向索引、說明與狀態檢視，還不是完整 production SaaS 管理後台。
 - Stage / Live2D / ASR / TTS 已有 v1 整合與本機 smoke；真機麥克風與長時間語音互動仍需在 HTTPS + 真機環境逐項驗收。
 - 多使用者內測建議使用 Cloudflare Access 或可信 reverse proxy；不要把本地服務匿名直接暴露到公開網路。
@@ -284,22 +288,24 @@ python -m echobot app --host 127.0.0.1 --port 8001
 
 ### Docker / Compose 啟動
 
-本版本也提供單 container 的升級版打包：
+本版本提供 `Nginx ingress + EchoBot app` 的 Compose 打包。請在指定 Docker host（本維護流程使用外部 Mac mini Docker server）執行；一般工作站不需要啟動 Docker daemon：
 
 ```shell
 cp docker.env.example docker.env.local
 docker compose build
 docker compose up -d
-curl -fsS http://127.0.0.1:8000/api/health
+curl -fsS http://127.0.0.1:8080/healthz
 ```
 
-GitHub Container Registry image：
+App container 的 `8000` 只在 Compose network 內可見；瀏覽器、Cloudflare Tunnel 與 health smoke 都走 loopback ingress `127.0.0.1:8080`。
+
+正式部署應使用 GitHub Container Registry 的 digest-qualified image：
 
 ```text
-ghcr.io/moegundam/echobot-web-mobile:upgrade
+ghcr.io/moegundam/echobot-web-mobile@sha256:<digest>
 ```
 
-詳細說明請見 [`docs/deployment/docker.md`](./docs/deployment/docker.md)。
+詳細說明請見 [`docs/deployment/docker.md`](./docs/deployment/docker.md)、[`docs/security/secret-storage.md`](./docs/security/secret-storage.md) 與 [`docs/architecture/stage-event-broker.md`](./docs/architecture/stage-event-broker.md)。
 
 ### 4. 開啟頁面
 

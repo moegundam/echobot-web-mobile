@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -9,6 +10,9 @@ from ...channels import (
     MessageBus,
     load_channels_config,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 class ChannelRuntimeManager:
@@ -48,14 +52,42 @@ class ChannelRuntimeManager:
             self.bus,
             attachment_store=self.attachment_store,
         )
-        await next_manager.start_all()
-
         previous_manager = self.channel_manager
+        if previous_manager is not None:
+            await previous_manager.stop_all()
+
+        try:
+            await next_manager.start_all()
+        except BaseException:
+            await self._rollback_reload(previous_manager, next_manager)
+            raise
+
         self.channel_manager = next_manager
         self.channels_config = next_config
 
-        if previous_manager is not None:
-            await previous_manager.stop_all()
+    async def _rollback_reload(
+        self,
+        previous_manager: ChannelManager | None,
+        next_manager: ChannelManager,
+    ) -> None:
+        try:
+            await next_manager.stop_all()
+        except BaseException as exc:
+            logger.error(
+                "Failed to clean up a failed channel manager reload (%s)",
+                type(exc).__name__,
+            )
+
+        if previous_manager is None:
+            return
+
+        try:
+            await previous_manager.start_all()
+        except BaseException as exc:
+            logger.error(
+                "Failed to restore the previous channel manager (%s)",
+                type(exc).__name__,
+            )
 
     def status(self) -> dict[str, dict[str, bool]]:
         if self.channel_manager is None:

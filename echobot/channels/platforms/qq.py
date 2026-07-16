@@ -65,6 +65,7 @@ def _make_bot_class(channel: "QQChannel") -> "type[botpy.Client]":
             super().__init__(intents=intents, ext_handlers=False)
 
         async def on_ready(self) -> None:
+            channel._running = True
             logger.info("QQ bot is ready")
 
         async def on_c2c_message_create(self, message: "C2CMessage") -> None:
@@ -84,8 +85,11 @@ class QQChannel(BaseChannel):
         self._client: "botpy.Client | None" = None
         self._processed_ids: deque[str] = deque(maxlen=1000)
         self._message_sequence = 0
+        self._stop_requested = False
 
     async def start(self) -> None:
+        self._running = False
+        self._stop_requested = False
         if not QQ_AVAILABLE:
             logger.error(
                 "QQ channel requires qq-botpy. Install it before enabling qq.",
@@ -95,25 +99,29 @@ class QQChannel(BaseChannel):
             logger.error("QQ channel requires app_id and client_secret")
             return
 
-        self._running = True
         bot_class = _make_bot_class(self)
         self._client = bot_class()
-        logger.info("QQ channel started")
         try:
-            while self._running:
+            while not self._stop_requested:
                 try:
                     await self._client.start(
                         appid=self.config.app_id,
                         secret=self.config.client_secret,
                     )
+                except asyncio.CancelledError:
+                    raise
                 except Exception:
+                    if not self._running:
+                        raise
                     logger.exception("QQ client stopped unexpectedly")
-                if self._running:
+                self._running = False
+                if not self._stop_requested:
                     await asyncio.sleep(5)
         finally:
             await self.stop()
 
     async def stop(self) -> None:
+        self._stop_requested = True
         self._running = False
         if self._client is None:
             return

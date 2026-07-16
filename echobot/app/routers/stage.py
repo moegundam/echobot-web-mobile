@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import asyncio
 from json import JSONDecodeError
+from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import ValidationError
 
@@ -89,12 +90,17 @@ async def publish_stage_event(
 async def subscribe_stage_events(
     session_name: str,
     runtime=Depends(get_app_runtime),
+    last_event_id: Annotated[
+        str | None,
+        Header(alias="Last-Event-ID"),
+    ] = None,
 ) -> StreamingResponse:
     try:
         subscription = await runtime.stage_event_broker.subscribe(
             scope_key=_stage_event_scope_key(runtime),
             session_name=session_name,
             replay_history=True,
+            after_event_id=last_event_id,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

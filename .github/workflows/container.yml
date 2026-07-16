@@ -28,7 +28,9 @@ jobs:
     needs: verify
     runs-on: ubuntu-latest
     permissions:
+      attestations: write
       contents: read
+      id-token: write
       packages: write
 
     steps:
@@ -49,21 +51,88 @@ jobs:
           name: echobot-container-${{ github.sha }}
           path: /tmp/echobot-container
 
-      - name: Load and tag verified image
-        run: |
-          short_sha="${GITHUB_SHA::7}"
-          docker load --input /tmp/echobot-container/echobot-web-mobile-ci.tar.gz
-          docker tag echobot-web-mobile:ci "${IMAGE_NAME}:upgrade"
-          docker tag echobot-web-mobile:ci "${IMAGE_NAME}:sha-${short_sha}"
+      - name: Download verified supply-chain evidence
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: echobot-supply-chain-${{ github.sha }}
+          path: /tmp/echobot-supply-chain
 
-      - name: Push image
+      - name: Load and tag immutable image
+        run: |
+          docker load --input /tmp/echobot-container/echobot-web-mobile-ci.tar.gz
+          docker tag echobot-web-mobile:ci "${IMAGE_NAME}:sha-${GITHUB_SHA}"
+
+      - name: Push immutable image
+        run: |
+          docker push "${IMAGE_NAME}:sha-${GITHUB_SHA}"
+
+      - name: Resolve and verify registry digest
+        id: registry
+        run: |
+          immutable_tag="${IMAGE_NAME}:sha-${GITHUB_SHA}"
+          docker buildx imagetools inspect "${immutable_tag}" > /tmp/echobot-container-inspect.txt
+          digest="$(awk '$1 == "Digest:" {print $2; exit}' /tmp/echobot-container-inspect.txt)"
+          if [[ ! "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            cat /tmp/echobot-container-inspect.txt
+            echo "Registry did not report a valid digest" >&2
+            exit 1
+          fi
+          docker pull "${IMAGE_NAME}@${digest}"
+          if ! docker image inspect "${IMAGE_NAME}@${digest}" >/dev/null; then
+            echo "Digest-qualified pull could not be inspected" >&2
+            exit 1
+          fi
+          echo "digest=${digest}" >> "${GITHUB_OUTPUT}"
+
+      - name: Attest build provenance
+        id: provenance
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373
+        with:
+          subject-name: ${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.registry.outputs.digest }}
+          push-to-registry: true
+
+      - name: Attest image SBOM
+        id: sbom
+        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763
+        with:
+          subject-name: ${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.registry.outputs.digest }}
+          sbom-path: /tmp/echobot-supply-chain/image-sbom.cdx.json
+          push-to-registry: true
+
+      - name: Promote convenience tags
         run: |
           short_sha="${GITHUB_SHA::7}"
-          docker push "${IMAGE_NAME}:upgrade"
+          digest="${{ steps.registry.outputs.digest }}"
+          docker tag "${IMAGE_NAME}@${digest}" "${IMAGE_NAME}:sha-${short_sha}"
+          docker tag "${IMAGE_NAME}@${digest}" "${IMAGE_NAME}:upgrade"
           docker push "${IMAGE_NAME}:sha-${short_sha}"
+          docker push "${IMAGE_NAME}:upgrade"
+
+      - name: Record immutable container evidence
+        run: |
+          digest="${{ steps.registry.outputs.digest }}"
+          {
+            printf 'source_sha=%s\n' "${GITHUB_SHA}"
+            printf 'image=%s\n' "${IMAGE_NAME}"
+            printf 'digest=%s\n' "${digest}"
+            printf 'immutable_ref=%s@%s\n' "${IMAGE_NAME}" "${digest}"
+            printf 'provenance_attestation=%s\n' "${{ steps.provenance.outputs.attestation-url }}"
+            printf 'sbom_attestation=%s\n' "${{ steps.sbom.outputs.attestation-url }}"
+          } > /tmp/container-provenance.txt
+
+      - name: Upload immutable container provenance
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: echobot-container-provenance-${{ github.sha }}
+          path: /tmp/container-provenance.txt
+          if-no-files-found: error
+          retention-days: 90
 
       - name: Publish latest tag on main
         if: github.ref == 'refs/heads/main'
         run: |
-          docker tag "${IMAGE_NAME}:upgrade" "${IMAGE_NAME}:latest"
+          digest="${{ steps.registry.outputs.digest }}"
+          docker tag "${IMAGE_NAME}@${digest}" "${IMAGE_NAME}:latest"
           docker push "${IMAGE_NAME}:latest"

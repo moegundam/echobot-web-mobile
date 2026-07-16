@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from ...session_metadata import ChannelBindingConflictError
 from ..schemas import (
     CreateSessionRequest,
     RenameSessionRequest,
@@ -58,6 +59,8 @@ async def create_session(
             channel_type=request.channel_type,
             channel_integration_id=request.channel_integration_id,
         )
+    except ChannelBindingConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return session_detail_model_from_session(session)
@@ -97,6 +100,8 @@ async def set_session_role(
 ) -> SessionDetailModel:
     try:
         session = await _session_app(runtime).set_role(session_name, request.role_name)
+    except ChannelBindingConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return session_detail_model_from_session(session)
@@ -130,6 +135,8 @@ async def set_session_channel_binding(
             channel_type=request.channel_type,
             channel_integration_id=request.channel_integration_id,
         )
+    except ChannelBindingConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         status_code = 404 if "not found" in str(exc).lower() else 400
         raise HTTPException(status_code=status_code, detail=str(exc)) from exc

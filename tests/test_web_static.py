@@ -801,7 +801,8 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn("buildChannelHints", channels_js)
         self.assertIn("buildLocalTestControls", channels_js)
         self.assertIn("buildVerificationSection", channels_js)
-        self.assertIn("Telegram: real bot E2E verified", channels_js)
+        self.assertIn("Telegram: adapter tests and historical maintainer smoke exist", channels_js)
+        self.assertNotIn("real bot E2E verified", channels_js)
         self.assertIn("LINE / WhatsApp: planning entries only", channels_js)
         self.assertIn('requestJson("/api/sessions").catch(() => [])', channels_js)
         self.assertIn("buildSessionDatalist", channels_js)
@@ -815,6 +816,8 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn('i18n.t("channels.reload")', channels_js)
         self.assertIn('i18n.t("channels.smokeTest")', channels_js)
         self.assertIn("drop_pending_updates", channels_js)
+        self.assertIn('{ name: "webhook_url", kind: "secret" }', channels_js)
+        self.assertIn('name.startsWith("webhook_")', channels_js)
 
         self.assertIn('"channels.saveChanges"', i18n_js)
         self.assertIn('"channels.reload"', i18n_js)

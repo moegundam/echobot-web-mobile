@@ -1,0 +1,70 @@
+services:
+  echobot:
+    image: "ghcr.io/moegundam/echobot-web-mobile@sha256:${ECHOBOT_IMAGE_SHA256:?Set ECHOBOT_IMAGE_SHA256 to the 64-character digest value without the sha256 prefix}"
+    expose:
+      - "8000"
+    env_file:
+      - path: ./docker.env.local
+        required: false
+    environment:
+      ECHOBOT_SHELL_SAFETY_MODE: ${ECHOBOT_SHELL_SAFETY_MODE:-workspace-write}
+      ECHOBOT_DEPLOYMENT_PROFILE: ${ECHOBOT_DEPLOYMENT_PROFILE:-tunnel}
+      ECHOBOT_TRUSTED_USER_HEADER_ENABLED: ${ECHOBOT_TRUSTED_USER_HEADER_ENABLED:-true}
+      ECHOBOT_ADMIN_REQUIRED: ${ECHOBOT_ADMIN_REQUIRED:-true}
+    volumes:
+      - echobot_data:/app/.echobot
+    tmpfs:
+      - /tmp
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=5).read()"
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+  ingress:
+    image: cgr.dev/chainguard/nginx@sha256:28bbae890f8266882e75a83ab6a1472d276d2d014a8eeb63d1d2e6d6093b5ed4
+    user: "65532:65532"
+    depends_on:
+      echobot:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${ECHOBOT_HOST_PORT:-8080}:8080"
+    volumes:
+      - ./deploy/nginx/echobot-container.conf:/etc/nginx/nginx.conf:ro
+    tmpfs:
+      - /var/cache/nginx
+      - /var/run
+      - /tmp
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - /usr/bin/wget
+        - --quiet
+        - --tries=1
+        - --timeout=5
+        - --output-document=/dev/null
+        - http://127.0.0.1:8080/healthz
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+volumes:
+  echobot_data:

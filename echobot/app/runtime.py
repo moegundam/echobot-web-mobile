@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from copy import deepcopy
 from collections.abc import Callable
 from pathlib import Path
 
@@ -13,6 +14,7 @@ from ..channels import (
     MessageBus,
     OutboundMessage,
 )
+from ..concurrency import AsyncReentrantLock
 from ..gateway import (
     DeliveryStore,
     GatewayRuntime,
@@ -83,9 +85,13 @@ class AppRuntime:
         self.channel_service: ChannelService | None = None
         self.stage_event_broker = StageEventBroker()
         self.stage_event_publisher = StageEventPublisher(self.stage_event_broker)
+        self.session_binding_lock = asyncio.Lock()
         self.session_runtime_override_service = SessionRuntimeOverrideService()
         self.web_console_service: WebConsoleService | None = None
         self.runtime_profile_applier: RuntimeProfileApplier | None = None
+        self.last_applied_model_profile: dict[str, object] = {}
+        self.model_profile_lock = AsyncReentrantLock()
+        self.model_profile_revision = 0
         self.tts_service: TTSService | None = None
         self.asr_service: ASRService | None = None
         self.user_runtime_factory = UserRuntimeFactory(
@@ -141,10 +147,7 @@ class AppRuntime:
             runtime_for_user=self.for_user,
             stage_event_publisher=self.publish_gateway_stage_event,
         )
-        self.chat_service = ChatService(
-            self.context.coordinator,
-            self.session_service,
-        )
+        self.chat_service = ChatService(self.context.coordinator)
         self.role_service = RoleService(
             self.context.role_registry,
             self.context.session_store,
@@ -291,9 +294,11 @@ class AppRuntime:
         await self.apply_model_profile(active_runtime_profile(self))
 
     async def apply_model_profile(self, profile: dict[str, object]) -> None:
-        if self.runtime_profile_applier is None:
-            return
-        await self.runtime_profile_applier.apply(profile)
+        async with self.model_profile_lock:
+            if self.runtime_profile_applier is not None:
+                await self.runtime_profile_applier.apply(profile)
+            self.last_applied_model_profile = deepcopy(profile)
+            self.model_profile_revision += 1
 
 
 def _default_context_builder(options: RuntimeOptions) -> RuntimeContext:

@@ -821,6 +821,7 @@ CHANNEL_SECRET_FIELD_NAMES = {
     "password",
     "secret",
     "token",
+    "webhook_url",
     "webhook_secret",
 }
 

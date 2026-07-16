@@ -12,6 +12,9 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  ECHOBOT_INGRESS_IMAGE: cgr.dev/chainguard/nginx@sha256:28bbae890f8266882e75a83ab6a1472d276d2d014a8eeb63d1d2e6d6093b5ed4
+
 jobs:
   test:
     name: Test
@@ -31,7 +34,11 @@ jobs:
           cache-dependency-path: requirements-dev.txt
 
       - name: Install dependencies
-        run: python -m pip install --disable-pip-version-check -r requirements-dev.txt
+        run: >-
+          python -m pip install
+          --disable-pip-version-check
+          --require-hashes
+          -r requirements-dev.txt
 
       - name: Install browser runtime
         run: python -m playwright install --with-deps chromium
@@ -79,11 +86,17 @@ jobs:
         run: python scripts/check_public_safety.py
 
       - name: Audit Python dependencies
-        run: >-
-          python -m pip_audit
-          --requirement requirements.txt
-          --no-deps
-          --disable-pip
+        run: |
+          python -m pip_audit \
+            --requirement requirements.txt \
+            --disable-pip \
+            --require-hashes
+          python -m pip_audit \
+            --requirement requirements.txt \
+            --disable-pip \
+            --require-hashes \
+            --format cyclonedx-json \
+            --output /tmp/python-sbom.cdx.json
 
       - name: Whitespace check
         run: git diff --check
@@ -122,11 +135,71 @@ jobs:
             --viewport 390x844 \
             --viewport 1280x900
 
+      - name: Install Nginx ingress test dependency
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install --yes --no-install-recommends nginx
+
+      - name: Validate and smoke ingress limits
+        run: |
+          mkdir -p /tmp/echobot-nginx-client-body /tmp/echobot-nginx-proxy
+          cleanup() {
+            if [ -f /tmp/echobot-nginx.pid ]; then
+              kill "$(cat /tmp/echobot-nginx.pid)" 2>/dev/null || true
+            fi
+          }
+          trap cleanup EXIT
+
+          nginx -t -c "${GITHUB_WORKSPACE}/deploy/nginx/echobot.conf"
+          nginx -c "${GITHUB_WORKSPACE}/deploy/nginx/echobot.conf"
+          python scripts/ingress_smoke.py \
+            --base-url http://127.0.0.1:8080 \
+            --manage-mock-upstream
+
       - name: Validate Compose config
-        run: docker compose config
+        run: |
+          docker compose config
+          ECHOBOT_IMAGE_SHA256="0000000000000000000000000000000000000000000000000000000000000000" \
+            docker compose -f compose.production.yaml config
+
+      - name: Validate production ingress container config
+        run: |
+          docker run --rm \
+            --entrypoint /usr/sbin/nginx \
+            --add-host echobot:127.0.0.1 \
+            --user 65532:65532 \
+            --read-only \
+            --cap-drop ALL \
+            --security-opt no-new-privileges:true \
+            --tmpfs /var/cache/nginx \
+            --tmpfs /var/run \
+            --tmpfs /tmp \
+            --volume "${GITHUB_WORKSPACE}/deploy/nginx/echobot-container.conf:/etc/nginx/nginx.conf:ro" \
+            "${ECHOBOT_INGRESS_IMAGE}" \
+            -e stderr \
+            -t \
+            -c /etc/nginx/nginx.conf
 
       - name: Build Docker image
         run: docker build --tag echobot-web-mobile:ci .
+
+      - name: Compose app replacement smoke
+        run: |
+          docker tag echobot-web-mobile:ci echobot-web-mobile:local
+          cleanup() {
+            ECHOBOT_HOST_PORT=18081 \
+              docker compose --project-name echobot-ci-replacement down \
+                --volumes --remove-orphans >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          ECHOBOT_HOST_PORT=18081 \
+            docker compose --project-name echobot-ci-replacement up \
+              --detach --no-build --wait --wait-timeout 90
+          python scripts/compose_replacement_smoke.py \
+            --project-name echobot-ci-replacement \
+            --app-image echobot-web-mobile:ci \
+            --base-url http://127.0.0.1:18081
 
       - name: Container runtime smoke
         run: |
@@ -147,6 +220,99 @@ jobs:
             fi
             sleep 1
           done
+
+      - name: Generate image SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610
+        with:
+          image: echobot-web-mobile:ci
+          format: cyclonedx-json
+          output-file: /tmp/image-sbom.cdx.json
+          upload-artifact: false
+          syft-version: v1.48.0
+
+      - name: Generate ingress image SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610
+        with:
+          image: ${{ env.ECHOBOT_INGRESS_IMAGE }}
+          format: cyclonedx-json
+          output-file: /tmp/ingress-sbom.cdx.json
+          upload-artifact: false
+          syft-version: v1.48.0
+
+      - name: Validate vulnerability exception policy
+        run: python scripts/validate_vulnerability_exceptions.py
+
+      - name: Record complete container vulnerability scan
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          scan-type: image
+          image-ref: echobot-web-mobile:ci
+          scanners: vuln
+          vuln-type: os,library
+          severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
+          ignore-unfixed: false
+          exit-code: 0
+          format: json
+          output: /tmp/trivy-image.json
+          version: v0.70.0
+
+      - name: Gate high and critical container vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          scan-type: image
+          image-ref: echobot-web-mobile:ci
+          scanners: vuln
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+          ignore-unfixed: false
+          exit-code: 1
+          format: table
+          output: /tmp/trivy-gate.txt
+          version: v0.70.0
+
+      - name: Record complete ingress vulnerability scan
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          scan-type: image
+          image-ref: ${{ env.ECHOBOT_INGRESS_IMAGE }}
+          scanners: vuln
+          vuln-type: os,library
+          severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
+          ignore-unfixed: false
+          exit-code: 0
+          format: json
+          output: /tmp/trivy-ingress.json
+          version: v0.70.0
+
+      - name: Gate high and critical ingress vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          scan-type: image
+          image-ref: ${{ env.ECHOBOT_INGRESS_IMAGE }}
+          scanners: vuln
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+          ignore-unfixed: false
+          exit-code: 1
+          format: table
+          output: /tmp/trivy-ingress-gate.txt
+          version: v0.70.0
+
+      - name: Upload supply-chain evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: echobot-supply-chain-${{ github.sha }}
+          path: |
+            /tmp/python-sbom.cdx.json
+            /tmp/image-sbom.cdx.json
+            /tmp/ingress-sbom.cdx.json
+            /tmp/trivy-image.json
+            /tmp/trivy-gate.txt
+            /tmp/trivy-ingress.json
+            /tmp/trivy-ingress-gate.txt
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Export verified container image
         if: github.event_name != 'pull_request'

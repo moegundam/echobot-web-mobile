@@ -2,14 +2,18 @@
 
 ## 中文版
 
-這份文件說明 EchoBot Web Mobile 的第一版容器化打包方式。目標是把目前穩定的 Web / Stage / Messenger / Console / Admin runtime 包成單一 app container，方便本機、VPS、Cloudflare Tunnel 或後續 PWA/App 入口使用。
+這份文件說明 EchoBot Web Mobile 的容器化打包方式。Compose 由 loopback Nginx ingress 與內部 EchoBot app 兩個 service 組成，讓 request-size、rate 與 stream connection 限制在 request 進入 FastAPI parser 前生效。
 
 ### 設計原則
 
 - EchoBot container 只負責 app runtime，不內建 LLM、Open WebUI、Cloudflare Tunnel 或資料庫。
+- 使用 immutable digest 的 Chainguard Nginx ingress 是唯一 host-published service；EchoBot `8000` 只暴露在 Compose network。
+- Nginx 透過 Docker embedded DNS 每 5 秒重新解析 `echobot` service；app container 被替換且 IP 改變時，不需要重啟 ingress。
+- ingress healthcheck 會實際請求 `http://127.0.0.1:8080/healthz`，不是只執行設定語法檢查。
 - `.echobot/` runtime data 使用 Docker volume 保存。
 - API key、bot token、Open WebUI bridge token 只放在 `docker.env.local` 或外部 secret manager，不寫進 image。
-- Compose 預設只綁 `127.0.0.1`，避免未經 reverse proxy / Access 保護就暴露到公開網路。
+- Compose ingress 預設只綁 `127.0.0.1:8080`，避免未經 reverse proxy / Access 保護就暴露到公開網路。
+- 本維護流程只在指定的外部 Mac mini Docker server 建置、執行與掃描 image；一般工作站只做 source/test/docs。
 - HTTPS 由 Cloudflare Tunnel、Caddy、Nginx 或平台 ingress 提供；container 內只跑 HTTP。
 
 ### 檔案
@@ -18,7 +22,9 @@
 |---|---|
 | `Dockerfile` | Multi-stage Python runtime image |
 | `.dockerignore` | 排除 `.env`、`.echobot`、venv、cache、docs/tests/scripts 等不必要 build context |
-| `compose.yaml` | 單 container 本機/VPS compose profile |
+| `compose.yaml` | 本地 build 的 ingress + app Compose profile |
+| `compose.production.yaml` | 強制 digest-qualified GHCR image 的 production profile |
+| `deploy/nginx/echobot-container.conf` | Container ingress resource policy |
 | `docker.env.example` | 可複製成 `docker.env.local` 的非敏感範本 |
 
 ### 快速啟動
@@ -27,7 +33,7 @@
 cp docker.env.example docker.env.local
 docker compose build
 docker compose up -d
-curl -fsS http://127.0.0.1:8000/api/health
+curl -fsS http://127.0.0.1:8080/healthz
 ```
 
 ### 使用已發佈 image
@@ -40,25 +46,26 @@ ghcr.io/moegundam/echobot-web-mobile:latest
 ghcr.io/moegundam/echobot-web-mobile:sha-<commit>
 ```
 
-可直接拉取：
+開發/測試可直接拉取 immutable SHA tag；正式部署必須使用 registry 回報的 digest：
 
 ```shell
-docker pull ghcr.io/moegundam/echobot-web-mobile:upgrade
+docker pull ghcr.io/moegundam/echobot-web-mobile:sha-<commit>
 ```
 
-若要在 compose 中使用 registry image 而不是本機 build，可移除或忽略 `build:` 區塊，保留：
+Production profile 不接受 mutable tag：
 
-```yaml
-image: ghcr.io/moegundam/echobot-web-mobile:upgrade
+```shell
+export ECHOBOT_IMAGE_SHA256='<64-character digest value without sha256:>'
+docker compose -f compose.production.yaml up -d
 ```
 
 開啟：
 
 ```text
-http://127.0.0.1:8000/console
-http://127.0.0.1:8000/stage?session_name=demo
-http://127.0.0.1:8000/messenger
-http://127.0.0.1:8000/admin
+http://127.0.0.1:8080/console
+http://127.0.0.1:8080/stage?session_name=demo
+http://127.0.0.1:8080/messenger
+http://127.0.0.1:8080/admin
 ```
 
 ### 設定模型
@@ -105,7 +112,11 @@ ECHOBOT_VAD_SILERO_ALLOW_PRIVATE_DOWNLOAD=true
 
 Compose 預設包含：
 
-- `127.0.0.1:${ECHOBOT_HOST_PORT:-8000}:8000`
+- ingress：`127.0.0.1:${ECHOBOT_HOST_PORT:-8080}:8080`
+- app：只使用 `expose: 8000`，不 publish host port
+- route-specific request-size、rate 與 SSE connection limits
+- Docker DNS app replacement recovery 與 HTTP live healthcheck
+- app 與 ingress 兩個映像都在 CI 產生 SBOM，並以 Trivy `HIGH` / `CRITICAL` 零容忍門檻阻擋發布
 - `read_only: true`
 - `tmpfs: /tmp`
 - `cap_drop: [ALL]`
@@ -113,13 +124,13 @@ Compose 預設包含：
 - `ECHOBOT_SHELL_SAFETY_MODE=workspace-write`
 - named volume `echobot_data:/app/.echobot`
 
-如果要給手機或外部網路使用，請使用 Cloudflare Tunnel / Caddy / Nginx 提供 HTTPS，不要直接把 `0.0.0.0:8000` 匿名暴露到公網。
+如果要給手機或外部網路使用，請讓 Cloudflare Tunnel / Caddy 連到 loopback ingress `127.0.0.1:8080` 並提供 HTTPS，不要直接 publish app port 或匿名暴露到公網。
 
 ### 維護命令
 
 ```shell
 docker compose ps
-docker compose logs -f echobot
+docker compose logs -f ingress echobot
 docker compose exec echobot python -m echobot --help
 docker compose down
 ```
@@ -142,18 +153,22 @@ docker compose down -v
 - v1 不把 LLM 模型權重包進 image。
 - v1 不內建 Postgres；目前仍使用 `.echobot` file-backed runtime。
 - v1 不內建 HTTPS；手機麥克風測試仍需要外層 HTTPS。
-- Docker daemon 未啟動時，`docker build` / `docker compose up` 無法本機驗證，只能先跑靜態檢查與 CI。
+- 本維護流程不在一般工作站啟動 Docker daemon；container build/runtime/scan 由指定外部 Docker host 與 CI 驗證。
 
 ## English version
 
-This document describes the first Docker packaging profile for EchoBot Web Mobile. The goal is to package the stable Web / Stage / Messenger / Console / Admin runtime as one app container for local use, VPS use, Cloudflare Tunnel, or future PWA/App entrypoints.
+This document describes the EchoBot Web Mobile container profile. Compose uses a loopback Nginx ingress plus an internal EchoBot app service so request-size, rate, and stream-connection controls run before the FastAPI request parser.
 
 ### Design Principles
 
 - The EchoBot container runs only the app runtime. It does not bundle an LLM, Open WebUI, Cloudflare Tunnel, or a database.
+- A digest-pinned Chainguard Nginx ingress is the only host-published service. EchoBot port `8000` is exposed only inside the Compose network.
+- Nginx re-resolves the `echobot` service through Docker's embedded DNS every five seconds, so an app replacement with a new IP does not require an ingress restart.
+- The ingress healthcheck performs a live request to `http://127.0.0.1:8080/healthz`; it is not limited to configuration syntax validation.
 - `.echobot/` runtime data is persisted through a Docker volume.
 - API keys, bot tokens, and Open WebUI bridge tokens belong in `docker.env.local` or an external secret manager, never in the image.
-- Compose binds to `127.0.0.1` by default so the app is not exposed before a reverse proxy / Access layer is configured.
+- Compose ingress binds to `127.0.0.1:8080` by default so the app is not exposed before a reverse proxy / Access layer is configured.
+- The maintainer workflow builds, runs, and scans images only on the designated external Mac mini Docker server; normal workstations handle source, tests, and docs.
 - HTTPS is provided by Cloudflare Tunnel, Caddy, Nginx, or platform ingress. The container serves HTTP internally.
 
 ### Files
@@ -162,7 +177,9 @@ This document describes the first Docker packaging profile for EchoBot Web Mobil
 |---|---|
 | `Dockerfile` | Multi-stage Python runtime image |
 | `.dockerignore` | Excludes `.env`, `.echobot`, venv, caches, docs/tests/scripts, and other unnecessary build context |
-| `compose.yaml` | Single-container local/VPS compose profile |
+| `compose.yaml` | Local-build ingress + app Compose profile |
+| `compose.production.yaml` | Production profile requiring a digest-qualified GHCR image |
+| `deploy/nginx/echobot-container.conf` | Container ingress resource policy |
 | `docker.env.example` | Non-sensitive template copied to `docker.env.local` |
 
 ### Quick Start
@@ -171,7 +188,7 @@ This document describes the first Docker packaging profile for EchoBot Web Mobil
 cp docker.env.example docker.env.local
 docker compose build
 docker compose up -d
-curl -fsS http://127.0.0.1:8000/api/health
+curl -fsS http://127.0.0.1:8080/healthz
 ```
 
 ### Using The Published Image
@@ -184,25 +201,26 @@ ghcr.io/moegundam/echobot-web-mobile:latest
 ghcr.io/moegundam/echobot-web-mobile:sha-<commit>
 ```
 
-Pull it directly:
+Development and test environments may pull an immutable SHA tag. Production must use the registry-reported digest:
 
 ```shell
-docker pull ghcr.io/moegundam/echobot-web-mobile:upgrade
+docker pull ghcr.io/moegundam/echobot-web-mobile:sha-<commit>
 ```
 
-To use the registry image in Compose instead of a local build, remove or ignore the `build:` block and keep:
+The production profile rejects mutable tags:
 
-```yaml
-image: ghcr.io/moegundam/echobot-web-mobile:upgrade
+```shell
+export ECHOBOT_IMAGE_SHA256='<64-character digest value without sha256:>'
+docker compose -f compose.production.yaml up -d
 ```
 
 Open:
 
 ```text
-http://127.0.0.1:8000/console
-http://127.0.0.1:8000/stage?session_name=demo
-http://127.0.0.1:8000/messenger
-http://127.0.0.1:8000/admin
+http://127.0.0.1:8080/console
+http://127.0.0.1:8080/stage?session_name=demo
+http://127.0.0.1:8080/messenger
+http://127.0.0.1:8080/admin
 ```
 
 ### Model Configuration
@@ -249,7 +267,11 @@ ECHOBOT_VAD_SILERO_ALLOW_PRIVATE_DOWNLOAD=true
 
 Compose includes:
 
-- `127.0.0.1:${ECHOBOT_HOST_PORT:-8000}:8000`
+- ingress: `127.0.0.1:${ECHOBOT_HOST_PORT:-8080}:8080`
+- app: `expose: 8000` only, with no host-published app port
+- route-specific request-size, rate, and SSE connection limits
+- Docker DNS app-replacement recovery and an HTTP live healthcheck
+- separate app and ingress SBOMs plus zero-tolerance Trivy `HIGH` / `CRITICAL` publication gates in CI
 - `read_only: true`
 - `tmpfs: /tmp`
 - `cap_drop: [ALL]`
@@ -257,13 +279,13 @@ Compose includes:
 - `ECHOBOT_SHELL_SAFETY_MODE=workspace-write`
 - named volume `echobot_data:/app/.echobot`
 
-For mobile or internet access, put Cloudflare Tunnel / Caddy / Nginx in front and provide HTTPS. Do not anonymously expose `0.0.0.0:8000` to the public internet.
+For mobile or internet access, point Cloudflare Tunnel / Caddy at the loopback ingress `127.0.0.1:8080` and provide HTTPS. Do not publish the app port or expose it anonymously.
 
 ### Maintenance Commands
 
 ```shell
 docker compose ps
-docker compose logs -f echobot
+docker compose logs -f ingress echobot
 docker compose exec echobot python -m echobot --help
 docker compose down
 ```
@@ -286,4 +308,4 @@ docker compose down -v
 - v1 does not bundle LLM weights into the image.
 - v1 does not include Postgres; the runtime remains `.echobot` file-backed.
 - v1 does not include HTTPS; real mobile microphone tests still need an outer HTTPS layer.
-- If the Docker daemon is not running, `docker build` / `docker compose up` cannot be validated locally; use static checks and CI first.
+- The maintainer workflow does not start Docker on normal workstations; container build/runtime/scan runs on the designated external Docker host and in CI.

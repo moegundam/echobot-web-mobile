@@ -1,12 +1,25 @@
 from __future__ import annotations
 
 import json
+import os
+import tempfile
+import threading
 from dataclasses import asdict, dataclass, field, is_dataclass
 from pathlib import Path
 from typing import Any
 
+from ..secrets import LocalJsonSecretStore, SecretConfigurationError
+
 
 DEFAULT_CHANNEL_CONFIG_PATH = Path(".echobot/channels.json")
+CHANNEL_SECRET_FILENAME = "channel_secrets.json"
+CHANNEL_SECRET_FIELDS: dict[str, tuple[str, ...]] = {
+    "telegram": ("bot_token",),
+    "discord": ("bot_token", "webhook_url", "webhook_secret"),
+    "qq": ("client_secret",),
+}
+_MUTATION_LOCKS_GUARD = threading.Lock()
+_MUTATION_LOCKS_BY_PATH: dict[Path, threading.RLock] = {}
 
 
 @dataclass(slots=True)
@@ -107,6 +120,19 @@ def load_channels_config(
     create_default: bool = True,
 ) -> ChannelsConfig:
     config_path = Path(path)
+    mutation_lock = _mutation_lock_for(config_path.resolve())
+    with mutation_lock:
+        return _load_channels_config_unlocked(
+            config_path,
+            create_default=create_default,
+        )
+
+
+def _load_channels_config_unlocked(
+    config_path: Path,
+    *,
+    create_default: bool,
+) -> ChannelsConfig:
     if not config_path.exists():
         config = _default_channels_config()
         if create_default:
@@ -119,7 +145,7 @@ def load_channels_config(
         raise ValueError(f"Invalid channel config JSON: {config_path}") from exc
     if not isinstance(data, dict):
         raise ValueError(f"Channel config must be a JSON object: {config_path}")
-    return ChannelsConfig.from_dict(data)
+    return ChannelsConfig.from_dict(_resolve_channel_secrets(data, config_path))
 
 
 def save_channels_config(
@@ -127,11 +153,36 @@ def save_channels_config(
     path: str | Path = DEFAULT_CHANNEL_CONFIG_PATH,
 ) -> None:
     config_path = Path(path)
-    config_path.parent.mkdir(parents=True, exist_ok=True)
-    config_path.write_text(
-        json.dumps(config.to_dict(), ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    payload = config.to_dict()
+    secret_values = _extract_channel_secrets(payload)
+    secret_path = config_path.with_name(CHANNEL_SECRET_FILENAME)
+    mutation_lock = _mutation_lock_for(config_path.resolve())
+    with mutation_lock:
+        secret_store = LocalJsonSecretStore(secret_path)
+        secret_snapshot_existed = secret_path.exists()
+        previous_secret_values = _channel_secret_snapshot(secret_store)
+        secret_snapshot_replaced = bool(
+            secret_values or secret_snapshot_existed
+        )
+        if secret_snapshot_replaced:
+            secret_store.replace_all(secret_values)
+        try:
+            _write_json_atomically(config_path, payload)
+        except Exception:
+            if secret_snapshot_replaced:
+                try:
+                    _restore_channel_secret_snapshot(
+                        secret_store,
+                        secret_path,
+                        existed=secret_snapshot_existed,
+                        values=previous_secret_values,
+                    )
+                except Exception:
+                    raise ValueError(
+                        "Channel config could not be written and the previous "
+                        "secret snapshot could not be restored"
+                    ) from None
+            raise ValueError("Channel config could not be written") from None
 
 
 def _build_dataclass(cls: type[Any], raw: Any) -> Any:
@@ -157,3 +208,140 @@ def _config_to_dict(config: Any) -> dict[str, Any]:
     if isinstance(config, dict):
         return dict(config)
     return dict(vars(config))
+
+
+def _resolve_channel_secrets(
+    payload: dict[str, Any],
+    config_path: Path,
+) -> dict[str, Any]:
+    resolved = {
+        name: dict(config) if isinstance(config, dict) else config
+        for name, config in payload.items()
+    }
+    secret_names = tuple(
+        f"{channel_name}.{field_name}"
+        for channel_name, fields in CHANNEL_SECRET_FIELDS.items()
+        for field_name in fields
+    )
+    stored = LocalJsonSecretStore(
+        config_path.with_name(CHANNEL_SECRET_FILENAME)
+    ).get_many(secret_names)
+
+    for channel_name, fields in CHANNEL_SECRET_FIELDS.items():
+        channel_payload = resolved.get(channel_name)
+        if channel_payload is None:
+            channel_payload = {}
+            resolved[channel_name] = channel_payload
+        if not isinstance(channel_payload, dict):
+            continue
+        for field_name in fields:
+            inline_value = channel_payload.get(field_name, "")
+            if inline_value is None:
+                inline_value = ""
+            if not isinstance(inline_value, str):
+                raise ValueError("Channel secret configuration is invalid")
+            stored_secret = stored.get(f"{channel_name}.{field_name}")
+            if stored_secret is None:
+                continue
+            if inline_value and inline_value != stored_secret.value:
+                raise ValueError("Channel secret has conflicting sources")
+            channel_payload[field_name] = stored_secret.value
+    return resolved
+
+
+def _extract_channel_secrets(payload: dict[str, Any]) -> dict[str, str]:
+    secrets: dict[str, str] = {}
+    for channel_name, fields in CHANNEL_SECRET_FIELDS.items():
+        channel_payload = payload.get(channel_name)
+        if not isinstance(channel_payload, dict):
+            continue
+        for field_name in fields:
+            value = channel_payload.get(field_name, "")
+            if value is None:
+                value = ""
+            if not isinstance(value, str):
+                raise SecretConfigurationError(
+                    "Configured channel secret must be text"
+                )
+            if value.strip():
+                secrets[f"{channel_name}.{field_name}"] = value
+            channel_payload[field_name] = ""
+    return secrets
+
+
+def _mutation_lock_for(path: Path) -> threading.RLock:
+    with _MUTATION_LOCKS_GUARD:
+        lock = _MUTATION_LOCKS_BY_PATH.get(path)
+        if lock is None:
+            lock = threading.RLock()
+            _MUTATION_LOCKS_BY_PATH[path] = lock
+        return lock
+
+
+def _channel_secret_snapshot(
+    secret_store: LocalJsonSecretStore,
+) -> dict[str, str]:
+    secret_names = tuple(
+        f"{channel_name}.{field_name}"
+        for channel_name, fields in CHANNEL_SECRET_FIELDS.items()
+        for field_name in fields
+    )
+    stored = secret_store.get_many(secret_names)
+    return {name: secret.value for name, secret in stored.items()}
+
+
+def _restore_channel_secret_snapshot(
+    secret_store: LocalJsonSecretStore,
+    secret_path: Path,
+    *,
+    existed: bool,
+    values: dict[str, str],
+) -> None:
+    if existed:
+        secret_store.replace_all(values)
+        return
+    try:
+        secret_path.unlink(missing_ok=True)
+    except OSError:
+        raise ValueError("Channel secret snapshot could not be restored") from None
+
+
+def _write_json_atomically(path: Path, payload: dict[str, Any]) -> None:
+    content = (
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
+    ).encode("utf-8")
+    parent = path.parent
+    temporary_path: Path | None = None
+    descriptor: int | None = None
+    try:
+        parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        descriptor, temporary_name = tempfile.mkstemp(
+            dir=parent,
+            prefix=f".{path.name}.",
+        )
+        temporary_path = Path(temporary_name)
+        os.fchmod(descriptor, 0o600)
+        view = memoryview(content)
+        while view:
+            written = os.write(descriptor, view)
+            if written <= 0:
+                raise OSError("short write")
+            view = view[written:]
+        os.fsync(descriptor)
+        os.close(descriptor)
+        descriptor = None
+        os.replace(temporary_path, path)
+        temporary_path = None
+    except OSError:
+        raise ValueError("Channel config could not be written") from None
+    finally:
+        if descriptor is not None:
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
+        if temporary_path is not None:
+            try:
+                temporary_path.unlink()
+            except OSError:
+                pass

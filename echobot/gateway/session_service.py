@@ -5,7 +5,7 @@ import asyncio
 from ..channels.types import ChannelAddress, DeliveryTarget
 from ..runtime.session_service import SessionLifecycleService
 from ..runtime.sessions import normalize_session_name
-from ..session_metadata import matches_channel_binding
+from ..session_metadata import ChannelBindingConflictError, matches_channel_binding
 from .delivery import DeliveryStore
 from .route_sessions import (
     DeleteRouteSessionResult,
@@ -38,6 +38,12 @@ class GatewaySessionService:
     async def load_current_session(self):
         return await self._session_service.load_current_session()
 
+    async def get_current_session_name(self) -> str | None:
+        return await self._session_service.get_current_session_name()
+
+    async def get_current_session_pointer(self) -> tuple[str | None, int]:
+        return await self._session_service.get_current_session_pointer()
+
     async def create_session(self, name: str | None = None):
         return await self._session_service.create_session(name)
 
@@ -46,6 +52,22 @@ class GatewaySessionService:
 
     async def set_current_session(self, name: str) -> None:
         await self._session_service.set_current_session(name)
+
+    async def compare_and_set_current_session(
+        self,
+        expected_name: str,
+        next_name: str | None,
+        *,
+        expected_revision: int | None = None,
+    ) -> bool:
+        return await self._session_service.compare_and_set_current_session(
+            expected_name,
+            next_name,
+            expected_revision=expected_revision,
+        )
+
+    async def session_lock(self, session_name: str):
+        return await self._session_service.session_lock(session_name)
 
     async def switch_session(self, name: str):
         return await self._session_service.switch_session(name)
@@ -89,6 +111,7 @@ class GatewaySessionService:
         channel_integration_id: str = "",
     ):
         sessions = await self.list_sessions()
+        matches = []
         for item in sessions:
             try:
                 session = await self.load_session(item.name)
@@ -99,8 +122,13 @@ class GatewaySessionService:
                 channel_type=channel_type,
                 channel_integration_id=channel_integration_id,
             ):
-                return session
-        return None
+                matches.append(session)
+        if len(matches) > 1:
+            names = ", ".join(sorted(session.name for session in matches))
+            raise ChannelBindingConflictError(
+                f"Channel binding resolved to multiple Sessions: {names}",
+            )
+        return matches[0] if matches else None
 
     async def list_route_sessions(self, route_key: str) -> list[RouteSessionSummary]:
         return await asyncio.to_thread(

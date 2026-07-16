@@ -5,7 +5,7 @@ credentials-file: <HOME>/.cloudflared/<TUNNEL-UUID>.json
 
 ingress:
   - hostname: echobot.example.com
-    service: http://127.0.0.1:8000
+    service: http://127.0.0.1:8080
     originRequest:
       httpHostHeader: echobot.example.com
       connectTimeout: 30s

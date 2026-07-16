@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import stat
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
+import echobot.channels.config as channel_config_module
 from echobot import AgentCore, AgentRunResult, LLMMessage, LLMResponse, ToolCall
 from echobot.attachments import AttachmentStore
 from echobot.channels import (
@@ -14,6 +19,7 @@ from echobot.channels import (
     MessageBus,
     OutboundMessage,
     load_channels_config,
+    save_channels_config,
 )
 from echobot.gateway import (
     DeliveryStore,
@@ -217,6 +223,288 @@ class ChannelConfigTests(unittest.TestCase):
             self.assertIn('"telegram"', text)
             self.assertIn('"discord"', text)
             self.assertIn('"qq"', text)
+            self.assertFalse(
+                config_path.with_name("channel_secrets.json").exists()
+            )
+
+    def test_legacy_inline_secret_is_migrated_on_next_save(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "channels.json"
+            config_path.write_text(
+                json.dumps(
+                    {
+                        "telegram": {
+                            "enabled": False,
+                            "bot_token": "legacy-telegram-secret",
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            config = load_channels_config(config_path)
+            self.assertEqual(
+                "legacy-telegram-secret",
+                config.telegram.bot_token,
+            )
+
+            from echobot.channels import save_channels_config
+
+            save_channels_config(config, config_path)
+
+            public_payload = config_path.read_text(encoding="utf-8")
+            secret_path = config_path.with_name("channel_secrets.json")
+            self.assertNotIn("legacy-telegram-secret", public_payload)
+            self.assertEqual(0o600, stat.S_IMODE(secret_path.stat().st_mode))
+            self.assertEqual(
+                "legacy-telegram-secret",
+                json.loads(secret_path.read_text(encoding="utf-8"))[
+                    "telegram.bot_token"
+                ],
+            )
+            self.assertEqual(
+                "legacy-telegram-secret",
+                load_channels_config(config_path).telegram.bot_token,
+            )
+
+    def test_conflicting_inline_and_secret_store_values_fail_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "channels.json"
+            config_path.write_text(
+                json.dumps(
+                    {"telegram": {"bot_token": "inline-secret-value"}}
+                ),
+                encoding="utf-8",
+            )
+            secret_path = config_path.with_name("channel_secrets.json")
+            secret_path.write_text(
+                json.dumps(
+                    {"telegram.bot_token": "stored-secret-value"}
+                ),
+                encoding="utf-8",
+            )
+            secret_path.chmod(0o600)
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "conflicting sources",
+            ) as raised:
+                load_channels_config(config_path)
+
+            message = str(raised.exception)
+            self.assertNotIn("inline-secret-value", message)
+            self.assertNotIn("stored-secret-value", message)
+
+    def test_secret_store_value_survives_missing_public_channel_section(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "channels.json"
+            config_path.write_text("{}", encoding="utf-8")
+            secret_path = config_path.with_name("channel_secrets.json")
+            secret_path.write_text(
+                json.dumps({"telegram.bot_token": "stored-secret-value"}),
+                encoding="utf-8",
+            )
+            secret_path.chmod(0o600)
+
+            config = load_channels_config(config_path)
+
+            self.assertFalse(config.telegram.enabled)
+            self.assertEqual("stored-secret-value", config.telegram.bot_token)
+
+    def test_public_write_failure_restores_previous_secret_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "channels.json"
+            secret_path = config_path.with_name("channel_secrets.json")
+            config = load_channels_config(config_path)
+            config.telegram.bot_token = "previous-secret-value"
+            config.telegram.proxy = "previous-public-value"
+            save_channels_config(config, config_path)
+            previous_public = config_path.read_bytes()
+            previous_secrets = secret_path.read_bytes()
+
+            config.telegram.bot_token = "replacement-secret-value"
+            config.telegram.proxy = "replacement-public-value"
+            real_replace = channel_config_module.os.replace
+
+            def fail_public_replace(source, destination):
+                if Path(destination) == config_path:
+                    raise OSError("injected public replace failure")
+                return real_replace(source, destination)
+
+            with patch.object(
+                channel_config_module.os,
+                "replace",
+                side_effect=fail_public_replace,
+            ):
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "Channel config could not be written",
+                ) as raised:
+                    save_channels_config(config, config_path)
+
+            message = str(raised.exception)
+            self.assertNotIn("previous-secret-value", message)
+            self.assertNotIn("replacement-secret-value", message)
+            self.assertEqual(previous_public, config_path.read_bytes())
+            self.assertEqual(previous_secrets, secret_path.read_bytes())
+
+    def test_public_write_failure_removes_new_secret_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "channels.json"
+            secret_path = config_path.with_name("channel_secrets.json")
+            config = load_channels_config(config_path)
+            previous_public = config_path.read_bytes()
+            config.telegram.bot_token = "new-secret-value"
+            config.telegram.proxy = "new-public-value"
+            real_replace = channel_config_module.os.replace
+
+            def fail_public_replace(source, destination):
+                if Path(destination) == config_path:
+                    raise OSError("injected public replace failure")
+                return real_replace(source, destination)
+
+            with patch.object(
+                channel_config_module.os,
+                "replace",
+                side_effect=fail_public_replace,
+            ):
+                with self.assertRaises(ValueError) as raised:
+                    save_channels_config(config, config_path)
+
+            self.assertNotIn("new-secret-value", str(raised.exception))
+            self.assertEqual(previous_public, config_path.read_bytes())
+            self.assertFalse(secret_path.exists())
+
+    def test_concurrent_saves_keep_public_and_secret_snapshots_together(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "channels.json"
+            first_config = load_channels_config(config_path)
+            second_config = load_channels_config(config_path)
+            first_config.telegram.bot_token = "first-secret-value"
+            first_config.telegram.proxy = "first-public-value"
+            second_config.telegram.bot_token = "second-secret-value"
+            second_config.telegram.proxy = "second-public-value"
+
+            first_public_waiting = threading.Event()
+            release_first_public = threading.Event()
+            second_public_written = threading.Event()
+            write_errors: list[Exception] = []
+            errors_lock = threading.Lock()
+            real_write = channel_config_module._write_json_atomically
+
+            def controlled_write(path, payload):
+                marker = payload["telegram"]["proxy"]
+                if marker == "first-public-value":
+                    first_public_waiting.set()
+                    if not release_first_public.wait(timeout=5):
+                        raise RuntimeError("timed out waiting to release first writer")
+                real_write(path, payload)
+                if marker == "second-public-value":
+                    second_public_written.set()
+
+            def save(config) -> None:
+                try:
+                    save_channels_config(config, config_path)
+                except Exception as exc:
+                    with errors_lock:
+                        write_errors.append(exc)
+
+            first_thread = threading.Thread(target=save, args=(first_config,))
+            second_thread = threading.Thread(target=save, args=(second_config,))
+            second_started = False
+
+            with patch.object(
+                channel_config_module,
+                "_write_json_atomically",
+                side_effect=controlled_write,
+            ):
+                first_thread.start()
+                try:
+                    self.assertTrue(first_public_waiting.wait(timeout=2))
+                    second_thread.start()
+                    second_started = True
+                    self.assertFalse(second_public_written.wait(timeout=1))
+                finally:
+                    release_first_public.set()
+                    first_thread.join(timeout=2)
+                    if second_started:
+                        second_thread.join(timeout=2)
+
+            self.assertFalse(first_thread.is_alive())
+            self.assertFalse(second_thread.is_alive())
+            self.assertEqual([], write_errors)
+            public_payload = json.loads(config_path.read_text(encoding="utf-8"))
+            secret_payload = json.loads(
+                config_path.with_name("channel_secrets.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            self.assertEqual(
+                "second-public-value",
+                public_payload["telegram"]["proxy"],
+            )
+            self.assertEqual("", public_payload["telegram"]["bot_token"])
+            self.assertEqual(
+                "second-secret-value",
+                secret_payload["telegram.bot_token"],
+            )
+
+    def test_concurrent_reader_never_observes_mixed_channel_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "channels.json"
+            initial = load_channels_config(config_path)
+            initial.telegram.bot_token = "previous-secret-value"
+            initial.telegram.proxy = "previous-public-value"
+            save_channels_config(initial, config_path)
+
+            replacement = load_channels_config(config_path)
+            replacement.telegram.bot_token = "replacement-secret-value"
+            replacement.telegram.proxy = "replacement-public-value"
+            writer_waiting = threading.Event()
+            release_writer = threading.Event()
+            reader_done = threading.Event()
+            reader_result: list[tuple[str, str]] = []
+            real_write = channel_config_module._write_json_atomically
+
+            def controlled_write(path, payload):
+                writer_waiting.set()
+                if not release_writer.wait(timeout=5):
+                    raise RuntimeError("timed out waiting to release writer")
+                real_write(path, payload)
+
+            def read_config() -> None:
+                loaded = load_channels_config(config_path)
+                reader_result.append(
+                    (loaded.telegram.proxy, loaded.telegram.bot_token),
+                )
+                reader_done.set()
+
+            writer = threading.Thread(
+                target=save_channels_config,
+                args=(replacement, config_path),
+            )
+            reader = threading.Thread(target=read_config)
+            with patch.object(
+                channel_config_module,
+                "_write_json_atomically",
+                side_effect=controlled_write,
+            ):
+                writer.start()
+                try:
+                    self.assertTrue(writer_waiting.wait(timeout=2))
+                    reader.start()
+                    self.assertFalse(reader_done.wait(timeout=0.2))
+                finally:
+                    release_writer.set()
+                    writer.join(timeout=2)
+                    reader.join(timeout=2)
+
+            self.assertFalse(writer.is_alive())
+            self.assertFalse(reader.is_alive())
+            self.assertEqual(
+                [("replacement-public-value", "replacement-secret-value")],
+                reader_result,
+            )
 
 
 class DeliveryStoreTests(unittest.TestCase):
@@ -281,6 +569,33 @@ def _gateway_scope(workspace: Path):
 
 
 class GatewayRuntimeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_bound_session_lookup_rejects_legacy_duplicate_bindings(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            context, session_store = build_test_runtime(workspace)
+            session_service = GatewaySessionService(
+                SessionLifecycleService(
+                    context.session_store,
+                    context.agent_session_store,
+                    coordinator=context.coordinator,
+                ),
+                route_session_store=RouteSessionStore(workspace / "route_sessions.json"),
+            )
+            for name in ("stage-one", "stage-two"):
+                session = session_store.create_session(name)
+                session.metadata["channel_type"] = "telegram"
+                session.metadata["channel_integration_id"] = "telegram"
+                session_store.save_session(session)
+
+            try:
+                with self.assertRaisesRegex(ValueError, "multiple Sessions"):
+                    await session_service.bound_session_for_channel(
+                        channel_type="telegram",
+                        channel_integration_id="telegram",
+                    )
+            finally:
+                await context.coordinator.close()
+
     async def test_inbound_user_id_routes_to_user_scoped_runtime(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             workspace = Path(temp_dir)
@@ -334,9 +649,17 @@ class GatewayRuntimeTests(unittest.IsolatedAsyncioTestCase):
 
             self.assertEqual("pong", alpha_outbound.text)
             self.assertEqual("pong", beta_outbound.text)
-            self.assertEqual([], list(parent_session_store.base_dir.glob("*.jsonl")))
-            self.assertEqual(1, len(list(alpha_session_store.base_dir.glob("*.jsonl"))))
-            self.assertEqual(1, len(list(beta_session_store.base_dir.glob("*.jsonl"))))
+            self.assertEqual([], parent_session_store.list_sessions())
+            self.assertEqual(1, len(alpha_session_store.list_sessions()))
+            self.assertEqual(1, len(beta_session_store.list_sessions()))
+            self.assertEqual(
+                alpha_session_store.list_sessions()[0].name,
+                alpha_session_store.get_current_session_name(),
+            )
+            self.assertEqual(
+                beta_session_store.list_sessions()[0].name,
+                beta_session_store.get_current_session_name(),
+            )
 
     async def test_inbound_user_id_with_bound_channel_uses_shared_session(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

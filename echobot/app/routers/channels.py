@@ -4,13 +4,14 @@ import hmac
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from ...channels import InboundMessage, get_channel_definition
 from ...channels.types import ChannelAddress
 from ...runtime.sessions import normalize_session_name
 from ..schemas import channel_config_payload
 from ..services.channel_owner_scope import channel_owner_scope
+from ..services.channels import ChannelActivationError
 from ..state import get_app_runtime, require_admin_user
 
 
@@ -24,6 +25,14 @@ class DiscordWebhookMessageRequest(BaseModel):
     thread_id: str | None = Field(default=None, max_length=128)
     username: str = Field(default="", max_length=128)
     session_name: str | None = Field(default=None, max_length=128)
+
+    @field_validator("user_id")
+    @classmethod
+    def require_user_id(cls, user_id: str) -> str:
+        normalized_user_id = user_id.strip()
+        if not normalized_user_id:
+            raise ValueError("user_id is required")
+        return normalized_user_id
 
 
 class LocalChannelTestMessageRequest(BaseModel):
@@ -59,6 +68,8 @@ async def update_channel_config(
         updated = await scope.service.update_config(raw_config)
     except TypeError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ChannelActivationError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
     return channel_config_payload(updated)
 
 
@@ -185,6 +196,7 @@ async def receive_discord_webhook(
                 channel="discord",
                 chat_id=request.channel_id,
                 thread_id=request.thread_id,
+                user_id=None,
             ),
             sender_id=request.user_id,
             text=request.text,

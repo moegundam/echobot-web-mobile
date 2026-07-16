@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import asyncio
+from copy import deepcopy
 from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ...asr import ASRService
 from ...channels import ChannelsConfig, OutboundMessage
+from ...concurrency import AsyncReentrantLock
 from ...gateway import DeliveryStore, GatewaySessionService, RouteSessionStore
 from ...runtime.bootstrap import RuntimeContext
 from ...runtime.session_service import SessionLifecycleService
@@ -52,7 +55,11 @@ class UserScopedRuntime:
         self.live2d_model_service: Live2DModelService | None = None
         self.web_console_service: WebConsoleService | None = None
         self.runtime_profile_applier: RuntimeProfileApplier | None = None
+        self.last_applied_model_profile: dict[str, object] = {}
+        self.model_profile_lock = AsyncReentrantLock()
+        self.model_profile_revision = 0
         self.stage_event_broker: StageEventBroker = parent.stage_event_broker
+        self.session_binding_lock = asyncio.Lock()
         self.session_runtime_override_service = SessionRuntimeOverrideService()
         self.tts_service: TTSService | None = None
         self.asr_service: ASRService | None = None
@@ -89,10 +96,7 @@ class UserScopedRuntime:
             route_session_store=self.route_session_store,
             delivery_store=self.delivery_store,
         )
-        self.chat_service = ChatService(
-            self.context.coordinator,
-            self.session_service,
-        )
+        self.chat_service = ChatService(self.context.coordinator)
         self.role_service = RoleService(
             self.context.role_registry,
             self.context.session_store,
@@ -204,9 +208,11 @@ class UserScopedRuntime:
         await self.apply_model_profile(active_runtime_profile(self))
 
     async def apply_model_profile(self, profile: dict[str, object]) -> None:
-        if self.runtime_profile_applier is None:
-            return
-        await self.runtime_profile_applier.apply(profile)
+        async with self.model_profile_lock:
+            if self.runtime_profile_applier is not None:
+                await self.runtime_profile_applier.apply(profile)
+            self.last_applied_model_profile = deepcopy(profile)
+            self.model_profile_revision += 1
 
 
 def _user_stage_scope_key(user_id: str) -> str:

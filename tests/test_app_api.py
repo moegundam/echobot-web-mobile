@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import stat
 import tempfile
 import time
 import unittest
@@ -22,6 +23,7 @@ from echobot.asr import ASRStatusSnapshot, ProviderStatusSnapshot, Transcription
 from echobot.app import create_app
 from echobot.app.auth import DEFAULT_TRUSTED_USER_HEADER, user_storage_key
 from echobot.app.runtime import AppRuntime
+from echobot.app.services.session_application import SessionApplicationService
 from echobot.app.services.model_profiles import ModelProfileService
 from echobot.app.services.runtime_model_repositories import (
     LLMModelRepository,
@@ -30,6 +32,7 @@ from echobot.app.services.runtime_model_repositories import (
 )
 from echobot.app.web_pages import WEB_PAGE_ROUTES
 from echobot.channels import ChannelAddress
+from echobot.channels.platforms.telegram import TelegramChannel
 from echobot.orchestration import (
     ConversationCoordinator,
     DecisionEngine,
@@ -46,6 +49,7 @@ from echobot.runtime.settings import (
 )
 from echobot.runtime.session_runner import SessionAgentRunner
 from echobot.runtime.sessions import SessionStore
+from echobot.session_metadata import ChannelBindingConflictError
 from echobot.scheduling.cron import (
     CronJob,
     CronJobState,
@@ -63,6 +67,7 @@ from echobot.tts import (
     VoiceOption,
 )
 from echobot.app.routers.stage import subscribe_stage_events
+from echobot.app.routers.session_catalog import activate_llm_model
 
 
 os.environ.setdefault("ECHOBOT_ASR_SHERPA_AUTO_DOWNLOAD", "false")
@@ -78,6 +83,10 @@ def make_chat_png_bytes() -> bytes:
 
 def make_chat_text_bytes() -> bytes:
     return "hello from uploaded file\n".encode("utf-8")
+
+
+async def _start_ready_test_telegram(channel: TelegramChannel) -> None:
+    channel._running = True
 
 
 def _wait_for_session_messages(
@@ -1210,6 +1219,7 @@ class AppApiTests(unittest.TestCase):
                 self.assertNotIn("telegram-secret-token", json.dumps(payload))
                 self.assertNotIn("discord-secret-token", json.dumps(payload))
                 self.assertNotIn("discord-webhook-secret", json.dumps(payload))
+                self.assertNotIn("https://discord.com/api/webhooks/1/token", json.dumps(payload))
                 self.assertNotIn("qq-client-secret", json.dumps(payload))
                 self.assertEqual("", payload["telegram"]["bot_token"])
                 self.assertTrue(payload["telegram"]["bot_token_configured"])
@@ -1217,10 +1227,8 @@ class AppApiTests(unittest.TestCase):
                 self.assertTrue(payload["discord"]["bot_token_configured"])
                 self.assertEqual("", payload["discord"]["webhook_secret"])
                 self.assertTrue(payload["discord"]["webhook_secret_configured"])
-                self.assertEqual(
-                    "https://discord.com/api/webhooks/1/token",
-                    payload["discord"]["webhook_url"],
-                )
+                self.assertEqual("", payload["discord"]["webhook_url"])
+                self.assertTrue(payload["discord"]["webhook_url_configured"])
                 self.assertEqual("discord-app-id", payload["discord"]["application_id"])
                 self.assertEqual("", payload["qq"]["client_secret"])
                 self.assertTrue(payload["qq"]["client_secret_configured"])
@@ -1229,10 +1237,58 @@ class AppApiTests(unittest.TestCase):
                 self.assertEqual("qq-app-id", payload["qq"]["app_id"])
 
             stored_text = config_path.read_text(encoding="utf-8")
-            self.assertIn("telegram-secret-token", stored_text)
-            self.assertIn("discord-secret-token", stored_text)
-            self.assertIn("discord-webhook-secret", stored_text)
-            self.assertIn("qq-client-secret", stored_text)
+            for secret in [
+                "telegram-secret-token",
+                "discord-secret-token",
+                "https://discord.com/api/webhooks/1/token",
+                "discord-webhook-secret",
+                "qq-client-secret",
+            ]:
+                self.assertNotIn(secret, stored_text)
+            secret_path = config_path.with_name("channel_secrets.json")
+            self.assertEqual(0o600, stat.S_IMODE(secret_path.stat().st_mode))
+            self.assertEqual(
+                {
+                    "discord.bot_token": "discord-secret-token",
+                    "discord.webhook_secret": "discord-webhook-secret",
+                    "discord.webhook_url": "https://discord.com/api/webhooks/1/token",
+                    "qq.client_secret": "qq-client-secret",
+                    "telegram.bot_token": "telegram-secret-token",
+                },
+                json.loads(secret_path.read_text(encoding="utf-8")),
+            )
+
+    def test_channel_activation_failure_is_sanitized_and_not_persisted(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            app = create_app(
+                runtime_options=RuntimeOptions(
+                    workspace=workspace,
+                    no_tools=True,
+                    no_skills=True,
+                    no_memory=True,
+                    no_heartbeat=True,
+                ),
+                channel_config_path=workspace / ".echobot" / "channels.json",
+                context_builder=build_test_context,
+            )
+
+            with TestClient(app) as client:
+                runtime = client.app.state.runtime
+                runtime.channel_service._reload_channels = AsyncMock(
+                    side_effect=RuntimeError("provider-secret-bearing-error"),
+                )
+                rejected = client.put(
+                    "/api/channels/config",
+                    json={"console": {"enabled": True}},
+                )
+                persisted = client.get("/api/channels/config")
+
+            self.assertEqual(409, rejected.status_code)
+            self.assertIn("previous runtime remains active", rejected.json()["detail"])
+            self.assertNotIn("provider-secret-bearing-error", rejected.text)
+            self.assertEqual(200, persisted.status_code)
+            self.assertFalse(persisted.json()["console"]["enabled"])
 
     def test_channel_config_update_preserves_redacted_gateway_secrets(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1288,12 +1344,33 @@ class AppApiTests(unittest.TestCase):
             self.assertEqual("", preserved.json()["discord"]["bot_token"])
             self.assertEqual("", preserved.json()["discord"]["webhook_secret"])
             stored_text = config_path.read_text(encoding="utf-8")
-            self.assertIn("telegram-secret-token", stored_text)
-            self.assertIn("discord-secret-token", stored_text)
+            self.assertNotIn("telegram-secret-token", stored_text)
+            self.assertNotIn("discord-secret-token", stored_text)
             self.assertIn('"drop_pending_updates": false', stored_text)
-            self.assertIn("discord-webhook-secret", stored_text)
-            self.assertIn("qq-client-secret", stored_text)
+            self.assertNotIn("discord-webhook-secret", stored_text)
+            self.assertNotIn("qq-client-secret", stored_text)
             self.assertIn("http://proxy.local:8080", stored_text)
+            secret_payload = json.loads(
+                config_path.with_name("channel_secrets.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            self.assertEqual(
+                "telegram-secret-token",
+                secret_payload["telegram.bot_token"],
+            )
+            self.assertEqual(
+                "discord-secret-token",
+                secret_payload["discord.bot_token"],
+            )
+            self.assertEqual(
+                "discord-webhook-secret",
+                secret_payload["discord.webhook_secret"],
+            )
+            self.assertEqual(
+                "qq-client-secret",
+                secret_payload["qq.client_secret"],
+            )
 
     def test_channel_smoke_checks_validate_config_without_echoing_secrets(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1484,6 +1561,93 @@ class AppApiTests(unittest.TestCase):
             self.assertEqual("ping", detail["history"][0]["content"])
             self.assertEqual("pong", detail["history"][1]["content"])
             self.assertEqual(["pong"], [item.text for item in history])
+
+    def test_discord_webhook_keeps_external_user_id_out_of_tenant_scope(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            app = create_app(
+                runtime_options=RuntimeOptions(
+                    workspace=workspace,
+                    no_tools=True,
+                    no_skills=True,
+                    no_memory=True,
+                    no_heartbeat=True,
+                ),
+                channel_config_path=workspace / ".echobot" / "channels.json",
+                context_builder=build_test_context,
+            )
+
+            configured_secret = "configured-webhook-secret"
+            supplied_secret = "supplied-webhook-secret"
+            with TestClient(app) as client:
+                configured = client.put(
+                    "/api/channels/config",
+                    json={
+                        "discord": {
+                            "enabled": True,
+                            "allow_from": ["discord-user"],
+                            "webhook_secret": configured_secret,
+                        },
+                    },
+                )
+                runtime = app.state.runtime
+                publish_inbound = AsyncMock()
+                runtime.bus.publish_inbound = publish_inbound
+
+                missing_user = client.post(
+                    "/api/channels/discord/webhook",
+                    headers={"X-EchoBot-Discord-Secret": configured_secret},
+                    json={"channel_id": "channel-1", "text": "ping"},
+                )
+                blank_user = client.post(
+                    "/api/channels/discord/webhook",
+                    headers={"X-EchoBot-Discord-Secret": configured_secret},
+                    json={
+                        "channel_id": "channel-1",
+                        "user_id": "   ",
+                        "text": "ping",
+                    },
+                )
+                invalid_secret = client.post(
+                    "/api/channels/discord/webhook",
+                    headers={"X-EchoBot-Discord-Secret": supplied_secret},
+                    json={
+                        "channel_id": "channel-1",
+                        "user_id": "discord-user",
+                        "text": "ping",
+                    },
+                )
+                accepted = client.post(
+                    "/api/channels/discord/webhook",
+                    headers={"X-EchoBot-Discord-Secret": configured_secret},
+                    json={
+                        "channel_id": "channel-1",
+                        "user_id": " discord-user ",
+                        "text": "ping",
+                    },
+                )
+
+            self.assertEqual(200, configured.status_code)
+            self.assertEqual(422, missing_user.status_code)
+            self.assertEqual(422, blank_user.status_code)
+            self.assertEqual(401, invalid_secret.status_code)
+            error_text = json.dumps(
+                [
+                    missing_user.json(),
+                    blank_user.json(),
+                    invalid_secret.json(),
+                ]
+            )
+            self.assertNotIn(configured_secret, error_text)
+            self.assertNotIn(supplied_secret, error_text)
+            self.assertEqual(200, accepted.status_code)
+            self.assertEqual(1, publish_inbound.await_count)
+            inbound = publish_inbound.await_args.args[0]
+            self.assertIsNone(inbound.address.user_id)
+            self.assertEqual("discord-user", inbound.sender_id)
+            self.assertEqual("discord-user", inbound.metadata["discord_user_id"])
 
     def test_local_channel_e2e_test_routes_to_bound_session_and_stage(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -2301,6 +2465,70 @@ class AppApiTests(unittest.TestCase):
             self.assertIn("motion", stage_schema["properties"])
             self.assertIn("target_user_id", chat_schema["required"])
             self.assertTrue(sessions_params[0]["required"])
+
+    def test_openwebui_bridge_resolves_token_file_and_rejects_ambiguous_sources(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            token_path = workspace / "bridge-token"
+            token_path.write_text("file-bridge-secret\n", encoding="utf-8")
+            token_file_env = "ECHOBOT_OPENWEBUI_BRIDGE_TOKEN_FILE"
+
+            with patch.dict(
+                os.environ,
+                {token_file_env: str(token_path)},
+                clear=False,
+            ):
+                os.environ.pop("ECHOBOT_OPENWEBUI_BRIDGE_TOKEN", None)
+                app = create_app(
+                    runtime_options=RuntimeOptions(
+                        workspace=workspace,
+                        no_tools=True,
+                        no_skills=True,
+                        no_memory=True,
+                        no_heartbeat=True,
+                    ),
+                    channel_config_path=workspace / ".echobot" / "channels.json",
+                    context_builder=build_test_context,
+                )
+                with TestClient(app) as client:
+                    accepted = client.get(
+                        "/api/openwebui/tools/openapi.json",
+                        headers={"Authorization": "Bearer file-bridge-secret"},
+                    )
+
+            with patch.dict(
+                os.environ,
+                {
+                    "ECHOBOT_OPENWEBUI_BRIDGE_TOKEN": "direct-secret",
+                    token_file_env: str(token_path),
+                },
+                clear=False,
+            ):
+                app = create_app(
+                    runtime_options=RuntimeOptions(
+                        workspace=workspace,
+                        no_tools=True,
+                        no_skills=True,
+                        no_memory=True,
+                        no_heartbeat=True,
+                    ),
+                    channel_config_path=workspace / ".echobot" / "channels.json",
+                    context_builder=build_test_context,
+                )
+                with TestClient(app) as client:
+                    rejected = client.get(
+                        "/api/openwebui/tools/openapi.json",
+                        headers={"Authorization": "Bearer direct-secret"},
+                    )
+
+            self.assertEqual(200, accepted.status_code)
+            self.assertEqual(503, rejected.status_code)
+            error_text = json.dumps(rejected.json())
+            self.assertNotIn("direct-secret", error_text)
+            self.assertNotIn("file-bridge-secret", error_text)
+            self.assertNotIn(str(token_path), error_text)
 
     def test_model_profiles_are_user_scoped_and_apply_to_console_runtime(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -3123,7 +3351,12 @@ class AppApiTests(unittest.TestCase):
                     "/api/sessions/default/route-mode",
                     json={"route_mode": "chat_only"},
                 )
-                client.put("/api/channels/config", json=raw_channel_config)
+                with patch.object(
+                    TelegramChannel,
+                    "start",
+                    _start_ready_test_telegram,
+                ):
+                    client.put("/api/channels/config", json=raw_channel_config)
 
                 llm_models = client.get("/api/llm-models")
                 voice_models = client.get("/api/voice-models")
@@ -4180,6 +4413,9 @@ class AppApiTests(unittest.TestCase):
                     "ECHOBOT_TRUSTED_USER_HEADER_ENABLED": "true",
                     "ECHOBOT_TRUSTED_USER_REQUIRED": "true",
                     "ECHOBOT_OPENWEBUI_BRIDGE_TOKEN": "bridge-secret",
+                    "ECHOBOT_OPENWEBUI_ALLOWED_TARGET_USERS": (
+                        "alpha@example.test,beta@example.test"
+                    ),
                 },
                 clear=False,
             ):
@@ -4346,6 +4582,55 @@ class AppApiTests(unittest.TestCase):
             self.assertEqual(403, disallowed_stage.status_code)
             self.assertEqual("target_user_id is not allowed", disallowed_stage.json()["detail"])
             self.assertEqual(["pong"], [item.text for item in alpha_history])
+            self.assertEqual([], beta_history)
+
+    def test_openwebui_bridge_denies_cross_user_target_when_allowlist_is_empty(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+
+            with patch.dict(
+                os.environ,
+                {
+                    "ECHOBOT_TRUSTED_USER_HEADER_ENABLED": "true",
+                    "ECHOBOT_TRUSTED_USER_REQUIRED": "true",
+                    "ECHOBOT_OPENWEBUI_BRIDGE_TOKEN": "bridge-secret",
+                    "ECHOBOT_OPENWEBUI_ALLOWED_TARGET_USERS": "",
+                },
+                clear=False,
+            ):
+                app = create_app(
+                    runtime_options=RuntimeOptions(
+                        workspace=workspace,
+                        no_tools=True,
+                        no_skills=True,
+                        no_memory=True,
+                        no_heartbeat=True,
+                    ),
+                    channel_config_path=workspace / ".echobot" / "channels.json",
+                    context_builder=build_test_context,
+                )
+
+                with TestClient(app) as client:
+                    rejected = client.post(
+                        "/api/openwebui/chat",
+                        headers={
+                            "Authorization": "Bearer bridge-secret",
+                            DEFAULT_TRUSTED_USER_HEADER: "alpha@example.test",
+                        },
+                        json={
+                            "target_user_id": "beta@example.test",
+                            "session_name": "demo",
+                            "prompt": "cross-user request",
+                        },
+                    )
+                    runtime = app.state.runtime
+                    beta_history = runtime.stage_event_broker.history(
+                        user_storage_key("beta@example.test"),
+                        "demo",
+                    )
+
+            self.assertEqual(403, rejected.status_code)
+            self.assertEqual("target_user_id is not allowed", rejected.json()["detail"])
             self.assertEqual([], beta_history)
 
     def test_trusted_user_header_isolates_sessions_jobs_and_attachments(self) -> None:
@@ -4660,7 +4945,7 @@ class AppApiTests(unittest.TestCase):
             self.assertEqual(400, too_large_text.status_code)
             self.assertEqual(400, too_large_metadata.status_code)
             self.assertEqual(200, alpha_event.status_code)
-            self.assertEqual("evt_000001", alpha_event.json()["event_id"])
+            self.assertRegex(alpha_event.json()["event_id"], r"^evt_[A-Za-z0-9_-]+$")
             self.assertEqual("assistant_final", alpha_event.json()["kind"])
             self.assertEqual("joy", alpha_event.json()["emotion"])
             self.assertEqual("smile.exp3.json", alpha_event.json()["expression"])
@@ -4798,18 +5083,31 @@ class AppApiTests(unittest.TestCase):
                         "default_channel_integration_id": "telegram",
                     },
                 )
-                client.put(
-                    "/api/channels/config",
-                    json={
-                        "telegram": {
-                            "enabled": True,
-                            "allow_from": ["12345"],
-                            "mirror_to_stage": False,
-                            "stage_session_name": "other-stage",
-                            "bot_token": "session-channel-secret",
+                with patch.object(
+                    TelegramChannel,
+                    "start",
+                    _start_ready_test_telegram,
+                ):
+                    client.put(
+                        "/api/channels/config",
+                        json={
+                            "telegram": {
+                                "enabled": True,
+                                "allow_from": ["12345"],
+                                "mirror_to_stage": False,
+                                "stage_session_name": "other-stage",
+                                "bot_token": "session-channel-secret",
+                            },
+                            "discord": {
+                                "enabled": False,
+                                "allow_from": ["discord-user"],
+                                "mirror_to_stage": False,
+                                "stage_session_name": "other-stage",
+                                "webhook_url": "https://discord.example/webhook",
+                                "webhook_secret": "discord-secret",
+                            },
                         },
-                    },
-                )
+                    )
                 default_bound = client.post(
                     "/api/sessions",
                     json={
@@ -4825,8 +5123,8 @@ class AppApiTests(unittest.TestCase):
                         "name": "Live Session",
                         "role_name": "Session Host",
                         "route_mode": "chat_only",
-                        "channel_type": "telegram",
-                        "channel_integration_id": "telegram",
+                        "channel_type": "discord",
+                        "channel_integration_id": "discord",
                     },
                 )
                 detail = client.get("/api/sessions/live-session")
@@ -4848,14 +5146,14 @@ class AppApiTests(unittest.TestCase):
             self.assertEqual("live-session", created.json()["name"])
             self.assertEqual("session-host", created.json()["role_name"])
             self.assertEqual("chat_only", created.json()["route_mode"])
-            self.assertEqual("telegram", created.json()["channel_type"])
-            self.assertEqual("telegram", created.json()["channel_integration_id"])
+            self.assertEqual("discord", created.json()["channel_type"])
+            self.assertEqual("discord", created.json()["channel_integration_id"])
             self.assertEqual(200, detail.status_code)
             self.assertEqual("session-host", detail.json()["role_name"])
-            self.assertEqual("telegram", detail.json()["channel_integration_id"])
+            self.assertEqual("discord", detail.json()["channel_integration_id"])
             self.assertEqual(200, context.status_code)
             self.assertEqual("session-host", context.json()["role_name"])
-            self.assertEqual("telegram", context.json()["channel"]["id"])
+            self.assertEqual("discord", context.json()["channel"]["id"])
             context_text = json.dumps(context.json())
             self.assertNotIn("session-channel-secret", context_text)
 
@@ -4875,26 +5173,31 @@ class AppApiTests(unittest.TestCase):
             )
 
             with TestClient(app) as client:
-                client.put(
-                    "/api/channels/config",
-                    json={
-                        "telegram": {
-                            "enabled": True,
-                            "allow_from": ["12345"],
-                            "mirror_to_stage": True,
-                            "stage_session_name": "legacy-stage",
-                            "bot_token": "session-channel-secret",
+                with patch.object(
+                    TelegramChannel,
+                    "start",
+                    _start_ready_test_telegram,
+                ):
+                    client.put(
+                        "/api/channels/config",
+                        json={
+                            "telegram": {
+                                "enabled": True,
+                                "allow_from": ["12345"],
+                                "mirror_to_stage": True,
+                                "stage_session_name": "legacy-stage",
+                                "bot_token": "session-channel-secret",
+                            },
+                            "discord": {
+                                "enabled": True,
+                                "allow_from": ["discord-user"],
+                                "mirror_to_stage": True,
+                                "stage_session_name": "discord-stage",
+                                "webhook_url": "https://discord.example/webhook",
+                                "webhook_secret": "discord-secret",
+                            },
                         },
-                        "discord": {
-                            "enabled": True,
-                            "allow_from": ["discord-user"],
-                            "mirror_to_stage": True,
-                            "stage_session_name": "discord-stage",
-                            "webhook_url": "https://discord.example/webhook",
-                            "webhook_secret": "discord-secret",
-                        },
-                    },
-                )
+                    )
                 client.post("/api/sessions", json={"name": "ops-room"})
                 updated = client.put(
                     "/api/sessions/ops-room/channel-binding",
@@ -4920,6 +5223,1094 @@ class AppApiTests(unittest.TestCase):
             self.assertEqual(200, cleared.status_code)
             self.assertEqual("", cleared.json()["channel_type"])
             self.assertEqual("", cleared.json()["channel_integration_id"])
+
+    def test_session_channel_binding_rejects_ambiguous_duplicate(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            app = create_app(
+                runtime_options=RuntimeOptions(
+                    workspace=workspace,
+                    no_tools=True,
+                    no_skills=True,
+                    no_memory=True,
+                    no_heartbeat=True,
+                ),
+                channel_config_path=workspace / ".echobot" / "channels.json",
+                context_builder=build_test_context,
+            )
+
+            with TestClient(app) as client:
+                first = client.post(
+                    "/api/sessions",
+                    json={
+                        "name": "telegram-stage",
+                        "channel_type": "telegram",
+                        "channel_integration_id": "telegram",
+                    },
+                )
+                duplicate = client.post(
+                    "/api/sessions",
+                    json={
+                        "name": "telegram-duplicate",
+                        "channel_type": "telegram",
+                        "channel_integration_id": "telegram",
+                    },
+                )
+                sessions = client.get("/api/sessions")
+
+            self.assertEqual(200, first.status_code)
+            self.assertEqual(409, duplicate.status_code)
+            self.assertIn("telegram-stage", duplicate.json()["detail"])
+            self.assertNotIn(
+                "telegram-duplicate",
+                [item["name"] for item in sessions.json()],
+            )
+
+    def test_concurrent_session_channel_bindings_are_atomic(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            app = create_app(
+                runtime_options=RuntimeOptions(
+                    workspace=workspace,
+                    no_tools=True,
+                    no_skills=True,
+                    no_memory=True,
+                    no_heartbeat=True,
+                ),
+                channel_config_path=workspace / ".echobot" / "channels.json",
+                context_builder=build_test_context,
+            )
+
+            with TestClient(app) as client:
+                session_names = [f"race-{index}" for index in range(8)]
+                for session_name in session_names:
+                    response = client.post("/api/sessions", json={"name": session_name})
+                    self.assertEqual(200, response.status_code)
+
+                async def bind_concurrently():
+                    runtime = client.app.state.runtime
+                    return await asyncio.gather(
+                        *(
+                            SessionApplicationService(runtime).set_channel_binding(
+                                session_name,
+                                channel_type="telegram",
+                                channel_integration_id="telegram",
+                            )
+                            for session_name in session_names
+                        ),
+                        return_exceptions=True,
+                    )
+
+                self.assertIsNotNone(client.portal)
+                results = client.portal.call(bind_concurrently)
+                listed = client.get("/api/sessions").json()
+
+            successes = [result for result in results if not isinstance(result, Exception)]
+            conflicts = [
+                result
+                for result in results
+                if isinstance(result, ChannelBindingConflictError)
+            ]
+            bound = [
+                item
+                for item in listed
+                if item["channel_integration_id"] == "telegram"
+            ]
+            self.assertEqual(1, len(successes))
+            self.assertEqual(len(session_names) - 1, len(conflicts))
+            self.assertEqual(1, len(bound))
+
+    def test_concurrent_session_creation_with_same_channel_binding_is_atomic(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            app = create_app(
+                runtime_options=RuntimeOptions(
+                    workspace=workspace,
+                    no_tools=True,
+                    no_skills=True,
+                    no_memory=True,
+                    no_heartbeat=True,
+                ),
+                channel_config_path=workspace / ".echobot" / "channels.json",
+                context_builder=build_test_context,
+            )
+
+            with TestClient(app) as client:
+                session_names = [f"create-race-{index}" for index in range(8)]
+
+                async def create_concurrently():
+                    runtime = client.app.state.runtime
+                    return await asyncio.gather(
+                        *(
+                            SessionApplicationService(runtime).create_session(
+                                name=session_name,
+                                channel_type="telegram",
+                                channel_integration_id="telegram",
+                            )
+                            for session_name in session_names
+                        ),
+                        return_exceptions=True,
+                    )
+
+                self.assertIsNotNone(client.portal)
+                results = client.portal.call(create_concurrently)
+                listed = client.get("/api/sessions").json()
+
+            successes = [result for result in results if not isinstance(result, Exception)]
+            conflicts = [
+                result
+                for result in results
+                if isinstance(result, ChannelBindingConflictError)
+            ]
+            bound = [
+                item
+                for item in listed
+                if item["channel_integration_id"] == "telegram"
+            ]
+            self.assertEqual(1, len(successes))
+            self.assertEqual(len(session_names) - 1, len(conflicts))
+            self.assertEqual(1, len(bound))
+            self.assertEqual(1, len(listed))
+
+    def test_conversation_save_does_not_erase_concurrent_channel_binding(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            app = create_app(
+                runtime_options=RuntimeOptions(
+                    workspace=workspace,
+                    no_tools=True,
+                    no_skills=True,
+                    no_memory=True,
+                    no_heartbeat=True,
+                ),
+                channel_config_path=workspace / ".echobot" / "channels.json",
+                context_builder=build_slow_ack_test_context,
+            )
+
+            with TestClient(app) as client:
+                created = client.post("/api/sessions", json={"name": "write-race"})
+
+                async def update_during_reply():
+                    runtime = client.app.state.runtime
+                    reply_task = asyncio.create_task(
+                        runtime.chat_service.run_prompt_stream("WRITE-RACE", "hello"),
+                    )
+                    await asyncio.sleep(0.02)
+                    await SessionApplicationService(runtime).set_channel_binding(
+                        "write-race",
+                        channel_type="discord",
+                        channel_integration_id="discord-main",
+                    )
+                    await reply_task
+
+                self.assertIsNotNone(client.portal)
+                client.portal.call(update_during_reply)
+                detail = client.get("/api/sessions/write-race")
+
+            self.assertEqual(200, created.status_code)
+            self.assertEqual(200, detail.status_code)
+            self.assertEqual("discord", detail.json()["channel_type"])
+            self.assertEqual("discord-main", detail.json()["channel_integration_id"])
+            self.assertEqual(2, len(detail.json()["history"]))
+
+    def test_conversation_save_and_session_rename_are_serialized(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            app = create_app(
+                runtime_options=RuntimeOptions(
+                    workspace=workspace,
+                    no_tools=True,
+                    no_skills=True,
+                    no_memory=True,
+                    no_heartbeat=True,
+                ),
+                channel_config_path=workspace / ".echobot" / "channels.json",
+                context_builder=build_slow_ack_test_context,
+            )
+
+            with TestClient(app) as client:
+                client.post("/api/sessions", json={"name": "rename-race"})
+
+                async def rename_during_reply():
+                    runtime = client.app.state.runtime
+                    reply_task = asyncio.create_task(
+                        runtime.chat_service.run_prompt_stream("rename-race", "hello"),
+                    )
+                    await asyncio.sleep(0.02)
+                    renamed = await SessionApplicationService(runtime).rename_session(
+                        "rename-race",
+                        "renamed-race",
+                    )
+                    await reply_task
+                    return renamed
+
+                self.assertIsNotNone(client.portal)
+                client.portal.call(rename_during_reply)
+                old_detail = client.get("/api/sessions/rename-race")
+                renamed_detail = client.get("/api/sessions/renamed-race")
+                current = client.get("/api/sessions/current")
+
+            self.assertEqual(404, old_detail.status_code)
+            self.assertEqual(200, renamed_detail.status_code)
+            self.assertEqual(2, len(renamed_detail.json()["history"]))
+            self.assertEqual("renamed-race", current.json()["name"])
+
+    def test_conversation_save_and_session_delete_are_serialized(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            app = create_app(
+                runtime_options=RuntimeOptions(
+                    workspace=workspace,
+                    no_tools=True,
+                    no_skills=True,
+                    no_memory=True,
+                    no_heartbeat=True,
+                ),
+                channel_config_path=workspace / ".echobot" / "channels.json",
+                context_builder=build_slow_ack_test_context,
+            )
+
+            with TestClient(app) as client:
+                client.post("/api/sessions", json={"name": "delete-race"})
+
+                async def delete_during_reply():
+                    runtime = client.app.state.runtime
+                    reply_task = asyncio.create_task(
+                        runtime.chat_service.run_prompt_stream("delete-race", "hello"),
+                    )
+                    await asyncio.sleep(0.02)
+                    deleted = await SessionApplicationService(runtime).delete_session(
+                        "delete-race",
+                    )
+                    await reply_task
+                    return deleted
+
+                self.assertIsNotNone(client.portal)
+                deleted = client.portal.call(delete_during_reply)
+                detail = client.get("/api/sessions/delete-race")
+
+            self.assertTrue(deleted)
+            self.assertEqual(404, detail.status_code)
+
+    def test_queued_chat_does_not_recreate_renamed_session(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            app = create_app(
+                runtime_options=RuntimeOptions(
+                    workspace=workspace,
+                    no_tools=True,
+                    no_skills=True,
+                    no_memory=True,
+                    no_heartbeat=True,
+                ),
+                channel_config_path=workspace / ".echobot" / "channels.json",
+                context_builder=build_test_context,
+            )
+
+            with TestClient(app) as client:
+                client.post("/api/sessions", json={"name": "queued-rename"})
+
+                async def queue_rename_before_chat():
+                    runtime = client.app.state.runtime
+                    lock = await runtime.context.coordinator.session_lock(
+                        "queued-rename",
+                    )
+                    await lock.acquire()
+                    try:
+                        rename_task = asyncio.create_task(
+                            SessionApplicationService(runtime).rename_session(
+                                "queued-rename",
+                                "renamed-queue",
+                            ),
+                        )
+                        await asyncio.sleep(0)
+                        reply_task = asyncio.create_task(
+                            runtime.chat_service.run_prompt_stream(
+                                "queued-rename",
+                                "hello",
+                            ),
+                        )
+                        await asyncio.sleep(0.02)
+                    finally:
+                        lock.release()
+                    return await asyncio.gather(
+                        rename_task,
+                        reply_task,
+                        return_exceptions=True,
+                    )
+
+                self.assertIsNotNone(client.portal)
+                renamed, reply = client.portal.call(queue_rename_before_chat)
+                old_detail = client.get("/api/sessions/queued-rename")
+                renamed_detail = client.get("/api/sessions/renamed-queue")
+
+            self.assertFalse(isinstance(renamed, Exception))
+            self.assertIsInstance(reply, RuntimeError)
+            self.assertEqual(404, old_detail.status_code)
+            self.assertEqual(200, renamed_detail.status_code)
+            self.assertEqual(0, len(renamed_detail.json()["history"]))
+
+    def test_queued_chat_does_not_recreate_deleted_session(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            app = create_app(
+                runtime_options=RuntimeOptions(
+                    workspace=workspace,
+                    no_tools=True,
+                    no_skills=True,
+                    no_memory=True,
+                    no_heartbeat=True,
+                ),
+                channel_config_path=workspace / ".echobot" / "channels.json",
+                context_builder=build_test_context,
+            )
+
+            with TestClient(app) as client:
+                client.post("/api/sessions", json={"name": "queued-delete"})
+
+                async def queue_delete_before_chat():
+                    runtime = client.app.state.runtime
+                    lock = await runtime.context.coordinator.session_lock(
+                        "queued-delete",
+                    )
+                    await lock.acquire()
+                    try:
+                        delete_task = asyncio.create_task(
+                            SessionApplicationService(runtime).delete_session(
+                                "queued-delete",
+                            ),
+                        )
+                        await asyncio.sleep(0)
+                        reply_task = asyncio.create_task(
+                            runtime.chat_service.run_prompt_stream(
+                                "queued-delete",
+                                "hello",
+                            ),
+                        )
+                        await asyncio.sleep(0.02)
+                    finally:
+                        lock.release()
+                    return await asyncio.gather(
+                        delete_task,
+                        reply_task,
+                        return_exceptions=True,
+                    )
+
+                self.assertIsNotNone(client.portal)
+                deleted, reply = client.portal.call(queue_delete_before_chat)
+                detail = client.get("/api/sessions/queued-delete")
+
+            self.assertTrue(deleted)
+            self.assertIsInstance(reply, RuntimeError)
+            self.assertEqual(404, detail.status_code)
+
+    def test_role_change_channel_conflict_does_not_partially_update_session(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            app = create_app(
+                runtime_options=RuntimeOptions(
+                    workspace=workspace,
+                    no_tools=True,
+                    no_skills=True,
+                    no_memory=True,
+                    no_heartbeat=True,
+                ),
+                channel_config_path=workspace / ".echobot" / "channels.json",
+                context_builder=build_test_context,
+            )
+
+            with TestClient(app) as client:
+                character = client.post(
+                    "/api/character-profiles",
+                    json={
+                        "name": "Telegram Host",
+                        "prompt": "# Telegram Host",
+                        "default_channel_type": "telegram",
+                        "default_channel_integration_id": "telegram",
+                    },
+                )
+                bound = client.post(
+                    "/api/sessions",
+                    json={
+                        "name": "bound-stage",
+                        "channel_type": "telegram",
+                        "channel_integration_id": "telegram",
+                    },
+                )
+                created = client.post(
+                    "/api/sessions",
+                    json={"name": "unbound-session"},
+                )
+                rejected = client.put(
+                    "/api/sessions/unbound-session/role",
+                    json={"role_name": "telegram-host"},
+                )
+                detail = client.get("/api/sessions/unbound-session")
+
+            self.assertEqual(200, character.status_code)
+            self.assertEqual(200, bound.status_code)
+            self.assertEqual(200, created.status_code)
+            self.assertEqual(409, rejected.status_code)
+            self.assertEqual("default", detail.json()["role_name"])
+            self.assertEqual("", detail.json()["channel_type"])
+            self.assertEqual("", detail.json()["channel_integration_id"])
+
+    def test_rejected_role_change_does_not_create_missing_session(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            app = create_app(
+                runtime_options=RuntimeOptions(
+                    workspace=workspace,
+                    no_tools=True,
+                    no_skills=True,
+                    no_memory=True,
+                    no_heartbeat=True,
+                ),
+                channel_config_path=workspace / ".echobot" / "channels.json",
+                context_builder=build_test_context,
+            )
+
+            with TestClient(app) as client:
+                character = client.post(
+                    "/api/character-profiles",
+                    json={
+                        "name": "Telegram Owner",
+                        "prompt": "# Telegram Owner",
+                        "default_channel_type": "telegram",
+                        "default_channel_integration_id": "telegram",
+                    },
+                )
+                bound = client.post(
+                    "/api/sessions",
+                    json={
+                        "name": "telegram-owner",
+                        "channel_type": "telegram",
+                        "channel_integration_id": "telegram",
+                    },
+                )
+                rejected = client.put(
+                    "/api/sessions/missing-session/role",
+                    json={"role_name": "telegram-owner"},
+                )
+                missing = client.get("/api/sessions/missing-session")
+
+            self.assertEqual(200, character.status_code)
+            self.assertEqual(200, bound.status_code)
+            self.assertEqual(409, rejected.status_code)
+            self.assertEqual(404, missing.status_code)
+
+    def test_failed_session_creation_rolls_back_new_session(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            app = create_app(
+                runtime_options=RuntimeOptions(
+                    workspace=workspace,
+                    no_tools=True,
+                    no_skills=True,
+                    no_memory=True,
+                    no_heartbeat=True,
+                ),
+                channel_config_path=workspace / ".echobot" / "channels.json",
+                context_builder=build_test_context,
+            )
+
+            with TestClient(app) as client:
+                role = client.post(
+                    "/api/roles",
+                    json={"name": "profile-failure", "prompt": "# Profile failure"},
+                )
+                with patch(
+                    "echobot.app.services.session_application.apply_runtime_profile_for_role",
+                    new=AsyncMock(side_effect=ValueError("profile apply failed")),
+                ):
+                    rejected = client.post(
+                        "/api/sessions",
+                        json={
+                            "name": "partial-create",
+                            "role_name": "profile-failure",
+                        },
+                    )
+                sessions = client.get("/api/sessions")
+
+            self.assertEqual(200, role.status_code)
+            self.assertEqual(400, rejected.status_code)
+            self.assertNotIn(
+                "partial-create",
+                [item["name"] for item in sessions.json()],
+            )
+
+    def test_failed_role_apply_rolls_back_implicitly_created_session(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            app = create_app(
+                runtime_options=RuntimeOptions(
+                    workspace=workspace,
+                    no_tools=True,
+                    no_skills=True,
+                    no_memory=True,
+                    no_heartbeat=True,
+                ),
+                channel_config_path=workspace / ".echobot" / "channels.json",
+                context_builder=build_test_context,
+            )
+
+            with TestClient(app) as client:
+                client.post(
+                    "/api/roles",
+                    json={"name": "role-failure", "prompt": "# Role failure"},
+                )
+                with patch(
+                    "echobot.app.services.session_application.apply_runtime_profile_for_role",
+                    new=AsyncMock(side_effect=ValueError("profile apply failed")),
+                ):
+                    rejected = client.put(
+                        "/api/sessions/implicit-session/role",
+                        json={"role_name": "role-failure"},
+                    )
+                missing = client.get("/api/sessions/implicit-session")
+
+            self.assertEqual(400, rejected.status_code)
+            self.assertEqual(404, missing.status_code)
+
+    def test_failed_role_apply_cannot_overwrite_newer_successful_role(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            app = create_app(
+                runtime_options=RuntimeOptions(
+                    workspace=workspace,
+                    no_tools=True,
+                    no_skills=True,
+                    no_memory=True,
+                    no_heartbeat=True,
+                ),
+                channel_config_path=workspace / ".echobot" / "channels.json",
+                context_builder=build_test_context,
+            )
+
+            with TestClient(app) as client:
+                for role_name in ("role-a", "role-b"):
+                    created = client.post(
+                        "/api/roles",
+                        json={"name": role_name, "prompt": f"# {role_name}"},
+                    )
+                    self.assertEqual(200, created.status_code)
+                client.post("/api/sessions", json={"name": "role-race"})
+                first_apply_started = asyncio.Event()
+                release_first_apply = asyncio.Event()
+
+                async def controlled_apply(_runtime, role_name):
+                    if role_name == "role-a":
+                        first_apply_started.set()
+                        await release_first_apply.wait()
+                        raise ValueError("role-a profile failed")
+                    return None
+
+                async def race_role_updates():
+                    runtime = client.app.state.runtime
+                    session_app = SessionApplicationService(runtime)
+                    first = asyncio.create_task(
+                        session_app.set_role("role-race", "role-a"),
+                    )
+                    await first_apply_started.wait()
+                    second = asyncio.create_task(
+                        session_app.set_role("role-race", "role-b"),
+                    )
+                    await asyncio.sleep(0.02)
+                    release_first_apply.set()
+                    return await asyncio.gather(first, second, return_exceptions=True)
+
+                with patch(
+                    "echobot.app.services.session_application.apply_runtime_profile_for_role",
+                    new=controlled_apply,
+                ):
+                    self.assertIsNotNone(client.portal)
+                    first, second = client.portal.call(race_role_updates)
+                detail = client.get("/api/sessions/role-race")
+
+            self.assertIsInstance(first, ValueError)
+            self.assertFalse(isinstance(second, Exception))
+            self.assertEqual("role-b", detail.json()["role_name"])
+
+    def test_failed_session_create_restores_current_session_and_runtime_profile(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            app = create_app(
+                runtime_options=RuntimeOptions(
+                    workspace=workspace,
+                    no_tools=True,
+                    no_skills=True,
+                    no_memory=True,
+                    no_heartbeat=True,
+                ),
+                channel_config_path=workspace / ".echobot" / "channels.json",
+                context_builder=build_test_context,
+            )
+
+            with TestClient(app) as client:
+                client.post("/api/sessions", json={"name": "anchor"})
+                client.put("/api/sessions/current", json={"name": "anchor"})
+                client.post(
+                    "/api/roles",
+                    json={"name": "profile-b", "prompt": "# Profile B"},
+                )
+                runtime = client.app.state.runtime
+                runtime.model_profile_service.set_role_binding("profile-b", "b")
+                apply_profile = AsyncMock(
+                    side_effect=[ValueError("profile apply failed"), None],
+                )
+                with patch.object(runtime, "apply_model_profile", new=apply_profile):
+                    rejected = client.post(
+                        "/api/sessions",
+                        json={"name": "failed-create", "role_name": "profile-b"},
+                    )
+                current = client.get("/api/sessions/current")
+                missing = client.get("/api/sessions/failed-create")
+                profile_state = runtime.model_profile_service.list_profiles()
+
+            self.assertEqual(400, rejected.status_code)
+            self.assertEqual("anchor", current.json()["name"])
+            self.assertEqual(404, missing.status_code)
+            self.assertEqual("a", profile_state["active_profile_id"])
+            self.assertEqual(2, apply_profile.await_count)
+            self.assertEqual(
+                "a",
+                apply_profile.await_args_list[-1].args[0]["profile_id"],
+            )
+
+    def test_failed_set_role_restores_current_session_and_runtime_profile(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            app = create_app(
+                runtime_options=RuntimeOptions(
+                    workspace=workspace,
+                    no_tools=True,
+                    no_skills=True,
+                    no_memory=True,
+                    no_heartbeat=True,
+                ),
+                channel_config_path=workspace / ".echobot" / "channels.json",
+                context_builder=build_test_context,
+            )
+
+            with TestClient(app) as client:
+                client.post("/api/sessions", json={"name": "anchor"})
+                client.post("/api/sessions", json={"name": "role-target"})
+                client.put("/api/sessions/current", json={"name": "anchor"})
+                client.post(
+                    "/api/roles",
+                    json={"name": "profile-b", "prompt": "# Profile B"},
+                )
+                runtime = client.app.state.runtime
+                runtime.model_profile_service.set_role_binding("profile-b", "b")
+                apply_profile = AsyncMock(
+                    side_effect=[ValueError("profile apply failed"), None],
+                )
+                with patch.object(runtime, "apply_model_profile", new=apply_profile):
+                    rejected = client.put(
+                        "/api/sessions/role-target/role",
+                        json={"role_name": "profile-b"},
+                    )
+                current = client.get("/api/sessions/current")
+                target = client.get("/api/sessions/role-target")
+                profile_state = runtime.model_profile_service.list_profiles()
+
+            self.assertEqual(400, rejected.status_code)
+            self.assertEqual("anchor", current.json()["name"])
+            self.assertEqual("default", target.json()["role_name"])
+            self.assertEqual("a", profile_state["active_profile_id"])
+            self.assertEqual(2, apply_profile.await_count)
+            self.assertEqual(
+                "a",
+                apply_profile.await_args_list[-1].args[0]["profile_id"],
+            )
+
+    def test_failed_session_create_preserves_newer_chat_current_pointer(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            app = create_app(
+                runtime_options=RuntimeOptions(
+                    workspace=workspace,
+                    no_tools=True,
+                    no_skills=True,
+                    no_memory=True,
+                    no_heartbeat=True,
+                ),
+                channel_config_path=workspace / ".echobot" / "channels.json",
+                context_builder=build_test_context,
+            )
+
+            with TestClient(app) as client:
+                client.post("/api/sessions", json={"name": "pointer-anchor"})
+                client.put(
+                    "/api/sessions/current",
+                    json={"name": "pointer-anchor"},
+                )
+                client.post(
+                    "/api/roles",
+                    json={"name": "pointer-role", "prompt": "# Pointer role"},
+                )
+                apply_started = asyncio.Event()
+                release_apply = asyncio.Event()
+
+                async def fail_after_newer_chat(_runtime, _role_name):
+                    apply_started.set()
+                    await release_apply.wait()
+                    raise ValueError("profile apply failed")
+
+                async def run_race():
+                    runtime = client.app.state.runtime
+                    create_task = asyncio.create_task(
+                        SessionApplicationService(runtime).create_session(
+                            name="failed-create-pointer",
+                            role_name="pointer-role",
+                        ),
+                    )
+                    await apply_started.wait()
+                    await runtime.chat_service.run_prompt_stream(
+                        "newer-chat-pointer",
+                        "hello",
+                    )
+                    release_apply.set()
+                    return await asyncio.gather(create_task, return_exceptions=True)
+
+                with patch(
+                    "echobot.app.services.session_application.apply_runtime_profile_for_role",
+                    new=fail_after_newer_chat,
+                ):
+                    self.assertIsNotNone(client.portal)
+                    result = client.portal.call(run_race)[0]
+                current = client.get("/api/sessions/current")
+                missing = client.get("/api/sessions/failed-create-pointer")
+
+            self.assertIsInstance(result, ValueError)
+            self.assertEqual("newer-chat-pointer", current.json()["name"])
+            self.assertEqual(404, missing.status_code)
+
+    def test_failed_set_role_preserves_newer_chat_current_pointer(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            app = create_app(
+                runtime_options=RuntimeOptions(
+                    workspace=workspace,
+                    no_tools=True,
+                    no_skills=True,
+                    no_memory=True,
+                    no_heartbeat=True,
+                ),
+                channel_config_path=workspace / ".echobot" / "channels.json",
+                context_builder=build_test_context,
+            )
+
+            with TestClient(app) as client:
+                client.post("/api/sessions", json={"name": "pointer-anchor"})
+                client.post("/api/sessions", json={"name": "pointer-target"})
+                client.put(
+                    "/api/sessions/current",
+                    json={"name": "pointer-anchor"},
+                )
+                client.post(
+                    "/api/roles",
+                    json={"name": "pointer-role", "prompt": "# Pointer role"},
+                )
+                apply_started = asyncio.Event()
+                release_apply = asyncio.Event()
+
+                async def fail_after_newer_chat(_runtime, _role_name):
+                    apply_started.set()
+                    await release_apply.wait()
+                    raise ValueError("profile apply failed")
+
+                async def run_race():
+                    runtime = client.app.state.runtime
+                    role_task = asyncio.create_task(
+                        SessionApplicationService(runtime).set_role(
+                            "pointer-target",
+                            "pointer-role",
+                        ),
+                    )
+                    await apply_started.wait()
+                    await runtime.chat_service.run_prompt_stream(
+                        "newer-chat-pointer",
+                        "hello",
+                    )
+                    release_apply.set()
+                    return await asyncio.gather(role_task, return_exceptions=True)
+
+                with patch(
+                    "echobot.app.services.session_application.apply_runtime_profile_for_role",
+                    new=fail_after_newer_chat,
+                ):
+                    self.assertIsNotNone(client.portal)
+                    result = client.portal.call(run_race)[0]
+                current = client.get("/api/sessions/current")
+                target = client.get("/api/sessions/pointer-target")
+
+            self.assertIsInstance(result, ValueError)
+            self.assertEqual("newer-chat-pointer", current.json()["name"])
+            self.assertEqual("default", target.json()["role_name"])
+
+    def test_failed_session_create_serializes_same_session_chat(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            app = create_app(
+                runtime_options=RuntimeOptions(
+                    workspace=workspace,
+                    no_tools=True,
+                    no_skills=True,
+                    no_memory=True,
+                    no_heartbeat=True,
+                ),
+                channel_config_path=workspace / ".echobot" / "channels.json",
+                context_builder=build_test_context,
+            )
+
+            with TestClient(app) as client:
+                client.post("/api/sessions", json={"name": "anchor"})
+                client.post(
+                    "/api/roles",
+                    json={"name": "create-race-role", "prompt": "# Create race"},
+                )
+                apply_started = asyncio.Event()
+                release_apply = asyncio.Event()
+
+                async def controlled_failure(_runtime, _role_name):
+                    apply_started.set()
+                    await release_apply.wait()
+                    raise ValueError("profile apply failed")
+
+                async def run_race():
+                    runtime = client.app.state.runtime
+                    create_task = asyncio.create_task(
+                        SessionApplicationService(runtime).create_session(
+                            name="same-session-create-race",
+                            role_name="create-race-role",
+                        ),
+                    )
+                    await apply_started.wait()
+                    chat_task = asyncio.create_task(
+                        runtime.chat_service.run_prompt_stream(
+                            "same-session-create-race",
+                            "hello",
+                        ),
+                    )
+                    await asyncio.sleep(0.02)
+                    release_apply.set()
+                    return await asyncio.gather(
+                        create_task,
+                        chat_task,
+                        return_exceptions=True,
+                    )
+
+                with patch(
+                    "echobot.app.services.session_application.apply_runtime_profile_for_role",
+                    new=controlled_failure,
+                ):
+                    self.assertIsNotNone(client.portal)
+                    create_result, chat_result = client.portal.call(run_race)
+                missing = client.get("/api/sessions/same-session-create-race")
+
+            self.assertIsInstance(create_result, ValueError)
+            self.assertIsInstance(chat_result, RuntimeError)
+            self.assertEqual(404, missing.status_code)
+
+    def test_failed_set_role_rejects_same_name_pointer_aba(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            app = create_app(
+                runtime_options=RuntimeOptions(
+                    workspace=workspace,
+                    no_tools=True,
+                    no_skills=True,
+                    no_memory=True,
+                    no_heartbeat=True,
+                ),
+                channel_config_path=workspace / ".echobot" / "channels.json",
+                context_builder=build_test_context,
+            )
+
+            with TestClient(app) as client:
+                client.post("/api/sessions", json={"name": "aba-anchor"})
+                client.post("/api/sessions", json={"name": "aba-target"})
+                client.put("/api/sessions/current", json={"name": "aba-anchor"})
+                client.post(
+                    "/api/roles",
+                    json={"name": "aba-role", "prompt": "# ABA role"},
+                )
+                apply_started = asyncio.Event()
+                release_apply = asyncio.Event()
+
+                async def controlled_failure(_runtime, _role_name):
+                    apply_started.set()
+                    await release_apply.wait()
+                    raise ValueError("profile apply failed")
+
+                async def run_race():
+                    runtime = client.app.state.runtime
+                    role_task = asyncio.create_task(
+                        SessionApplicationService(runtime).set_role(
+                            "aba-target",
+                            "aba-role",
+                        ),
+                    )
+                    await apply_started.wait()
+                    await runtime.session_service.set_current_session("aba-target")
+                    release_apply.set()
+                    return await asyncio.gather(role_task, return_exceptions=True)
+
+                with patch(
+                    "echobot.app.services.session_application.apply_runtime_profile_for_role",
+                    new=controlled_failure,
+                ):
+                    self.assertIsNotNone(client.portal)
+                    role_result = client.portal.call(run_race)[0]
+                current = client.get("/api/sessions/current")
+
+            self.assertIsInstance(role_result, ValueError)
+            self.assertEqual("aba-target", current.json()["name"])
+
+    def test_failed_set_role_preserves_newer_runtime_profile(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            app = create_app(
+                runtime_options=RuntimeOptions(
+                    workspace=workspace,
+                    no_tools=True,
+                    no_skills=True,
+                    no_memory=True,
+                    no_heartbeat=True,
+                ),
+                channel_config_path=workspace / ".echobot" / "channels.json",
+                context_builder=build_test_context,
+            )
+
+            with TestClient(app) as client:
+                client.post("/api/sessions", json={"name": "profile-race"})
+                client.post(
+                    "/api/roles",
+                    json={"name": "profile-race-role", "prompt": "# Profile race"},
+                )
+                runtime = client.app.state.runtime
+                apply_started = asyncio.Event()
+                release_apply = asyncio.Event()
+
+                async def controlled_failure(_runtime, _role_name):
+                    apply_started.set()
+                    await release_apply.wait()
+                    raise ValueError("profile apply failed")
+
+                async def run_race():
+                    role_task = asyncio.create_task(
+                        SessionApplicationService(runtime).set_role(
+                            "profile-race",
+                            "profile-race-role",
+                        ),
+                    )
+                    await apply_started.wait()
+                    runtime.model_profile_service.activate_profile("b")
+                    newer_profile = runtime.model_profile_service.get_profile_for_runtime(
+                        "b",
+                    )
+                    await runtime.apply_model_profile(newer_profile)
+                    release_apply.set()
+                    return await asyncio.gather(role_task, return_exceptions=True)
+
+                with patch(
+                    "echobot.app.services.session_application.apply_runtime_profile_for_role",
+                    new=controlled_failure,
+                ):
+                    self.assertIsNotNone(client.portal)
+                    role_result = client.portal.call(run_race)[0]
+                profile_state = runtime.model_profile_service.list_profiles()
+
+            self.assertIsInstance(role_result, ValueError)
+            self.assertEqual("b", profile_state["active_profile_id"])
+            self.assertEqual("b", runtime.last_applied_model_profile["profile_id"])
+
+    def test_llm_activation_is_atomic_with_failed_role_rollback(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            app = create_app(
+                runtime_options=RuntimeOptions(
+                    workspace=workspace,
+                    no_tools=True,
+                    no_skills=True,
+                    no_memory=True,
+                    no_heartbeat=True,
+                ),
+                channel_config_path=workspace / ".echobot" / "channels.json",
+                context_builder=build_test_context,
+            )
+
+            with TestClient(app) as client:
+                client.post("/api/sessions", json={"name": "activation-race"})
+                client.post(
+                    "/api/roles",
+                    json={"name": "activation-role", "prompt": "# Activation role"},
+                )
+                runtime = client.app.state.runtime
+                role_apply_started = asyncio.Event()
+                release_role_failure = asyncio.Event()
+                activation_pre_apply = asyncio.Event()
+                release_activation_apply = asyncio.Event()
+                original_apply = runtime.apply_model_profile
+                blocked_activation = False
+
+                async def controlled_role_failure(_runtime, _role_name):
+                    role_apply_started.set()
+                    await release_role_failure.wait()
+                    raise ValueError("profile apply failed")
+
+                async def delayed_apply(profile):
+                    nonlocal blocked_activation
+                    if profile.get("profile_id") == "b" and not blocked_activation:
+                        blocked_activation = True
+                        activation_pre_apply.set()
+                        await release_activation_apply.wait()
+                    await original_apply(profile)
+
+                async def run_race():
+                    runtime.apply_model_profile = delayed_apply
+                    try:
+                        role_task = asyncio.create_task(
+                            SessionApplicationService(runtime).set_role(
+                                "activation-race",
+                                "activation-role",
+                            ),
+                        )
+                        await role_apply_started.wait()
+                        activation_task = asyncio.create_task(
+                            activate_llm_model(
+                                "b",
+                                runtime=runtime,
+                                _admin_user="admin",
+                            ),
+                        )
+                        await activation_pre_apply.wait()
+                        release_role_failure.set()
+                        await asyncio.sleep(0.02)
+                        release_activation_apply.set()
+                        return await asyncio.gather(
+                            role_task,
+                            activation_task,
+                            return_exceptions=True,
+                        )
+                    finally:
+                        runtime.apply_model_profile = original_apply
+
+                with patch(
+                    "echobot.app.services.session_application.apply_runtime_profile_for_role",
+                    new=controlled_role_failure,
+                ):
+                    self.assertIsNotNone(client.portal)
+                    role_result, activation_result = client.portal.call(run_race)
+                profile_state = runtime.model_profile_service.list_profiles()
+
+            self.assertIsInstance(role_result, ValueError)
+            self.assertNotIsInstance(activation_result, BaseException)
+            self.assertEqual("b", profile_state["active_profile_id"])
+            self.assertEqual("b", runtime.last_applied_model_profile["profile_id"])
 
     def test_chat_endpoint_accepts_image_only_requests(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

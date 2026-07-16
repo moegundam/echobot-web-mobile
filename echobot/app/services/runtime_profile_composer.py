@@ -17,6 +17,27 @@ async def apply_runtime_profile_for_role(
     *,
     preferred_profile_id: str = "",
 ) -> dict[str, Any] | None:
+    lock = getattr(runtime, "model_profile_lock", None)
+    if lock is None:
+        return await _apply_runtime_profile_for_role_unlocked(
+            runtime,
+            role_name,
+            preferred_profile_id=preferred_profile_id,
+        )
+    async with lock:
+        return await _apply_runtime_profile_for_role_unlocked(
+            runtime,
+            role_name,
+            preferred_profile_id=preferred_profile_id,
+        )
+
+
+async def _apply_runtime_profile_for_role_unlocked(
+    runtime,
+    role_name: str,
+    *,
+    preferred_profile_id: str = "",
+) -> dict[str, Any] | None:
     if runtime.model_profile_service is None:
         return None
 

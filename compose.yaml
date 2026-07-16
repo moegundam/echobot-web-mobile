@@ -5,9 +5,9 @@ services:
     build:
       context: .
       target: runtime
-    image: ghcr.io/moegundam/echobot-web-mobile:upgrade
-    ports:
-      - "127.0.0.1:${ECHOBOT_HOST_PORT:-8000}:8000"
+    image: echobot-web-mobile:local
+    expose:
+      - "8000"
     env_file:
       - path: ./docker.env.local
         required: false
@@ -35,6 +35,40 @@ services:
       interval: 30s
       timeout: 5s
       start_period: 20s
+      retries: 3
+
+  ingress:
+    image: cgr.dev/chainguard/nginx@sha256:28bbae890f8266882e75a83ab6a1472d276d2d014a8eeb63d1d2e6d6093b5ed4
+    user: "65532:65532"
+    depends_on:
+      echobot:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${ECHOBOT_HOST_PORT:-8080}:8080"
+    volumes:
+      - ./deploy/nginx/echobot-container.conf:/etc/nginx/nginx.conf:ro
+    tmpfs:
+      - /var/cache/nginx
+      - /var/run
+      - /tmp
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - /usr/bin/wget
+        - --quiet
+        - --tries=1
+        - --timeout=5
+        - --output-document=/dev/null
+        - http://127.0.0.1:8080/healthz
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
       retries: 3
 
 volumes:

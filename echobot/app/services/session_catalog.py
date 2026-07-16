@@ -204,7 +204,7 @@ def _channel_configured(channel_id: str, config: dict[str, Any]) -> bool:
     if channel_id == "telegram":
         return bool(config.get("bot_token_configured"))
     if channel_id == "discord":
-        return bool(config.get("bot_token_configured")) or bool(str(config.get("webhook_url") or "").strip())
+        return bool(config.get("bot_token_configured")) or bool(config.get("webhook_url_configured"))
     if channel_id == "qq":
         return bool(str(config.get("app_id") or "").strip()) and bool(config.get("client_secret_configured"))
     return bool(config.get("enabled"))

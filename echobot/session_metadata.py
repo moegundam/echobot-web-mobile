@@ -7,6 +7,10 @@ CHANNEL_TYPE_METADATA_KEY = "channel_type"
 CHANNEL_INTEGRATION_METADATA_KEY = "channel_integration_id"
 
 
+class ChannelBindingConflictError(ValueError):
+    """Raised when one channel integration would resolve to multiple Sessions."""
+
+
 def channel_type_from_metadata(metadata: dict[str, Any] | None) -> str:
     if not isinstance(metadata, dict):
         return ""
@@ -60,3 +64,28 @@ def matches_channel_binding(
     if bound_type:
         return bound_type == normalized_channel_type
     return False
+
+
+def channel_bindings_overlap(
+    metadata: dict[str, Any] | None,
+    *,
+    channel_type: str,
+    channel_integration_id: str = "",
+) -> bool:
+    """Return whether two bindings can match the same inbound channel route."""
+    candidate_metadata = set_channel_binding(
+        {},
+        channel_type=channel_type,
+        channel_integration_id=channel_integration_id,
+    )
+    if not candidate_metadata:
+        return False
+    return matches_channel_binding(
+        metadata,
+        channel_type=channel_type,
+        channel_integration_id=channel_integration_id,
+    ) or matches_channel_binding(
+        candidate_metadata,
+        channel_type=channel_type_from_metadata(metadata),
+        channel_integration_id=channel_integration_id_from_metadata(metadata),
+    )

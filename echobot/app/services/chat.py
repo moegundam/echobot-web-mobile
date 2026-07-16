@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from typing import Any, Protocol
+from typing import Any
 
 from ...models import FileInput, ImageInput
 from ...orchestration import (
@@ -15,19 +15,12 @@ from ...orchestration import (
 StreamCallback = Callable[[str], Awaitable[None]]
 
 
-class CurrentSessionService(Protocol):
-    async def set_current_session(self, name: str) -> None:
-        ...
-
-
 class ChatService:
     def __init__(
         self,
         coordinator: ConversationCoordinator,
-        session_service: CurrentSessionService,
     ) -> None:
         self._coordinator = coordinator
-        self._session_service = session_service
 
     async def run_prompt(
         self,
@@ -49,7 +42,6 @@ class ChatService:
             route_mode=route_mode,
             response_language=response_language,
         )
-        await self._session_service.set_current_session(result.session.name)
         return result
 
     async def run_prompt_stream(
@@ -74,7 +66,6 @@ class ChatService:
             on_chunk=on_chunk,
             response_language=response_language,
         )
-        await self._session_service.set_current_session(result.session.name)
         return result
 
     async def set_role(
@@ -83,7 +74,6 @@ class ChatService:
         role_name: str,
     ):
         session = await self._coordinator.set_session_role(session_name, role_name)
-        await self._session_service.set_current_session(session.name)
         return session
 
     async def current_role_name(self, session_name: str) -> str:
@@ -98,7 +88,6 @@ class ChatService:
             session_name,
             route_mode,
         )
-        await self._session_service.set_current_session(session.name)
         return session
 
     async def current_route_mode(self, session_name: str) -> RouteMode:
@@ -134,5 +123,4 @@ class ChatService:
 
     async def retry_job(self, job_id: str) -> OrchestratedTurnResult:
         result = await self._coordinator.retry_job(job_id)
-        await self._session_service.set_current_session(result.session.name)
         return result

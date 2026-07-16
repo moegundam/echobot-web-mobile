@@ -13,6 +13,14 @@ from .types import OutboundMessage
 
 
 logger = logging.getLogger(__name__)
+_CHANNEL_STARTUP_TIMEOUT_SECONDS = 30.0
+
+
+class ChannelStartupError(RuntimeError):
+    def __init__(self, channel_name: str, error_type: str) -> None:
+        super().__init__(
+            f"Channel {channel_name} failed to start ({error_type})",
+        )
 
 
 class ChannelManager:
@@ -41,10 +49,27 @@ class ChannelManager:
             name="echobot_outbound_dispatcher",
         )
         for name, channel in self.channels.items():
-            self._channel_tasks[name] = asyncio.create_task(
+            task = asyncio.create_task(
                 self._run_channel(name, channel),
                 name=f"echobot_channel_{name}",
             )
+            task.add_done_callback(self._consume_channel_task_result)
+            self._channel_tasks[name] = task
+
+        try:
+            await asyncio.gather(
+                *(
+                    self._wait_for_channel_startup(
+                        name,
+                        channel,
+                        self._channel_tasks[name],
+                    )
+                    for name, channel in self.channels.items()
+                ),
+            )
+        except BaseException:
+            await self.stop_all()
+            raise
 
     async def stop_all(self) -> None:
         for channel in self.channels.values():
@@ -101,8 +126,41 @@ class ChannelManager:
             await channel.start()
         except asyncio.CancelledError:
             raise
-        except Exception:
-            logger.exception("Channel %s crashed", name)
+        except Exception as exc:
+            logger.error("Channel %s stopped with %s", name, type(exc).__name__)
+            raise
+
+    async def _wait_for_channel_startup(
+        self,
+        name: str,
+        channel: BaseChannel,
+        task: asyncio.Task[None],
+    ) -> None:
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + _CHANNEL_STARTUP_TIMEOUT_SECONDS
+        while True:
+            if channel.is_running:
+                return
+            if task.done():
+                try:
+                    task.result()
+                except Exception as exc:
+                    raise ChannelStartupError(name, type(exc).__name__) from None
+                raise RuntimeError(
+                    f"Channel {name} exited before signaling readiness",
+                )
+            if loop.time() >= deadline:
+                raise TimeoutError(
+                    f"Channel {name} did not become ready within "
+                    f"{_CHANNEL_STARTUP_TIMEOUT_SECONDS:g} seconds",
+                )
+            await asyncio.sleep(0.05)
+
+    @staticmethod
+    def _consume_channel_task_result(task: asyncio.Task[None]) -> None:
+        if task.cancelled():
+            return
+        task.exception()
 
     async def _dispatch_outbound(self) -> None:
         while True:

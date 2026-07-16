@@ -1,3 +1,3 @@
-from .postgres_schema import POSTGRES_SCHEMA_SQL
+from .postgres_schema import POSTGRES_SCHEMA_SQL, POSTGRES_SCHEMA_VERSION
 
-__all__ = ["POSTGRES_SCHEMA_SQL"]
+__all__ = ["POSTGRES_SCHEMA_SQL", "POSTGRES_SCHEMA_VERSION"]

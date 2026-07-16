@@ -22,6 +22,10 @@ ChannelReloadCallback = Callable[[ChannelsConfig], Awaitable[None]]
 ChannelStatusCallback = Callable[[], dict[str, dict[str, bool]]]
 
 
+class ChannelActivationError(RuntimeError):
+    pass
+
+
 class ChannelService:
     def __init__(
         self,
@@ -52,12 +56,27 @@ class ChannelService:
                 existing_config.to_dict(),
             )
         )
-        await asyncio.to_thread(
-            save_channels_config,
-            config,
-            self._config_path,
-        )
-        await self._reload_channels(config)
+        try:
+            await self._reload_channels(config)
+        except Exception:
+            raise ChannelActivationError(
+                "Channel configuration could not be activated; the previous runtime remains active",
+            ) from None
+
+        try:
+            await asyncio.to_thread(
+                save_channels_config,
+                config,
+                self._config_path,
+            )
+        except Exception:
+            try:
+                await self._reload_channels(existing_config)
+            except Exception:
+                raise ChannelActivationError(
+                    "Channel configuration could not be persisted or rolled back",
+                ) from None
+            raise
         return config.to_dict()
 
     async def get_status(self) -> dict[str, dict[str, bool]]:

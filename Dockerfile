@@ -1,4 +1,4 @@
-FROM cgr.dev/chainguard/wolfi-base@sha256:441d6709305552a3411e585ad98aacb9dadda00c80f3267483c38ac6f86f49d4 AS builder
+FROM cgr.dev/chainguard/wolfi-base@sha256:02dab76bd852a70556b5b2002195c8a5fdab77d323c433bf6642aab080489795 AS python-base
 
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_DEFAULT_TIMEOUT=60 \
@@ -9,17 +9,18 @@ ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
 
 USER root
 
-WORKDIR /build
-
-RUN apk update \
-    && apk add --no-cache ca-certificates libgomp py3.12-pip python-3.12 \
+RUN apk add --no-cache ca-certificates libgomp py3.12-pip python-3.12 \
     && python3.12 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:${PATH}"
 
-COPY requirements.txt .
-RUN pip install -r requirements.txt
+FROM python-base AS builder
 
-FROM cgr.dev/chainguard/wolfi-base@sha256:441d6709305552a3411e585ad98aacb9dadda00c80f3267483c38ac6f86f49d4 AS runtime
+WORKDIR /build
+
+COPY requirements.txt .
+RUN pip install --require-hashes -r requirements.txt
+
+FROM python-base AS runtime
 
 ENV PATH="/opt/venv/bin:${PATH}" \
     HOME=/app \
@@ -29,9 +30,7 @@ ENV PATH="/opt/venv/bin:${PATH}" \
 
 USER root
 
-RUN apk update \
-    && apk add --no-cache ca-certificates libgomp python-3.12 \
-    && mkdir -p /app/.echobot \
+RUN mkdir -p /app/.echobot \
     && chown -R 65532:65532 /app
 
 WORKDIR /app

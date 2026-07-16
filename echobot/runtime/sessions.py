@@ -175,23 +175,81 @@ class SessionStore:
     def set_current_session(self, name: str) -> None:
         with self._lock:
             self.base_dir.mkdir(parents=True, exist_ok=True)
-            record = {"current_session": normalize_session_name(name)}
+            _, current_revision = self.get_current_session_pointer()
+            record = {
+                "current_session": normalize_session_name(name),
+                "revision": current_revision + 1,
+            }
             self.index_file.write_text(
                 json.dumps(record, ensure_ascii=False) + "\n",
                 encoding="utf-8",
             )
 
+    def compare_and_set_current_session(
+        self,
+        expected_name: str,
+        next_name: str | None,
+        *,
+        expected_revision: int | None = None,
+    ) -> bool:
+        with self._lock:
+            expected = normalize_session_name(expected_name)
+            current_name, current_revision = self.get_current_session_pointer()
+            if current_name != expected:
+                return False
+            if (
+                expected_revision is not None
+                and current_revision != expected_revision
+            ):
+                return False
+
+            if next_name is None:
+                if self.index_file.exists():
+                    self.index_file.unlink()
+                return True
+
+            normalized_next = normalize_session_name(next_name)
+            if not self._session_path(normalized_next).exists():
+                raise ValueError(f"Session not found: {normalized_next}")
+            self.set_current_session(normalized_next)
+            return True
+
+    def repair_current_session_after_deletion(
+        self,
+        deleted_name: str,
+    ) -> ChatSession | None:
+        with self._lock:
+            normalized_deleted = normalize_session_name(deleted_name)
+            if self.get_current_session_name() != normalized_deleted:
+                return None
+
+            remaining = self.list_sessions()
+            if remaining:
+                replacement = self.load_session(remaining[0].name)
+            else:
+                replacement = self.load_or_create_session("default")
+            self.set_current_session(replacement.name)
+            return replacement
+
     def get_current_session_name(self) -> str | None:
+        current_name, _ = self.get_current_session_pointer()
+        return current_name
+
+    def get_current_session_pointer(self) -> tuple[str | None, int]:
         with self._lock:
             if not self.index_file.exists():
-                return None
+                return None, 0
 
             records = self._read_jsonl_records(self.index_file)
             if not records:
-                return None
+                return None, 0
 
             current_name = str(records[0].get("current_session", "")).strip()
-            return current_name or None
+            try:
+                revision = max(int(records[0].get("revision", 0)), 0)
+            except (TypeError, ValueError):
+                revision = 0
+            return current_name or None, revision
 
     def list_sessions(self) -> list[SessionInfo]:
         with self._lock:

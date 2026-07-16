@@ -59,6 +59,7 @@ class TelegramChannel(BaseChannel):
         self._app: "TelegramApplication | None" = None
 
     async def start(self) -> None:
+        self._running = False
         if not TELEGRAM_AVAILABLE:
             logger.error(
                 "Telegram channel requires python-telegram-bot. "
@@ -69,7 +70,6 @@ class TelegramChannel(BaseChannel):
             logger.error("Telegram channel is missing bot_token")
             return
 
-        self._running = True
         request = HTTPXRequest(
             connection_pool_size=16,
             pool_timeout=5.0,
@@ -86,29 +86,33 @@ class TelegramChannel(BaseChannel):
             builder = builder.proxy(self.config.proxy).get_updates_proxy(
                 self.config.proxy,
             )
-        self._app = builder.build()
-        self._app.add_error_handler(self._on_error)
-        self._app.add_handler(
-            MessageHandler(
-                filters.ALL,
-                self._on_message,
-            ),
-        )
-        await self._app.initialize()
-        await self._app.start()
+        app = builder.build()
+        self._app = app
         try:
-            await self._app.bot.set_my_commands(_BOT_COMMANDS)
-        except Exception:
-            logger.debug("Telegram command registration failed", exc_info=True)
-        await self._app.updater.start_polling(
-            allowed_updates=["message"],
-            drop_pending_updates=bool(
-                getattr(self.config, "drop_pending_updates", True),
-            ),
-            error_callback=self._on_polling_error,
-        )
-        logger.info("Telegram channel started")
-        try:
+            app.add_error_handler(self._on_error)
+            app.add_handler(
+                MessageHandler(
+                    filters.ALL,
+                    self._on_message,
+                ),
+            )
+            await app.initialize()
+            await app.start()
+            try:
+                await app.bot.set_my_commands(_BOT_COMMANDS)
+            except Exception:
+                logger.debug("Telegram command registration failed", exc_info=True)
+            await app.updater.start_polling(
+                allowed_updates=["message"],
+                drop_pending_updates=bool(
+                    getattr(self.config, "drop_pending_updates", True),
+                ),
+                error_callback=self._on_polling_error,
+            )
+            if self._app is not app:
+                return
+            self._running = True
+            logger.info("Telegram channel started")
             while self._running:
                 await asyncio.sleep(1)
         finally:
@@ -116,24 +120,25 @@ class TelegramChannel(BaseChannel):
 
     async def stop(self) -> None:
         self._running = False
-        if self._app is None:
+        app = self._app
+        self._app = None
+        if app is None:
             return
         logger.info("Stopping Telegram channel")
-        updater = getattr(self._app, "updater", None)
+        updater = getattr(app, "updater", None)
         try:
             if updater is not None:
                 await updater.stop()
         except Exception:
             logger.debug("Telegram updater stop failed", exc_info=True)
         try:
-            await self._app.stop()
+            await app.stop()
         except Exception:
             logger.debug("Telegram app stop failed", exc_info=True)
         try:
-            await self._app.shutdown()
+            await app.shutdown()
         except Exception:
             logger.debug("Telegram app shutdown failed", exc_info=True)
-        self._app = None
 
     async def send(self, message: OutboundMessage) -> None:
         if self._app is None:

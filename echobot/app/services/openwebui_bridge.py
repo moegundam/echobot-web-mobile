@@ -9,6 +9,7 @@ from fastapi import HTTPException, Request
 
 from ...orchestration import RouteMode, normalize_route_mode
 from ...runtime.sessions import normalize_session_name
+from ...secrets import EnvironmentSecretStore, SecretStoreError
 from ..auth import is_valid_trusted_user_id, user_storage_key
 
 
@@ -22,6 +23,7 @@ BRIDGE_REQUIRE_TARGET_USER_ENV = "ECHOBOT_OPENWEBUI_REQUIRE_TARGET_USER"
 @dataclass(slots=True, frozen=True)
 class OpenWebUIBridgeSettings:
     token: str = ""
+    token_configuration_error: bool = False
     default_user_id: str = ""
     operator_agent_enabled: bool = False
     allowed_target_users: frozenset[str] = frozenset()
@@ -29,8 +31,17 @@ class OpenWebUIBridgeSettings:
 
     @classmethod
     def from_env(cls) -> "OpenWebUIBridgeSettings":
+        token = ""
+        token_configuration_error = False
+        try:
+            resolved_token = EnvironmentSecretStore().get(BRIDGE_TOKEN_ENV)
+            if resolved_token is not None:
+                token = resolved_token.value.strip()
+        except SecretStoreError:
+            token_configuration_error = True
         return cls(
-            token=os.environ.get(BRIDGE_TOKEN_ENV, "").strip(),
+            token=token,
+            token_configuration_error=token_configuration_error,
             default_user_id=os.environ.get(BRIDGE_DEFAULT_USER_ENV, "").strip(),
             operator_agent_enabled=_env_bool(BRIDGE_AGENT_ENABLED_ENV, False),
             allowed_target_users=frozenset(
@@ -48,6 +59,11 @@ class OpenWebUIBridgeSettings:
 
 async def require_openwebui_bridge(request: Request) -> OpenWebUIBridgeSettings:
     settings = OpenWebUIBridgeSettings.from_env()
+    if settings.token_configuration_error:
+        raise HTTPException(
+            status_code=503,
+            detail="Open WebUI bridge token configuration is invalid",
+        )
     if not settings.token_configured:
         raise HTTPException(
             status_code=503,
@@ -79,7 +95,9 @@ def openwebui_bridge_status() -> dict[str, Any]:
 
 def _bridge_security_warnings(settings: OpenWebUIBridgeSettings) -> list[str]:
     warnings: list[str] = []
-    if not settings.token_configured:
+    if settings.token_configuration_error:
+        warnings.append("bridge token configuration is invalid")
+    elif not settings.token_configured:
         warnings.append("bridge token is missing")
     if not settings.require_target_user and not settings.default_user_id:
         warnings.append("target user is optional and no default user is configured")
@@ -102,7 +120,7 @@ def resolve_bridge_target_user(
     if not is_valid_trusted_user_id(user_id):
         raise HTTPException(status_code=400, detail="target_user_id is invalid")
     allowed_users = settings.allowed_target_users
-    if allowed_users and _normalize_user_id(user_id) not in allowed_users:
+    if not allowed_users or _normalize_user_id(user_id) not in allowed_users:
         raise HTTPException(status_code=403, detail="target_user_id is not allowed")
     return user_id
 

@@ -24,7 +24,7 @@ const FALLBACK_FIELDS = {
         { name: "mirror_to_stage", kind: "bool" },
         { name: "stage_session_name", kind: "text" },
         { name: "bot_token", kind: "secret" },
-        { name: "webhook_url", kind: "text" },
+        { name: "webhook_url", kind: "secret" },
         { name: "webhook_secret", kind: "secret" },
         { name: "application_id", kind: "text" },
         { name: "guild_id", kind: "text" },
@@ -54,11 +54,11 @@ const channelText = {
     en: {
         builtInTitle: "Available runtime channels",
         builtInBody: "Telegram and Discord are editable here for configuration and smoke testing. Other channels remain in a read-only state on this page.",
-        verificationTitle: "Verified platform status",
-        verificationBody: "This is the current tested state, so the page does not imply that every listed platform is production-ready.",
+        verificationTitle: "Platform evidence status",
+        verificationBody: "Adapter tests, local routing smoke, historical maintainer evidence, and fresh external acceptance are separate evidence levels.",
         verificationItems: [
-            "Telegram: real bot E2E verified with inbound reply and Stage mirror.",
-            "Discord: real bot E2E verified with inbound reply and Stage mirror.",
+            "Telegram: adapter tests and historical maintainer smoke exist; run a fresh external E2E for this deployment.",
+            "Discord: adapter tests and historical maintainer smoke exist; run a fresh external E2E for this deployment.",
             "QQ: runtime adapter exists, but no long-running real-platform check has been completed.",
             "LINE / WhatsApp: planning entries only; runtime adapters are not wired yet.",
         ],
@@ -82,7 +82,7 @@ const channelText = {
             telegram: [
                 "Inbound uses Bot API polling. Run only one EchoBot poller for the same bot token.",
                 "Keep drop pending updates enabled for clean smoke tests; disable it only when you intentionally want queued Telegram messages.",
-                "Use the local E2E test to send a controlled inbound message through EchoBot without waiting for a real platform event.",
+                "Use the local routing smoke to inject a controlled message; it does not prove a real Telegram platform event.",
             ],
             discord: [
                 "Inbound bridge endpoint: POST /api/channels/discord/webhook",
@@ -90,18 +90,18 @@ const channelText = {
                 "Request JSON includes channel_id, user_id, text, and optional session_name.",
                 "Outbound replies use webhook_url when configured.",
                 "Native bot events require discord.py plus Message Content Intent in the Discord Developer Portal.",
-                "Use the local E2E test for session routing and Stage mirroring before enabling the channel in a shared server.",
+                "Use the local routing smoke for Session routing and Stage mirroring before a separate real Discord acceptance run.",
             ],
         },
     },
     "zh-Hant": {
         builtInTitle: "目前可用通訊入口",
         builtInBody: "Telegram 與 Discord 在此頁可編輯並可做連線檢查；其他通訊入口目前仍維持唯讀。",
-        verificationTitle: "平台實測狀態",
-        verificationBody: "這裡列的是目前已驗證狀態，避免頁面讓人誤以為每個平台都已 production-ready。",
+        verificationTitle: "平台證據狀態",
+        verificationBody: "Adapter 測試、本機路由 smoke、歷史維護者證據與本次部署的外部驗收是不同證據層級。",
         verificationItems: [
-            "Telegram：真實 bot E2E 已驗證 inbound 回覆與 Stage 同步。",
-            "Discord：真實 bot E2E 已驗證 inbound 回覆與 Stage 同步。",
+            "Telegram：已有 adapter 測試與歷史維護者 smoke；本次部署仍需 fresh external E2E。",
+            "Discord：已有 adapter 測試與歷史維護者 smoke；本次部署仍需 fresh external E2E。",
             "QQ：已有 runtime adapter，但尚未完成真實平台長跑檢查。",
             "LINE / WhatsApp：目前只是規劃入口，runtime adapter 尚未接線。",
         ],
@@ -125,7 +125,7 @@ const channelText = {
             telegram: [
                 "Inbound 使用 Bot API polling；同一個 bot token 同時間只能跑一個 EchoBot poller。",
                 "乾淨連線檢查建議維持啟動時丟棄 pending updates；只有刻意要吃 Telegram 佇列訊息時才關閉。",
-                "可先用本機 E2E 測試送一則受控訊息，不必等待真實平台事件。",
+                "可先用本機路由 smoke 注入受控訊息；這不代表已收到真實 Telegram 平台事件。",
             ],
             discord: [
                 "Inbound bridge endpoint：POST /api/channels/discord/webhook",
@@ -133,18 +133,18 @@ const channelText = {
                 "Request JSON 包含 channel_id、user_id、text，可選 session_name。",
                 "Outbound 回覆在設定 webhook_url 後會透過 Discord webhook 發送。",
                 "原生 bot events 需要 discord.py，並在 Discord Developer Portal 開啟 Message Content Intent。",
-                "在共享伺服器啟用前，先用本機 E2E 測試驗證場次路由與 Stage 同步。",
+                "在共享伺服器啟用前，先做本機路由 smoke，再另外執行真實 Discord 驗收。",
             ],
         },
     },
     "zh-Hans": {
         builtInTitle: "当前可用通讯入口",
         builtInBody: "Telegram 与 Discord 在此页可编辑并可做连线检查；其他通讯入口目前仍保持只读。",
-        verificationTitle: "平台实测状态",
-        verificationBody: "这里列的是当前已验证状态，避免页面让人误以为每个平台都已 production-ready。",
+        verificationTitle: "平台证据状态",
+        verificationBody: "Adapter 测试、本机路由 smoke、历史维护者证据与本次部署的外部验收是不同证据层级。",
         verificationItems: [
-            "Telegram：真实 bot E2E 已验证 inbound 回复与 Stage 同步。",
-            "Discord：真实 bot E2E 已验证 inbound 回复与 Stage 同步。",
+            "Telegram：已有 adapter 测试与历史维护者 smoke；本次部署仍需 fresh external E2E。",
+            "Discord：已有 adapter 测试与历史维护者 smoke；本次部署仍需 fresh external E2E。",
             "QQ：已有 runtime adapter，但尚未完成真实平台长跑检查。",
             "LINE / WhatsApp：目前只是规划入口，runtime adapter 尚未接线。",
         ],
@@ -168,7 +168,7 @@ const channelText = {
             telegram: [
                 "Inbound 使用 Bot API polling；同一个 bot token 同时间只能跑一个 EchoBot poller。",
                 "干净连线检查建议维持启动时丢弃 pending updates；只有刻意要吃 Telegram 队列消息时才关闭。",
-                "可先用本机 E2E 测试发送一则受控消息，不必等待真实平台事件。",
+                "可先用本机路由 smoke 注入受控消息；这不代表已收到真实 Telegram 平台事件。",
             ],
             discord: [
                 "Inbound bridge endpoint：POST /api/channels/discord/webhook",
@@ -176,7 +176,7 @@ const channelText = {
                 "Request JSON 包含 channel_id、user_id、text，可选 session_name。",
                 "Outbound 回复在设置 webhook_url 后会通过 Discord webhook 发送。",
                 "原生 bot events 需要 discord.py，并在 Discord Developer Portal 开启 Message Content Intent。",
-                "在共享服务器启用前，先用本机 E2E 测试验证场次路由与 Stage 同步。",
+                "在共享服务器启用前，先做本机路由 smoke，再另外执行真实 Discord 验收。",
             ],
         },
     },
@@ -549,7 +549,11 @@ function isSecretField(fieldMeta) {
         return true;
     }
     const name = fieldMeta.name.toLowerCase();
-    return name.includes("token") || name.includes("secret") || name.includes("key") || name.includes("password");
+    return name.startsWith("webhook_")
+        || name.includes("token")
+        || name.includes("secret")
+        || name.includes("key")
+        || name.includes("password");
 }
 
 function isBooleanField(fieldMeta) {

@@ -39,7 +39,7 @@ Based on the currently verifiable pages, APIs, tests, documentation, and smoke s
 | # | Category | What changed |
 |---:|---|---|
 | 1 | Public information leakage | `/api/health` no longer exposes local absolute paths, and README avoids private hosts or tokens |
-| 2 | Secret exposure | API keys, bot tokens, bridge tokens, and webhook secrets only expose configured status, never plaintext |
+| 2 | Secret display and storage | API keys, bot tokens, bridge tokens, and webhook secrets expose configured status only; channel credentials are no longer stored in `channels.json` |
 | 3 | Console/Admin responsibility split | Admin owns persistent setup; Console owns testing and temporary runtime overrides that can apply to Stage |
 | 4 | Mixed model settings | `/admin/models` is LLM-only; Voice and Live2D moved to dedicated pages |
 | 5 | Hardcoded language text | Main buttons, placeholders, status text, and dynamic copy moved into i18n |
@@ -149,7 +149,8 @@ A user/session scoped Stage event flow was added:
 
 - `GET /api/stage/events?session_name=<name>`: subscribe to Stage events over SSE.
 - `POST /api/stage/events`: publish subtitles and stage events.
-- Broker v1 is in-memory and keyed by trusted user plus session.
+- The current app runtime defaults to a bounded in-memory broker keyed by trusted user plus session, with `Last-Event-ID` cursor replay.
+- A Redis Streams adapter foundation is available. It uses one hashed key, retention limit, and TTL per user/session; it is not the default runtime and has not yet passed a real Redis cross-process acceptance test.
 - Stage updates subtitles on `assistant_delta` and performs final subtitle/TTS behavior on `assistant_final`.
 - Stage events can carry `emotion`, `expression`, and `motion`; `character_state` can update Live2D expression/motion without changing subtitles.
 - `/admin/characters` can maintain an emotion map per character; when an event only provides `emotion` and the session has a bound role, the backend fills the mapped Live2D `expression` / `motion`.
@@ -168,7 +169,7 @@ Security design:
 - The bridge uses a server-to-server Bearer token.
 - The full site `/openapi.json` is not exposed to Open WebUI.
 - By default, bridge calls require `target_user_id` or `ECHOBOT_OPENWEBUI_BRIDGE_USER_ID` so they do not write into the shared root runtime.
-- `ECHOBOT_OPENWEBUI_ALLOWED_TARGET_USERS` can restrict which user namespaces the bridge may target.
+- `ECHOBOT_OPENWEBUI_ALLOWED_TARGET_USERS` must explicitly list every user namespace the bridge may target; an empty allowlist fails closed and denies all named targets.
 - The default route mode is `chat_only`.
 - Operator-agent mode must be explicitly enabled before higher-risk routing is allowed.
 
@@ -197,7 +198,8 @@ Runtime model configuration is split across three Admin pages so model, voice, a
 
 - Telegram can store enabled state, allow list, bot token, proxy, reply-to-message behavior, and whether pending updates are dropped on startup.
 - Discord can store enabled state, allow list, bot token, webhook URL, webhook secret, application/guild/channel ids. It currently supports the secret-protected `POST /api/channels/discord/webhook` inbound bridge, outbound webhook delivery, and native Discord bot events after `discord.py` is installed and Message Content Intent is enabled.
-- Secret fields only expose configured status in the API and UI; plaintext values are never returned.
+- Secret fields expose configured status only in the API and UI. Telegram, Discord, and QQ credentials are stored outside the repository in `.echobot/channel_secrets.json` with mode `0600`; legacy inline secrets are migrated on the next save.
+- Saving an enabled channel waits for the adapter to report ready. Activation failure returns a sanitized `409`, does not replace the persisted configuration, and restores the previously working runtime.
 - `POST /api/channels/{channel}/smoke` provides safe local readiness checks without echoing tokens in responses.
 - `scripts/telegram_gateway_smoke.py` and `scripts/discord_gateway_smoke.py` rerun gateway checks. Plain text validates session history, while deterministic `/ping` / `/smoke` commands validate Stage replay because those commands do not write normal conversation history.
 - `GET /api/channels/stage-targets` exposes a secret-free messaging target list so `/stage` and `/messenger` can select the Stage session bound to a configured platform.
@@ -224,14 +226,16 @@ Completed so far:
 - English, Traditional Chinese, and Simplified Chinese switching is applied to static pages and the main dynamic UI.
 - Mobile/tablet/desktop display modes have been added, with 360x800, 390x844, 430x932, and 768x1024 viewport checks expected to avoid horizontal overflow.
 - First-version interfaces and documentation exist for Cloudflare Local Tunnel, trusted-user isolation, Stage Event Broker, Open WebUI bridge APIs, LLM / Voice / Live2D profiles, Character Packages, and Channels setup/smoke checks.
-- Telegram / Discord E2E in the maintainer environment, Voice TTS/ASR smoke, and Open WebUI bridge smoke from both local EchoBot and a remote Open WebUI host over a reverse tunnel have passed.
+- Telegram/Discord and Open WebUI have historical maintainer-environment evidence, while Voice TTS/ASR has local smoke evidence. A new deployment must still rerun fresh platform, Stage, permission, and device acceptance.
 - Console/Admin UX has been tightened: route mode no longer shows raw enum values, Messenger uses the Session route mode, Stage/Messenger include cross-surface navigation, and Open WebUI/Channels show repeatable entrypoint and verified-platform status.
 - The public-facing safety default is now `ECHOBOT_SHELL_SAFETY_MODE=workspace-write`.
+- Compose uses a loopback Nginx ingress while the app port remains internal. Ingress enforces request-size, rate, and stream-connection limits, dynamically re-resolves the app through Docker DNS, and uses an HTTP live healthcheck against the serving path.
+- Runtime/dev dependencies use hash-enforced locks. CI records separate SBOM/Trivy evidence for Python dependencies, the EchoBot app image, and the Nginx ingress image, then creates provenance/attestation for the app image. Publication completion is determined by the current GitHub Actions run.
 
 Not finished or still planned:
 
 - LINE and WhatsApp production runtime adapters remain planned; the QQ adapter still has a built-in entry but has not had a long-running real-platform check.
-- The EchoBot-side narrow Open WebUI bridge API, documentation page, and local smoke script exist. A remote Open WebUI host has been verified through an SSH reverse tunnel for tool spec, stage events, and chat. `scripts/echobot_entrypoint.py` can run the local app and reverse tunnel under macOS launchd and rerun bridge smoke checks. Cloudflare Tunnel / Access remains the formal HTTPS entrypoint.
+- The EchoBot-side narrow Open WebUI bridge API, documentation page, and local smoke script exist. Historical reverse-tunnel evidence is retained, but each new deployment must rerun tool-spec, Stage, chat, and permission E2E. Cloudflare Tunnel / Access remains the formal HTTPS entrypoint.
 - `/admin` v1 is mostly an index, guide, and status surface. It is not a complete production SaaS admin console.
 - Stage / Live2D / ASR / TTS have v1 integration and local smoke coverage. Real-device microphone and long-running voice interaction checks still need HTTPS plus real-device validation.
 - Multi-user private testing should use Cloudflare Access or a trusted reverse proxy. Do not expose the local service anonymously to the public internet.
@@ -284,22 +288,24 @@ python -m echobot app --host 127.0.0.1 --port 8001
 
 ### Docker / Compose Startup
 
-This edition also provides an upgraded single-container package:
+This edition provides an `Nginx ingress + EchoBot app` Compose package. Run it on the designated Docker host (the maintainer workflow uses an external Mac mini Docker server); a normal workstation does not need a local Docker daemon:
 
 ```shell
 cp docker.env.example docker.env.local
 docker compose build
 docker compose up -d
-curl -fsS http://127.0.0.1:8000/api/health
+curl -fsS http://127.0.0.1:8080/healthz
 ```
 
-GitHub Container Registry image:
+The app container's port `8000` is visible only inside the Compose network. Browsers, Cloudflare Tunnel, and health smoke use the loopback ingress at `127.0.0.1:8080`.
+
+Production deployments should use a digest-qualified GitHub Container Registry image:
 
 ```text
-ghcr.io/moegundam/echobot-web-mobile:upgrade
+ghcr.io/moegundam/echobot-web-mobile@sha256:<digest>
 ```
 
-See [`docs/deployment/docker.md`](./docs/deployment/docker.md) for details.
+See [`docs/deployment/docker.md`](./docs/deployment/docker.md), [`docs/security/secret-storage.md`](./docs/security/secret-storage.md), and [`docs/architecture/stage-event-broker.md`](./docs/architecture/stage-event-broker.md).
 
 ### 4. Open The Pages
 

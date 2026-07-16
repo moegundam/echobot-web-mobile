@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Any
 
+from ..concurrency import AsyncReentrantLock
 from ..models import (
     FileInput,
     ImageInput,
@@ -19,7 +20,7 @@ from ..models import (
     message_content_to_text,
 )
 from ..runtime.session_runner import SessionAgentRunner
-from ..runtime.sessions import ChatSession, SessionStore
+from ..runtime.sessions import ChatSession, SessionStore, normalize_session_name
 from .decision import DecisionEngine
 from .jobs import (
     JOB_CANCELLED_TEXT,
@@ -65,11 +66,12 @@ class ConversationCoordinator:
         self._role_registry = role_registry
         self._delegated_ack_enabled = delegated_ack_enabled
         self._jobs = job_store or ConversationJobStore()
-        self._session_locks: dict[str, asyncio.Lock] = {}
+        self._session_locks: dict[str, AsyncReentrantLock] = {}
         self._session_locks_guard = asyncio.Lock()
         self._background_tasks: set[asyncio.Task[None]] = set()
         self._job_tasks: dict[str, asyncio.Task[None]] = {}
         self._deleted_sessions: set[str] = set()
+        self._session_deletion_generations: dict[str, int] = {}
         self._deleted_sessions_guard = asyncio.Lock()
 
     @property
@@ -141,13 +143,18 @@ class ConversationCoordinator:
         retry_of_job_id: str | None = None,
         attempt: int = 1,
     ) -> OrchestratedTurnResult:
-        await self.restore_session(session_name)
         chunk_handler = on_chunk or _discard_stream_chunk
         lock = await self._session_lock(session_name)
         async with lock:
+            if await self._is_session_deleted(session_name):
+                raise RuntimeError(f"Session is deleted: {session_name}")
             session = await asyncio.to_thread(
                 self._session_store.load_or_create_session,
                 session_name,
+            )
+            await asyncio.to_thread(
+                self._session_store.set_current_session,
+                session.name,
             )
             role_card = self._resolve_turn_role(session, role_name)
             resolved_route_mode = self._resolve_turn_route_mode(session, route_mode)
@@ -286,6 +293,10 @@ class ConversationCoordinator:
                 session_name,
             )
 
+    async def session_lock(self, session_name: str) -> AsyncReentrantLock:
+        """Return the shared mutation lock for one conversation Session."""
+        return await self._session_lock(session_name)
+
     async def set_session_role(self, session_name: str, role_name: str) -> ChatSession:
         role_card = self._role_registry.require(role_name)
         lock = await self._session_lock(session_name)
@@ -296,6 +307,10 @@ class ConversationCoordinator:
             )
             session.metadata = set_role_name(session.metadata, role_card.name)
             await asyncio.to_thread(self._session_store.save_session, session)
+            await asyncio.to_thread(
+                self._session_store.set_current_session,
+                session.name,
+            )
             return session
 
     async def current_role_name(self, session_name: str) -> str:
@@ -327,6 +342,10 @@ class ConversationCoordinator:
             )
             session.metadata = set_route_mode(session.metadata, route_mode)
             await asyncio.to_thread(self._session_store.save_session, session)
+            await asyncio.to_thread(
+                self._session_store.set_current_session,
+                session.name,
+            )
             return session
 
     async def current_route_mode(self, session_name: str) -> RouteMode:
@@ -464,19 +483,47 @@ class ConversationCoordinator:
                 cancelled_jobs.append(updated_job)
         return cancelled_jobs
 
-    async def mark_session_deleted(self, session_name: str) -> None:
+    async def mark_session_deleted(self, session_name: str) -> int:
+        session_name = normalize_session_name(session_name)
         async with self._deleted_sessions_guard:
+            generation = self._session_deletion_generations.get(session_name, 0) + 1
+            self._session_deletion_generations[session_name] = generation
             self._deleted_sessions.add(session_name)
         mark_deleted = getattr(self._agent_runner, "mark_session_deleted", None)
         if mark_deleted is not None:
             await mark_deleted(session_name)
+        return generation
 
-    async def restore_session(self, session_name: str) -> None:
+    async def restore_session(
+        self,
+        session_name: str,
+        *,
+        expected_deletion_generation: int | None = None,
+    ) -> bool:
+        session_name = normalize_session_name(session_name)
         async with self._deleted_sessions_guard:
+            current_generation = self._session_deletion_generations.get(
+                session_name,
+                0,
+            )
+            if (
+                expected_deletion_generation is not None
+                and current_generation != expected_deletion_generation
+            ):
+                return False
             self._deleted_sessions.discard(session_name)
         restore = getattr(self._agent_runner, "restore_session", None)
         if restore is not None:
             await restore(session_name)
+        return True
+
+    async def session_deletion_state(self, session_name: str) -> tuple[bool, int]:
+        session_name = normalize_session_name(session_name)
+        async with self._deleted_sessions_guard:
+            return (
+                session_name in self._deleted_sessions,
+                self._session_deletion_generations.get(session_name, 0),
+            )
 
     async def job_counts(self) -> dict[str, int]:
         return await self._jobs.counts()
@@ -823,15 +870,17 @@ class ConversationCoordinator:
             final_response_content=JOB_CANCELLED_TEXT,
         )
 
-    async def _session_lock(self, session_name: str) -> asyncio.Lock:
+    async def _session_lock(self, session_name: str) -> AsyncReentrantLock:
+        session_name = normalize_session_name(session_name)
         async with self._session_locks_guard:
             lock = self._session_locks.get(session_name)
             if lock is None:
-                lock = asyncio.Lock()
+                lock = AsyncReentrantLock()
                 self._session_locks[session_name] = lock
             return lock
 
     async def _is_session_deleted(self, session_name: str) -> bool:
+        session_name = normalize_session_name(session_name)
         async with self._deleted_sessions_guard:
             return session_name in self._deleted_sessions
 
