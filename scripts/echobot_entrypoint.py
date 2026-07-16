@@ -218,29 +218,24 @@ def _build_app_plist(config: dict[str, object]) -> dict[str, object]:
     repo_root = Path(config["repo_root"])
     log_dir = Path(config.get("log_dir") or DEFAULT_LOG_DIR)
     python_path = str(config["python"])
-    command = " ".join(
-        [
-            "cd",
-            shlex.quote(str(repo_root)),
-            "&&",
-            "exec",
-            shlex.quote(python_path),
-            "-m echobot app",
-            "--host",
-            shlex.quote(str(config["host"])),
-            "--port",
-            shlex.quote(str(config["port"])),
-            "--workspace",
-            shlex.quote(str(repo_root)),
-            "--env-file",
-            shlex.quote(str(config["env_file"])),
-            "--channel-config",
-            shlex.quote(str(config["channel_config"])),
-        ],
-    )
     return {
         "Label": APP_LABEL,
-        "ProgramArguments": ["/bin/zsh", "-lc", command],
+        "ProgramArguments": [
+            python_path,
+            "-m",
+            "echobot",
+            "app",
+            "--host",
+            str(config["host"]),
+            "--port",
+            str(config["port"]),
+            "--workspace",
+            str(repo_root),
+            "--env-file",
+            str(config["env_file"]),
+            "--channel-config",
+            str(config["channel_config"]),
+        ],
         "WorkingDirectory": str(repo_root),
         "RunAtLoad": True,
         "KeepAlive": True,

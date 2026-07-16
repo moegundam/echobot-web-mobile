@@ -119,7 +119,12 @@ def test_launchd_app_plist_leaves_file_token_for_application_to_read(tmp_path: P
     assert TOKEN_ENV not in plist["EnvironmentVariables"]
     assert str(token_file) in rendered
     assert "secret-token" not in rendered
-    assert "-m echobot app" in rendered
+    assert plist["ProgramArguments"][:4] == [
+        config["python"],
+        "-m",
+        "echobot",
+        "app",
+    ]
     assert captured == {
         "token": None,
         "token_file": str(token_file),
