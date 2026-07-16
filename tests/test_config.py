@@ -78,6 +78,27 @@ class RuntimeLoggingConfigTests(unittest.TestCase):
 
 
 class RuntimeBootstrapConfigTests(unittest.TestCase):
+    def test_build_runtime_context_allows_unconfigured_web_setup(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+
+            with patch.dict(os.environ, {}, clear=True):
+                context = build_runtime_context(
+                    RuntimeOptions(
+                        workspace=workspace,
+                        allow_unconfigured_llm=True,
+                        no_memory=True,
+                        no_tools=True,
+                        no_skills=True,
+                        no_heartbeat=True,
+                    ),
+                    load_session_state=False,
+                )
+
+            provider = context.agent.provider
+            self.assertEqual("", provider.settings.api_key)
+            self.assertEqual("", provider.settings.model)
+
     def test_build_runtime_context_reads_agent_max_steps_from_env_file(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             workspace = Path(temp_dir)

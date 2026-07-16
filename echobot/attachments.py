@@ -8,8 +8,9 @@ import secrets
 import threading
 from dataclasses import asdict, dataclass
 from datetime import datetime
+from io import BytesIO
 from pathlib import Path
-from typing import Any
+from typing import Any, BinaryIO
 
 from .images import DEFAULT_IMAGE_BUDGET, ImageBudget, normalize_image_bytes
 
@@ -21,10 +22,11 @@ FILE_ATTACHMENT_KIND = "file"
 
 @dataclass(slots=True)
 class FileBudget:
-    max_input_bytes: int = 200 * 1024 * 1024
+    max_input_bytes: int = 25 * 1024 * 1024
 
 
 DEFAULT_FILE_BUDGET = FileBudget()
+FILE_STREAM_CHUNK_BYTES = 1024 * 1024
 
 
 @dataclass(slots=True)
@@ -187,13 +189,19 @@ class AttachmentStore:
         content_type: str | None = None,
         filename: str | None = None,
     ) -> FileAttachment:
-        if not file_bytes:
-            raise ValueError("Attachment file must not be empty")
-        if len(file_bytes) > self.file_budget.max_input_bytes:
-            raise ValueError(
-                "Attachment file exceeds the upload size limit "
-                f"({len(file_bytes)} bytes > {self.file_budget.max_input_bytes} bytes)"
-            )
+        return self.create_file_attachment_from_stream(
+            BytesIO(file_bytes),
+            content_type=content_type,
+            filename=filename,
+        )
+
+    def create_file_attachment_from_stream(
+        self,
+        file_stream: BinaryIO,
+        *,
+        content_type: str | None = None,
+        filename: str | None = None,
+    ) -> FileAttachment:
 
         cleaned_filename = str(filename or "").strip()
         cleaned_content_type = _normalize_content_type(
@@ -206,23 +214,49 @@ class AttachmentStore:
             content_type=cleaned_content_type,
         )
         relative_path = f"files/{attachment_id}{file_suffix}"
-        attachment = FileAttachment(
-            attachment_id=attachment_id,
-            content_type=cleaned_content_type,
-            original_filename=cleaned_filename,
-            size_bytes=len(file_bytes),
-            sha256=hashlib.sha256(file_bytes).hexdigest(),
-            created_at=_now_text(),
-            relative_path=relative_path,
-        )
-
         with self._lock:
             self._ensure_dirs()
-            self._stored_file_path(attachment.relative_path).write_bytes(file_bytes)
-            self._metadata_path(attachment.attachment_id).write_text(
+
+        attachment_path = self._stored_file_path(relative_path)
+        metadata_path = self._metadata_path(attachment_id)
+        total_bytes = 0
+        digest = hashlib.sha256()
+        try:
+            with attachment_path.open("xb") as stored_file:
+                while True:
+                    chunk = file_stream.read(FILE_STREAM_CHUNK_BYTES)
+                    if not chunk:
+                        break
+                    total_bytes += len(chunk)
+                    if total_bytes > self.file_budget.max_input_bytes:
+                        raise ValueError(
+                            "Attachment file exceeds the upload size limit "
+                            f"({total_bytes} bytes > "
+                            f"{self.file_budget.max_input_bytes} bytes)"
+                        )
+                    digest.update(chunk)
+                    stored_file.write(chunk)
+
+            if total_bytes == 0:
+                raise ValueError("Attachment file must not be empty")
+
+            attachment = FileAttachment(
+                attachment_id=attachment_id,
+                content_type=cleaned_content_type,
+                original_filename=cleaned_filename,
+                size_bytes=total_bytes,
+                sha256=digest.hexdigest(),
+                created_at=_now_text(),
+                relative_path=relative_path,
+            )
+            metadata_path.write_text(
                 json.dumps(attachment.to_dict(), ensure_ascii=False, indent=2) + "\n",
                 encoding="utf-8",
             )
+        except Exception:
+            attachment_path.unlink(missing_ok=True)
+            metadata_path.unlink(missing_ok=True)
+            raise
 
         return attachment
 

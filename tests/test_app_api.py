@@ -10,7 +10,7 @@ from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import quote
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from fastapi.testclient import TestClient
 from PIL import Image
@@ -21,6 +21,7 @@ from echobot.attachments import AttachmentStore
 from echobot.asr import ASRStatusSnapshot, ProviderStatusSnapshot, TranscriptionResult
 from echobot.app import create_app
 from echobot.app.auth import DEFAULT_TRUSTED_USER_HEADER, user_storage_key
+from echobot.app.runtime import AppRuntime
 from echobot.app.services.model_profiles import ModelProfileService
 from echobot.app.services.runtime_model_repositories import (
     LLMModelRepository,
@@ -1127,11 +1128,14 @@ class AppApiTests(unittest.TestCase):
             )
 
             with TestClient(app) as client:
+                readiness = client.get("/healthz")
                 health = client.get("/api/health")
                 definitions = client.get("/api/channels/definitions")
                 config = client.get("/api/channels/config")
                 roles = client.get("/api/roles")
 
+            self.assertEqual(200, readiness.status_code)
+            self.assertEqual({"status": "ok"}, readiness.json())
             self.assertEqual(200, health.status_code)
             self.assertEqual("ok", health.json()["status"])
             self.assertEqual(workspace.name, health.json()["workspace_name"])
@@ -1815,6 +1819,7 @@ class AppApiTests(unittest.TestCase):
                 )
 
             with TestClient(app) as client:
+                readiness = client.get("/healthz")
                 missing = client.get("/api/health")
                 invalid = client.get(
                     "/api/health",
@@ -1825,6 +1830,8 @@ class AppApiTests(unittest.TestCase):
                     headers={DEFAULT_TRUSTED_USER_HEADER: "alpha@example.test"},
                 )
 
+            self.assertEqual(200, readiness.status_code)
+            self.assertEqual({"status": "ok"}, readiness.json())
             self.assertEqual(401, missing.status_code)
             self.assertEqual("Trusted user header is required", missing.json()["detail"])
             self.assertEqual(401, invalid.status_code)
@@ -1835,6 +1842,32 @@ class AppApiTests(unittest.TestCase):
             self.assertEqual("user", authorized.json()["storage_scope"])
             self.assertNotIn("workspace", authorized.json())
             self.assertNotIn("storage_root", authorized.json())
+
+    def test_readiness_endpoint_fails_when_runtime_is_unavailable(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            app = create_app(
+                runtime_options=RuntimeOptions(
+                    workspace=workspace,
+                    no_tools=True,
+                    no_skills=True,
+                    no_memory=True,
+                    no_heartbeat=True,
+                ),
+                channel_config_path=workspace / ".echobot" / "channels.json",
+                context_builder=build_test_context,
+            )
+
+            with patch.object(
+                AppRuntime,
+                "readiness_snapshot",
+                new=AsyncMock(side_effect=RuntimeError("runtime unavailable")),
+            ):
+                with TestClient(app) as client:
+                    response = client.get("/healthz")
+
+            self.assertEqual(503, response.status_code)
+            self.assertEqual({"status": "unavailable"}, response.json())
 
     def test_admin_allowlist_blocks_mutating_admin_apis(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

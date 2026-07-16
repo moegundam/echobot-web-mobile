@@ -323,7 +323,7 @@ This branch has repeatable verification for:
 - API route/auth tests.
 - Browser smoke: `scripts/browser_smoke.py --base-url http://127.0.0.1:8001`.
 - Public safety scan: `scripts/check_public_safety.py`.
-- Full pytest / CI: `363 passed, 2 warnings`.
+- Full pytest / CI: use the current GitHub Actions and release evidence; the README does not pin a test count that will become stale.
 
 ## Project Rules
 
@@ -339,8 +339,6 @@ This branch has repeatable verification for:
 ## License
 
 This project follows the MIT License. See [`LICENSE`](./LICENSE). The upstream EchoBot copyright remains KdaiP's, and this fork's additional modifications are marked under `moegundam` in the same MIT license file.
-
-MIT permits use, modification, distribution, sublicensing, and sale, so this project can be used in commercial products or apps. Distributed copies must preserve the MIT license text and copyright notice, and third-party assets, models, and platform terms still need separate review.
 
 License notices:
 

@@ -2,9 +2,12 @@ name: CI
 
 on:
   pull_request:
-  push:
-    branches:
-      - main
+  workflow_call:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -25,13 +28,13 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: requirements.txt
+          cache-dependency-path: requirements-dev.txt
 
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt
-          python -m pip install pytest httpx
+        run: python -m pip install --disable-pip-version-check -r requirements-dev.txt
+
+      - name: Install browser runtime
+        run: python -m playwright install --with-deps chromium
 
       - name: Check JavaScript syntax
         run: |
@@ -75,14 +78,86 @@ jobs:
       - name: Public safety scan
         run: python scripts/check_public_safety.py
 
+      - name: Audit Python dependencies
+        run: >-
+          python -m pip_audit
+          --requirement requirements.txt
+          --no-deps
+          --disable-pip
+
       - name: Whitespace check
-        run: git diff --check HEAD
+        run: git diff --check
 
       - name: Run tests
-        run: pytest
+        run: python -m pytest
+
+      - name: Browser smoke
+        run: |
+          python -m echobot app \
+            --host 127.0.0.1 \
+            --port 8011 \
+            --no-memory \
+            --no-heartbeat \
+            >/tmp/echobot-browser-smoke.log 2>&1 &
+          server_pid=$!
+          trap 'kill "${server_pid}" 2>/dev/null || true' EXIT
+
+          for attempt in {1..60}; do
+            if curl --fail --silent http://127.0.0.1:8011/api/health >/dev/null; then
+              break
+            fi
+            if ! kill -0 "${server_pid}" 2>/dev/null; then
+              cat /tmp/echobot-browser-smoke.log
+              exit 1
+            fi
+            if [ "${attempt}" -eq 60 ]; then
+              cat /tmp/echobot-browser-smoke.log
+              exit 1
+            fi
+            sleep 1
+          done
+
+          python scripts/browser_smoke.py \
+            --base-url http://127.0.0.1:8011 \
+            --viewport 390x844 \
+            --viewport 1280x900
 
       - name: Validate Compose config
         run: docker compose config
 
       - name: Build Docker image
         run: docker build --tag echobot-web-mobile:ci .
+
+      - name: Container runtime smoke
+        run: |
+          docker run \
+            --detach \
+            --name echobot-ci-runtime \
+            --publish 127.0.0.1:18080:8000 \
+            echobot-web-mobile:ci
+          trap 'docker rm --force echobot-ci-runtime >/dev/null 2>&1 || true' EXIT
+
+          for attempt in {1..60}; do
+            if curl --fail --silent http://127.0.0.1:18080/healthz >/dev/null; then
+              exit 0
+            fi
+            if [ "${attempt}" -eq 60 ]; then
+              docker logs echobot-ci-runtime
+              exit 1
+            fi
+            sleep 1
+          done
+
+      - name: Export verified container image
+        if: github.event_name != 'pull_request'
+        run: docker save echobot-web-mobile:ci | gzip -1 > /tmp/echobot-web-mobile-ci.tar.gz
+
+      - name: Upload verified container image
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: echobot-container-${{ github.sha }}
+          path: /tmp/echobot-web-mobile-ci.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0

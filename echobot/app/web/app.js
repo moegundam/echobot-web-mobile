@@ -16,7 +16,7 @@ import { appState, audioState, sessionState } from "./core/store.js";
 import { createAsrModule } from "./features/asr.js?v=site-public-6";
 import { createChatModule } from "./features/chat/index.js?v=response-language-1";
 import { createLayoutModule } from "./features/layout/index.js?v=console-layout-1";
-import { createLive2DModule } from "./features/live2d/index.js?v=console-a11y-1";
+import { createLive2DModule } from "./features/live2d/index.js?v=background-i18n-1";
 import { createRolesModule } from "./features/roles.js?v=site-public-6";
 import { createSessionsModule } from "./features/sessions.js?v=console-save-1";
 import { createTtsModule } from "./features/tts.js?v=site-public-6";

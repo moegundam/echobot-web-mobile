@@ -323,7 +323,7 @@ python -m pytest
 - API route/auth tests。
 - browser smoke：`scripts/browser_smoke.py --base-url http://127.0.0.1:8001`。
 - public safety scan：`scripts/check_public_safety.py`。
-- full pytest / CI：`363 passed, 2 warnings`。
+- full pytest / CI：以當次 GitHub Actions 與 release evidence 為準，不在 README 固定會過期的測試數字。
 
 ## 專案規矩
 
@@ -339,8 +339,6 @@ python -m pytest
 ## License
 
 本專案沿用 MIT License。請見 [`LICENSE`](./LICENSE)。上游 EchoBot copyright 保留為 KdaiP，本 fork 的新增修改以 `moegundam` 名義標示在同一份 MIT 授權中。
-
-MIT 允許使用、修改、散布、再授權與販售，因此本專案可用於商業產品或 App；但散布時必須保留 MIT 授權文字與 copyright notice，且第三方素材、模型與平台條款需另外確認。
 
 授權標示：
 

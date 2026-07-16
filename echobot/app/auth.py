@@ -17,6 +17,10 @@ MAX_TRUSTED_USER_ID_LENGTH = 320
 ADMIN_ALLOWLIST_ENV = "ECHOBOT_ADMIN_ALLOWLIST"
 ADMIN_USERS_ENV = "ECHOBOT_ADMIN_USERS"
 ADMIN_REQUIRED_ENV = "ECHOBOT_ADMIN_REQUIRED"
+DEPLOYMENT_PROFILE_ENV = "ECHOBOT_DEPLOYMENT_PROFILE"
+LOCAL_DEPLOYMENT_PROFILES = frozenset({"local", "development", "test"})
+EXPOSED_DEPLOYMENT_PROFILES = frozenset({"tunnel", "public", "production", "vps"})
+VALID_DEPLOYMENT_PROFILES = LOCAL_DEPLOYMENT_PROFILES | EXPOSED_DEPLOYMENT_PROFILES
 OPENWEBUI_BRIDGE_PATHS = {
     "/api/openwebui/tools/openapi.json",
     "/api/openwebui/stage/events",
@@ -67,6 +71,51 @@ class AdminAccessConfig:
         if not self.required and not self.allowlist:
             return True
         return normalized_user_id in self.allowlist
+
+
+@dataclass(slots=True, frozen=True)
+class DeploymentSecurityConfig:
+    profile: str = "local"
+
+    @classmethod
+    def from_env(
+        cls,
+        env: Mapping[str, str] | None = None,
+    ) -> "DeploymentSecurityConfig":
+        source = os.environ if env is None else env
+        profile = str(source.get(DEPLOYMENT_PROFILE_ENV, "local")).strip().lower()
+        profile = profile or "local"
+        if profile not in VALID_DEPLOYMENT_PROFILES:
+            valid_profiles = ", ".join(sorted(VALID_DEPLOYMENT_PROFILES))
+            raise ValueError(
+                f"{DEPLOYMENT_PROFILE_ENV} must be one of: {valid_profiles}"
+            )
+        return cls(profile=profile)
+
+
+def validate_deployment_security(
+    deployment: DeploymentSecurityConfig,
+    trusted_user: TrustedUserConfig,
+    admin_access: AdminAccessConfig,
+) -> None:
+    if deployment.profile not in EXPOSED_DEPLOYMENT_PROFILES:
+        return
+
+    if not trusted_user.enabled or not trusted_user.required:
+        raise ValueError(
+            f"Deployment profile '{deployment.profile}' requires trusted-user "
+            "authentication with ECHOBOT_TRUSTED_USER_HEADER_ENABLED=true and "
+            "ECHOBOT_TRUSTED_USER_REQUIRED=true"
+        )
+    if (
+        not admin_access.required
+        or not admin_access.allowlist
+        or "*" in admin_access.allowlist
+    ):
+        raise ValueError(
+            f"Deployment profile '{deployment.profile}' requires an explicit admin "
+            "allowlist and ECHOBOT_ADMIN_REQUIRED=true"
+        )
 
 
 def is_protected_path(path: str) -> bool:

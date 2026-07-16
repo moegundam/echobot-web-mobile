@@ -54,14 +54,10 @@ async def upload_file_attachment(
     runtime=Depends(get_app_runtime),
 ) -> FileAttachmentResponse:
     try:
-        file_bytes = await _read_upload_bytes(
-            file,
-            max_bytes=runtime.context.attachment_store.file_budget.max_input_bytes,
-            label="Attachment file",
-        )
+        await file.seek(0)
         attachment = await asyncio.to_thread(
-            runtime.context.attachment_store.create_file_attachment,
-            file_bytes,
+            runtime.context.attachment_store.create_file_attachment_from_stream,
+            file.file,
             content_type=file.content_type,
             filename=file.filename,
         )

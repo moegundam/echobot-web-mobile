@@ -28,6 +28,17 @@ export function createStageBackgroundController(deps) {
     let transformSaveTimerId = 0;
     let pendingTransformSave = null;
 
+    function stageBackgroundOptionLabel(background) {
+        if (
+            !background
+            || background.kind === "none"
+            || !String(background.url || "").trim()
+        ) {
+            return t("console.noStageBackground");
+        }
+        return background.label || background.key;
+    }
+
     function normalizeStageConfig(stageConfig) {
         const backgrounds = Array.isArray(stageConfig && stageConfig.backgrounds)
             ? stageConfig.backgrounds
@@ -227,7 +238,7 @@ export function createStageBackgroundController(deps) {
         const normalizedTransform = normalizeStageBackgroundTransform(transform);
         return {
             key: selectedOption ? selectedOption.key : "default",
-            label: selectedOption ? selectedOption.label : t("console.noStageBackground"),
+            label: stageBackgroundOptionLabel(selectedOption),
             url: selectedOption ? selectedOption.url : "",
             kind: selectedOption ? selectedOption.kind : "none",
             transform: normalizedTransform,
@@ -259,7 +270,7 @@ export function createStageBackgroundController(deps) {
         backgrounds.forEach((background) => {
             const option = document.createElement("option");
             option.value = background.key;
-            option.textContent = background.label || background.key;
+            option.textContent = stageBackgroundOptionLabel(background);
             DOM.stageBackgroundSelect.appendChild(option);
         });
 

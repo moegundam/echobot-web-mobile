@@ -13,6 +13,7 @@ services:
         required: false
     environment:
       ECHOBOT_SHELL_SAFETY_MODE: ${ECHOBOT_SHELL_SAFETY_MODE:-workspace-write}
+      ECHOBOT_DEPLOYMENT_PROFILE: ${ECHOBOT_DEPLOYMENT_PROFILE:-local}
       ECHOBOT_TRUSTED_USER_HEADER_ENABLED: ${ECHOBOT_TRUSTED_USER_HEADER_ENABLED:-false}
       ECHOBOT_ADMIN_REQUIRED: ${ECHOBOT_ADMIN_REQUIRED:-false}
     volumes:
@@ -30,7 +31,7 @@ services:
         - CMD
         - python
         - -c
-        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=5).read()"
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=5).read()"
       interval: 30s
       timeout: 5s
       start_period: 20s

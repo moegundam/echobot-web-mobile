@@ -18,6 +18,7 @@ def test_dockerfile_uses_hardened_runtime_defaults() -> None:
     assert "python-3.12" in dockerfile
     assert "USER 65532:65532" in dockerfile
     assert "HEALTHCHECK" in dockerfile
+    assert "urlopen('http://127.0.0.1:8000/healthz', timeout=5)" in dockerfile
     assert "ECHOBOT_SHELL_SAFETY_MODE=workspace-write" in dockerfile
     assert "LLM_API_KEY=" not in dockerfile
     assert "TELEGRAM_BOT_TOKEN=" not in dockerfile
@@ -32,10 +33,14 @@ def test_compose_uses_loopback_volume_and_restricted_runtime() -> None:
     assert service["ports"] == ["127.0.0.1:${ECHOBOT_HOST_PORT:-8000}:8000"]
     assert "echobot_data:/app/.echobot" in service["volumes"]
     assert "LLM_API_KEY" not in service["environment"]
+    assert "ECHOBOT_DEPLOYMENT_PROFILE" in service["environment"]
     assert service["read_only"] is True
     assert service["cap_drop"] == ["ALL"]
     assert "no-new-privileges:true" in service["security_opt"]
     assert "/tmp" in service["tmpfs"]
+    assert "urlopen('http://127.0.0.1:8000/healthz', timeout=5)" in service[
+        "healthcheck"
+    ]["test"][-1]
     assert compose["volumes"]["echobot_data"] is None
 
 
@@ -62,3 +67,13 @@ def test_docker_env_template_is_non_secret() -> None:
     assert "DISCORD_BOT_TOKEN=" in template
     assert "sk-" not in template
     assert ":AA" not in template
+
+
+def test_tunnel_env_template_uses_fail_closed_security_and_bounded_uploads() -> None:
+    template = (ROOT / ".env.local-tunnel.example").read_text(encoding="utf-8")
+
+    assert "ECHOBOT_DEPLOYMENT_PROFILE=tunnel" in template
+    assert "ECHOBOT_TRUSTED_USER_HEADER_ENABLED=true" in template
+    assert "ECHOBOT_TRUSTED_USER_REQUIRED=true" in template
+    assert "ECHOBOT_ADMIN_REQUIRED=true" in template
+    assert "ECHOBOT_FILE_MAX_INPUT_BYTES=26214400" in template

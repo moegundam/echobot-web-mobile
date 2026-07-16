@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from dataclasses import replace
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -8,13 +9,16 @@ from fastapi.responses import JSONResponse
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from ..config import load_env_file
 from ..runtime.bootstrap import RuntimeOptions
 from .auth import (
     TRUSTED_USER_STATE_KEY,
     AdminAccessConfig,
+    DeploymentSecurityConfig,
     TrustedUserConfig,
     is_protected_path,
     resolve_trusted_user_id,
+    validate_deployment_security,
 )
 from .routers import (
     attachments,
@@ -48,7 +52,11 @@ def create_app(
     tts_service_builder: TTSServiceBuilder | None = None,
     asr_service_builder: ASRServiceBuilder | None = None,
 ) -> FastAPI:
-    options = runtime_options or RuntimeOptions()
+    options = replace(
+        runtime_options or RuntimeOptions(),
+        allow_unconfigured_llm=True,
+    )
+    _load_runtime_env(options)
     runtime = AppRuntime(
         runtime_options=options,
         channel_config_path=channel_config_path,
@@ -71,9 +79,17 @@ def create_app(
         description="Runtime API for EchoBot daemon and future web console.",
         lifespan=lifespan,
     )
+    deployment_security_config = DeploymentSecurityConfig.from_env()
     trusted_user_config = TrustedUserConfig.from_env()
+    admin_access_config = AdminAccessConfig.from_env()
+    validate_deployment_security(
+        deployment_security_config,
+        trusted_user_config,
+        admin_access_config,
+    )
+    app.state.deployment_security_config = deployment_security_config
     app.state.trusted_user_config = trusted_user_config
-    app.state.admin_access_config = AdminAccessConfig.from_env()
+    app.state.admin_access_config = admin_access_config
 
     @app.middleware("http")
     async def trusted_user_middleware(request, call_next):
@@ -100,6 +116,16 @@ def create_app(
             "name": "EchoBot API",
             "docs": "/docs",
         }
+
+    @app.get("/healthz", include_in_schema=False)
+    async def readiness():
+        try:
+            return await runtime.readiness_snapshot()
+        except Exception:
+            return JSONResponse(
+                {"status": "unavailable"},
+                status_code=503,
+            )
 
     _register_web_page_routes(app)
 
@@ -132,6 +158,14 @@ def create_app(
     app.include_router(openwebui.router, prefix="/api")
     app.include_router(web.router, prefix="/api")
     return app
+
+
+def _load_runtime_env(options: RuntimeOptions) -> None:
+    env_file_path = Path(options.env_file).expanduser()
+    if not env_file_path.is_absolute():
+        workspace = (options.workspace or Path(".")).resolve()
+        env_file_path = workspace / env_file_path
+    load_env_file(env_file_path)
 
 
 def _register_web_page_routes(app: FastAPI) -> None:

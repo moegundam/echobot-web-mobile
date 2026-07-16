@@ -48,6 +48,7 @@ class OpenAICompatibleSettings:
         env: Mapping[str, str] | None = None,
         *,
         prefix: str = "LLM_",
+        allow_unconfigured: bool = False,
     ) -> "OpenAICompatibleSettings":
         source = os.environ if env is None else env
         api_key_name = f"{prefix}API_KEY"
@@ -57,8 +58,12 @@ class OpenAICompatibleSettings:
 
         extra_body_name = f"{prefix}EXTRA_BODY"
 
-        api_key = _get_required_env(source, api_key_name)
-        model = _get_required_env(source, model_name)
+        if allow_unconfigured:
+            api_key = _get_optional_env(source, api_key_name, default="") or ""
+            model = _get_optional_env(source, model_name, default="") or ""
+        else:
+            api_key = _get_required_env(source, api_key_name)
+            model = _get_required_env(source, model_name)
         base_url = _get_optional_env(source, base_url_name, default=_DEFAULT_BASE_URL)
         timeout_text = _get_optional_env(
             source,
@@ -110,6 +115,7 @@ class OpenAICompatibleProvider(LLMProvider):
         temperature: float | None = None,
         max_tokens: int | None = None,
     ) -> LLMResponse:
+        self._ensure_configured()
         payload = await asyncio.to_thread(
             self._build_payload,
             messages=messages,
@@ -131,6 +137,7 @@ class OpenAICompatibleProvider(LLMProvider):
         temperature: float | None = None,
         max_tokens: int | None = None,
     ) -> AsyncIterator[str]:
+        self._ensure_configured()
         if tools:
             response = await self.generate(
                 messages,
@@ -393,11 +400,21 @@ class OpenAICompatibleProvider(LLMProvider):
         )
 
     def _request_headers(self) -> dict[str, str]:
-        return {
-            "Authorization": f"Bearer {self.settings.api_key}",
+        headers = {
             "Content-Type": "application/json; charset=utf-8",
             **self.settings.extra_headers,
         }
+        if self.settings.api_key and self.settings.api_key != "EMPTY":
+            headers["Authorization"] = f"Bearer {self.settings.api_key}"
+        return headers
+
+    def _ensure_configured(self) -> None:
+        if self.settings.model.strip():
+            return
+        raise RuntimeError(
+            "LLM provider is not configured. Configure an LLM model in "
+            "/admin/models or set LLM_MODEL before sending a message."
+        )
 
     def _parse_stream_chunk(self, payload_text: str) -> str:
         try:

@@ -195,12 +195,10 @@ class ConversationCoordinatorTests(unittest.IsolatedAsyncioTestCase):
                 "Please set a cron reminder",
             )
 
-            job = None
-            for _ in range(20):
-                job = await coordinator.get_job(result.job_id or "")
-                if job is not None and job.status != "running":
-                    break
-                await asyncio.sleep(0.01)
+            job = await self._wait_for_job_to_settle(
+                coordinator,
+                result.job_id or "",
+            )
 
             session = session_store.load_session("demo")
             await coordinator.close()
@@ -231,12 +229,10 @@ class ConversationCoordinatorTests(unittest.IsolatedAsyncioTestCase):
                 response_language="zh-Hant",
             )
 
-            job = None
-            for _ in range(20):
-                job = await coordinator.get_job(result.job_id or "")
-                if job is not None and job.status != "running":
-                    break
-                await asyncio.sleep(0.01)
+            job = await self._wait_for_job_to_settle(
+                coordinator,
+                result.job_id or "",
+            )
 
             session = session_store.load_session("demo")
             await coordinator.close()
@@ -328,12 +324,10 @@ class ConversationCoordinatorTests(unittest.IsolatedAsyncioTestCase):
                 "Please set a cron reminder",
             )
 
-            job = None
-            for _ in range(20):
-                job = await coordinator.get_job(result.job_id or "")
-                if job is not None and job.status != "running":
-                    break
-                await asyncio.sleep(0.01)
+            job = await self._wait_for_job_to_settle(
+                coordinator,
+                result.job_id or "",
+            )
 
             session = session_store.load_session("demo")
             await coordinator.close()
@@ -361,23 +355,20 @@ class ConversationCoordinatorTests(unittest.IsolatedAsyncioTestCase):
                 "demo",
                 "Please set a cron reminder",
             )
-            for _ in range(20):
-                first_job = await coordinator.get_job(first_result.job_id or "")
-                if first_job is not None and first_job.status != "running":
-                    break
-                await asyncio.sleep(0.01)
+            await self._wait_for_job_to_settle(
+                coordinator,
+                first_result.job_id or "",
+            )
 
             second_result = await coordinator.handle_user_turn(
                 "demo",
                 "src/app.py",
             )
 
-            second_job = None
-            for _ in range(20):
-                second_job = await coordinator.get_job(second_result.job_id or "")
-                if second_job is not None and second_job.status != "running":
-                    break
-                await asyncio.sleep(0.01)
+            second_job = await self._wait_for_job_to_settle(
+                coordinator,
+                second_result.job_id or "",
+            )
 
             session = session_store.load_session("demo")
             await coordinator.close()
@@ -481,3 +472,25 @@ class ConversationCoordinatorTests(unittest.IsolatedAsyncioTestCase):
             if issubclass(warning.category, RuntimeWarning)
             and "was never awaited" in str(warning.message)
         ]
+
+    async def _wait_for_job_to_settle(
+        self,
+        coordinator: ConversationCoordinator,
+        job_id: str,
+        *,
+        timeout_seconds: float = 2.0,
+    ):
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout_seconds
+        last_job = None
+        while loop.time() < deadline:
+            last_job = await coordinator.get_job(job_id)
+            if last_job is not None and last_job.status != "running":
+                return last_job
+            await asyncio.sleep(0.01)
+
+        status = "missing" if last_job is None else last_job.status
+        self.fail(
+            f"job {job_id!r} did not settle within {timeout_seconds:.1f}s "
+            f"(last status: {status})"
+        )

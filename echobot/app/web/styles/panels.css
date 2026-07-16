@@ -286,7 +286,12 @@
 
 html[data-layout-mode="desktop"] .settings-panel[open],
 html[data-layout-mode="tablet"][data-viewport-orientation="landscape"] .settings-panel[open] {
-    max-height: min(66vh, 640px);
+    max-height: min(52vh, calc(100dvh - 320px), 560px);
+}
+
+html[data-layout-mode="desktop"] .conversation-panel,
+html[data-layout-mode="tablet"][data-viewport-orientation="landscape"] .conversation-panel {
+    min-height: 250px;
 }
 
 .session-sidebar,

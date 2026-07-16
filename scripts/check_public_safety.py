@@ -24,19 +24,23 @@ FORBIDDEN_TRACKED_PREFIXES = (
 SCANNED_SECRET_PATTERNS = {
     "telegram_bot_token": re.compile(r"\b\d{8,12}:AA[A-Za-z0-9_-]{30,}\b"),
     "openai_api_key": re.compile(r"\bsk-[A-Za-z0-9A-Za-z_-]{20,}\b"),
+    "github_token": re.compile(r"\bgh[pousr]_[A-Za-z0-9]{30,}\b"),
+    "aws_access_key": re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
+    "slack_token": re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{20,}\b"),
+    "discord_bot_token": re.compile(
+        r"\b[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{20,}\b",
+    ),
     "discord_mfa_token": re.compile(r"\bmfa\.[A-Za-z0-9_-]{20,}\b"),
     "private_key_block": re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH |)PRIVATE KEY-----"),
 }
 
 SCAN_EXCLUDED_PREFIXES = (
     ".git/",
-    ".github/",
     ".venv/",
     ".uv-cache/",
     "venv/",
     "node_modules/",
     "echobot/app/web/vendor/",
-    "echobot/skills/",
 )
 
 SCAN_EXCLUDED_SUFFIXES = (

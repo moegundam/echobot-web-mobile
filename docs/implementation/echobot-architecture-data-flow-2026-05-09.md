@@ -482,36 +482,36 @@ flowchart TD
 
 | 區塊 | 狀態 | 備註 |
 |---|---|---|
-| Session 為 runtime 核心 | 部分完成 | Session API 已存在，但 `sessions.py` 還需要抽 application service |
+| Session 為 runtime 核心 | 已完成目前 application slice | `SessionApplicationService` 已存在，sessions router 已委派 service |
 | Character 綁 LLM/Voice/Live2D | 部分完成 | 後台 API/UI 已拆，但資料仍透過 compatibility model profile store |
 | Channel owner scoped | 已完成一輪 | `channel_owner_scope` 已避免 user runtime 假裝持有 channel service |
 | Runtime context service | 已完成一輪 | `session_runtime_context.py` 已抽出 |
 | Stage event broker | 已完成基礎 | SSE + bounded event model 已存在 |
 | Telegram / Discord gateway | 可跑，需 E2E 持續驗收 | health 顯示 running，但正式活動前仍需真訊息回歸 |
-| Open WebUI bridge | 接口方向已存在 | 尚未完成真接線驗收 |
+| Open WebUI bridge | 部分完成 | Narrow API 與 smoke path 已存在；正式 UI/長跑驗收仍需環境證據 |
 | PostgreSQL schema | 規劃/文件存在 | 目前 runtime 仍以 `.echobot` JSON/files 為主 |
 
 ### 下一步重構順序
 
-1. `sessions.py` -> `SessionApplicationService`
-   - 將 create/update/role/channel-binding/default channel template 收斂。
-   - 讓 Session 核心規則集中。
-
-2. `character_profiles.py` 拆分
+1. `character_profiles.py` 拆分
    - Character CRUD
    - package import/export
    - model/voice/live2D/channel default binding
 
-3. `runtime_model_repositories.py` 拆分
+2. `runtime_model_repositories.py` 拆分
    - Base repository
    - LLM repository
    - Voice repository
    - Live2D repository
 
-4. UIUX 資料流檢查
+3. UIUX 資料流檢查
    - Console session selector 是否為主入口。
    - Stage 是否只呈現正式互動。
    - Admin 是否只做持久設定。
+
+4. Production persistence and broker
+   - PostgreSQL runtime repositories/migration。
+   - Redis/pubsub before multi-worker deployment。
 
 ## English version
 
@@ -688,18 +688,18 @@ flowchart TD
 
 | Area | Status | Notes |
 |---|---|---|
-| Session-centered runtime | Partially done | `sessions.py` should still be extracted into an application service |
+| Session-centered runtime | Current application slice complete | `SessionApplicationService` exists and the sessions router delegates to it |
 | Character model/voice/Live2D binding | Partially done | Uses compatibility model profile storage |
 | Owner-scoped channel service | Done in one slice | User runtimes no longer expose `channel_service` directly |
 | Runtime context service | Done in one slice | `session_runtime_context.py` now owns effective context composition |
 | Stage event broker | Basic complete | SSE broker exists |
 | Telegram / Discord gateway | Running, needs repeated E2E | Health shows adapters running |
-| Open WebUI bridge | Interface exists | Full live integration is not yet verified |
+| Open WebUI bridge | Partial | Narrow APIs and smoke paths exist; formal UI/long-run evidence remains environment-specific |
 | PostgreSQL | Planned | Current runtime still uses `.echobot` files |
 
 ### Recommended Refactor Order
 
-1. Extract `sessions.py` into `SessionApplicationService`.
-2. Split `character_profiles.py` into character CRUD, package import/export, and runtime binding services.
-3. Split `runtime_model_repositories.py` into smaller repositories.
-4. Recheck UI data flow for Console, Stage, Messenger, and Admin.
+1. Split `character_profiles.py` into character CRUD, package import/export, and runtime binding services.
+2. Split `runtime_model_repositories.py` into smaller repositories.
+3. Recheck UI data flow for Console, Stage, Messenger, and Admin.
+4. Add PostgreSQL runtime repositories/migration and Redis/pubsub before multi-worker deployment.

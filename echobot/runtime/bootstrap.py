@@ -48,6 +48,7 @@ class RuntimeOptions:
     storage_root: Path | None = None
     temperature: float | None = None
     max_tokens: int | None = None
+    allow_unconfigured_llm: bool = False
     delegated_ack_enabled: bool | None = None
     no_tools: bool = False
     no_skills: bool = False
@@ -120,7 +121,9 @@ def build_runtime_context(
     configure_runtime_logging()
     lightweight_max_tokens = _env_int("ECHOBOT_LIGHTWEIGHT_MAX_TOKENS", 4096)
     agent_max_steps = _env_int("ECHOBOT_AGENT_MAX_STEPS", 50)
-    settings = OpenAICompatibleSettings.from_env()
+    settings = OpenAICompatibleSettings.from_env(
+        allow_unconfigured=options.allow_unconfigured_llm,
+    )
     supports_image_input = _env_bool("ECHOBOT_LLM_SUPPORTS_IMAGE_INPUT", True)
     attachment_store = AttachmentStore(
         storage_root / "attachments",

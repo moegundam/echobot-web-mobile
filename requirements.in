@@ -1,0 +1,23 @@
+# Runtime dependencies validated with Python 3.12.
+fastapi==0.136.1
+uvicorn==0.46.0
+python-multipart==0.0.31
+pydantic==2.13.3
+loguru==0.7.3
+PyYAML==6.0.3
+Pillow==12.3.0
+openai==2.33.0
+
+# Document processing
+defusedxml==0.7.1
+
+# ASR and TTS
+edge-tts==7.2.8
+sherpa-onnx==1.13.0
+# sherpa-onnx publishes its native runtime separately on supported platforms.
+sherpa-onnx-core==1.13.0
+
+# Gateway adapters
+qq-botpy==1.2.1
+python-telegram-bot==22.7
+discord.py==2.7.1

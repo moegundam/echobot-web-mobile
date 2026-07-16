@@ -279,6 +279,12 @@ class AppRuntime:
             "jobs": job_counts,
         }
 
+    async def readiness_snapshot(self) -> dict[str, str]:
+        if not self._started or self.gateway_task is None or self.gateway_task.done():
+            raise RuntimeError("App runtime is not ready")
+        await self.health_snapshot()
+        return {"status": "ok"}
+
     async def apply_active_model_profile(self) -> None:
         if self.model_profile_service is None:
             return

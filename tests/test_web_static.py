@@ -71,6 +71,9 @@ class WebStaticAssetTests(unittest.TestCase):
         live2d_render_js = (
             WEB_ROOT / "features" / "live2d" / "controls" / "render.js"
         ).read_text(encoding="utf-8")
+        live2d_backgrounds_js = (
+            WEB_ROOT / "features" / "live2d" / "backgrounds.js"
+        ).read_text(encoding="utf-8")
 
         self.assertIn('id="session-settings-summary"', html)
         self.assertIn('id="session-settings-current"', html)
@@ -116,7 +119,17 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn('data-i18n-key="console.applyBackgroundToStage"', html)
         self.assertIn('data-i18n-key="console.backgroundApplyHelp"', html)
         self.assertIn('data-language-switcher', html)
-        self.assertIn('app.js?v=console-a11y-1', html)
+        self.assertIn('app.js?v=background-i18n-1', html)
+        self.assertIn(
+            'features/live2d/index.js?v=background-i18n-1',
+            app_js,
+        )
+        self.assertIn(
+            'backgrounds.js?v=background-i18n-1',
+            (WEB_ROOT / "features" / "live2d" / "index.js").read_text(
+                encoding="utf-8",
+            ),
+        )
         self.assertIn('shell-i18n.js?v=language-menu-1', app_js)
         self.assertIn('shell-display-mode.js?v=display-menu-1', app_js)
         self.assertIn('id="console-advanced-overrides-panel"', html)
@@ -160,6 +173,19 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn('"console.applyBackgroundToStage"', i18n_js)
         self.assertIn('"console.backgroundApplyHelp"', i18n_js)
         self.assertIn("getUiLanguage: () => i18n.language", app_js)
+        self.assertIn("function stageBackgroundOptionLabel(background)", live2d_backgrounds_js)
+        self.assertIn(
+            'return t("console.noStageBackground")',
+            live2d_backgrounds_js,
+        )
+        self.assertIn(
+            "option.textContent = stageBackgroundOptionLabel(background)",
+            live2d_backgrounds_js,
+        )
+        self.assertIn(
+            "label: stageBackgroundOptionLabel(selectedOption)",
+            live2d_backgrounds_js,
+        )
         self.assertIn('document.querySelectorAll("[data-language-switcher]")', i18n_js)
         self.assertNotIn('document.querySelector("[data-language-switcher]")', i18n_js)
         self.assertIn('document.createElement("button")', i18n_js)
@@ -203,7 +229,11 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn('html[data-layout-mode="tablet"][data-viewport-orientation="landscape"] .page-shell', responsive_css)
         self.assertIn("grid-template-columns: minmax(0, 1fr) minmax(320px, min(44vw, 420px));", responsive_css)
         self.assertIn("html[data-layout-mode=\"tablet\"] .page-resizer", responsive_css)
-        self.assertIn("max-height: min(66vh, 640px)", panels_css)
+        self.assertIn(
+            "max-height: min(52vh, calc(100dvh - 320px), 560px)",
+            panels_css,
+        )
+        self.assertIn("min-height: 250px", panels_css)
         self.assertIn("response_language: getUiLanguage()", chat_runner_js)
         self.assertIn("SHELL_SAFETY_MODE_LABEL_KEYS", (WEB_ROOT / "features" / "layout" / "runtime.js").read_text(encoding="utf-8"))
         self.assertNotIn('"danger-full-access": "full access"', (WEB_ROOT / "features" / "layout" / "runtime.js").read_text(encoding="utf-8"))

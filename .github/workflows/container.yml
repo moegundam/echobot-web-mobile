@@ -10,15 +10,26 @@ on:
 
 permissions:
   contents: read
-  packages: write
+
+concurrency:
+  group: container-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/echobot-web-mobile
 
 jobs:
+  verify:
+    name: Verify before publish
+    uses: ./.github/workflows/ci.yml
+
   publish:
     name: Build and publish image
+    needs: verify
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
 
     steps:
       - name: Check out repository
@@ -32,13 +43,18 @@ jobs:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USERNAME}" --password-stdin
 
-      - name: Build image
+      - name: Download verified container image
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: echobot-container-${{ github.sha }}
+          path: /tmp/echobot-container
+
+      - name: Load and tag verified image
         run: |
           short_sha="${GITHUB_SHA::7}"
-          docker build \
-            --tag "${IMAGE_NAME}:upgrade" \
-            --tag "${IMAGE_NAME}:sha-${short_sha}" \
-            .
+          docker load --input /tmp/echobot-container/echobot-web-mobile-ci.tar.gz
+          docker tag echobot-web-mobile:ci "${IMAGE_NAME}:upgrade"
+          docker tag echobot-web-mobile:ci "${IMAGE_NAME}:sha-${short_sha}"
 
       - name: Push image
         run: |

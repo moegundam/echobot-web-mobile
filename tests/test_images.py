@@ -9,7 +9,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from echobot.attachments import AttachmentStore
+from echobot.attachments import AttachmentStore, FileBudget
 from echobot.images import ImageBudget, image_bytes_to_jpeg_data_url, normalize_image_bytes
 
 
@@ -53,6 +53,48 @@ class ImageNormalizationTests(unittest.TestCase):
 
 
 class AttachmentStoreTests(unittest.TestCase):
+    def test_create_file_attachment_from_stream_does_not_require_full_buffer(self) -> None:
+        class ChunkedStream(BytesIO):
+            def read(self, size: int = -1) -> bytes:
+                self.assert_bounded_read(size)
+                return super().read(min(size, 3))
+
+            @staticmethod
+            def assert_bounded_read(size: int) -> None:
+                if size <= 0:
+                    raise AssertionError("stream upload must use bounded reads")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            attachment_store = AttachmentStore(Path(temp_dir) / "attachments")
+
+            attachment = attachment_store.create_file_attachment_from_stream(
+                ChunkedStream(b"streamed file content"),
+                content_type="text/plain",
+                filename="notes.txt",
+            )
+
+            self.assertEqual(21, attachment.size_bytes)
+            self.assertEqual(
+                b"streamed file content",
+                attachment_store.file_attachment_path(attachment.attachment_id).read_bytes(),
+            )
+
+    def test_stream_file_upload_removes_partial_file_when_budget_is_exceeded(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            attachment_store = AttachmentStore(
+                Path(temp_dir) / "attachments",
+                file_budget=FileBudget(max_input_bytes=5),
+            )
+
+            with self.assertRaisesRegex(ValueError, "upload size limit"):
+                attachment_store.create_file_attachment_from_stream(
+                    BytesIO(b"too large"),
+                    filename="large.bin",
+                )
+
+            self.assertEqual([], list(attachment_store.files_dir.glob("*")))
+            self.assertEqual([], list(attachment_store.meta_dir.glob("*")))
+
     def test_create_image_attachment_persists_metadata_and_file(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             attachment_store = AttachmentStore(Path(temp_dir) / "attachments")

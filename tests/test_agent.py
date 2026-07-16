@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 import platform
 import tempfile
@@ -1179,6 +1180,19 @@ class OpenAICompatibleProviderTests(unittest.TestCase):
 
         self.assertEqual("", chunk)
 
+    def test_unconfigured_provider_fails_before_network_request(self) -> None:
+        provider = OpenAICompatibleProvider(
+            OpenAICompatibleSettings(api_key="", model=""),
+        )
+
+        with patch.object(provider, "_post_json") as post_json:
+            with self.assertRaisesRegex(RuntimeError, "not configured"):
+                asyncio.run(
+                    provider.generate([LLMMessage(role="user", content="hello")])
+                )
+
+        post_json.assert_not_called()
+
 
 class OpenAICompatibleSettingsTests(unittest.TestCase):
     def test_from_env_reads_required_values(self) -> None:
@@ -1210,6 +1224,15 @@ class OpenAICompatibleSettingsTests(unittest.TestCase):
     def test_from_env_requires_api_key_and_model(self) -> None:
         with self.assertRaisesRegex(ValueError, "LLM_API_KEY"):
             OpenAICompatibleSettings.from_env(env={"LLM_MODEL": "test-model"})
+
+    def test_from_env_can_build_unconfigured_web_runtime_settings(self) -> None:
+        settings = OpenAICompatibleSettings.from_env(
+            env={},
+            allow_unconfigured=True,
+        )
+
+        self.assertEqual("", settings.api_key)
+        self.assertEqual("", settings.model)
 
     def test_from_env_validates_timeout(self) -> None:
         with self.assertRaisesRegex(ValueError, "LLM_TIMEOUT"):
