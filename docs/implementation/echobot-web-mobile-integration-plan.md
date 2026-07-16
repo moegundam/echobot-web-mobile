@@ -84,7 +84,7 @@
 | Mobile | 390x844 / 430x932 / 360x800 / 768x1024 無重疊 | 已完成 Chrome DevTools smoke |
 | iPhone | Safari 登入、麥克風、ASR、TTS、Live2D lip sync | 未完成真機 |
 | Android | Chrome 登入、麥克風、常開麥、ASR、TTS、Live2D lip sync | 未完成真機 |
-| Regression | 全量 pytest | current working candidate：`498 passed, 3 warnings, 31 subtests passed in 26.73s` |
+| Regression | 全量 pytest | current working candidate：`499 passed, 3 warnings, 31 subtests passed in 27.62s` |
 
 ### 需要使用者接手或確認的項目
 
@@ -182,7 +182,7 @@ Turn EchoBot into the Web/Mobile management repo `moegundam/echobot-web-mobile`.
 | Mobile | 390x844 / 430x932 / 360x800 / 768x1024 have no overlap | Chrome DevTools smoke done |
 | iPhone | Safari login, mic, ASR, TTS, Live2D lip sync | Real-device pending |
 | Android | Chrome login, mic, open mic, ASR, TTS, Live2D lip sync | Real-device pending |
-| Regression | Full pytest | Current working candidate: `498 passed, 3 warnings, 31 subtests passed in 26.73s` |
+| Regression | Full pytest | Current working candidate: `499 passed, 3 warnings, 31 subtests passed in 27.62s` |
 
 ### User Handoff Or Confirmation Needed
 

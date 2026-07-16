@@ -140,7 +140,7 @@ def _default_repo_root() -> Path:
 
 def _config_from_args(args: argparse.Namespace) -> dict[str, object]:
     repo_root = Path(args.repo_root).expanduser().resolve()
-    python_path = Path(args.python).expanduser() if args.python else repo_root / ".venv" / "bin" / "python"
+    python_path = _resolve_python_path(str(args.python), repo_root)
     return {
         "repo_root": repo_root,
         "host": str(args.host),
@@ -156,6 +156,20 @@ def _config_from_args(args: argparse.Namespace) -> dict[str, object]:
         "log_dir": DEFAULT_LOG_DIR,
         "launch_agent_dir": Path.home() / "Library" / "LaunchAgents",
     }
+
+
+def _resolve_python_path(value: str, repo_root: Path) -> Path:
+    if not value:
+        return (repo_root / ".venv" / "bin" / "python").resolve()
+
+    expanded = Path(value).expanduser()
+    if expanded.is_absolute():
+        return expanded.resolve()
+    if expanded.parent != Path("."):
+        return (repo_root / expanded).resolve()
+
+    discovered = shutil.which(value)
+    return Path(discovered).resolve() if discovered else (repo_root / expanded).resolve()
 
 
 def _doctor(config: dict[str, object]) -> int:

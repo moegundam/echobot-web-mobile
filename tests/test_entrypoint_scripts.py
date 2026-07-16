@@ -26,12 +26,14 @@ def _write_environment_capture_python(tmp_path: Path) -> Path:
         f"#!{sys.executable}\n"
         "import json\n"
         "import os\n"
+        "import sys\n"
         "from pathlib import Path\n"
         f"token_file = os.environ.get({TOKEN_FILE_ENV!r})\n"
         "token_file_value = None\n"
         "if token_file:\n"
         "    token_file_value = Path(token_file).read_text(encoding='utf-8')\n"
         "payload = {\n"
+        "    'argv': sys.argv[1:],\n"
         f"    'token': os.environ.get({TOKEN_ENV!r}),\n"
         "    'token_file': token_file,\n"
         "    'token_file_value': token_file_value,\n"
@@ -97,15 +99,17 @@ def test_gateway_smoke_scripts_detect_deterministic_commands() -> None:
 
 def test_launchd_app_plist_leaves_file_token_for_application_to_read(tmp_path: Path) -> None:
     entrypoint = _load_script("echobot_entrypoint")
+    repo_root = tmp_path / "workspace with spaces;$(not-executed)"
+    repo_root.mkdir()
     token_file = tmp_path / "bridge-token"
     token_file.write_text("secret-token\n", encoding="utf-8")
     capture_path = tmp_path / "captured-environment.json"
     config = {
-        "repo_root": ROOT,
-        "host": "127.0.0.1",
+        "repo_root": repo_root,
+        "host": "127.0.0.1;$(not-executed)",
         "port": 8001,
-        "env_file": ".env",
-        "channel_config": ".echobot/channels.json",
+        "env_file": repo_root / '.env "quoted"',
+        "channel_config": repo_root / "channels;$(not-executed).json",
         "token_file": str(token_file),
         "python": str(_write_environment_capture_python(tmp_path)),
     }
@@ -119,13 +123,28 @@ def test_launchd_app_plist_leaves_file_token_for_application_to_read(tmp_path: P
     assert TOKEN_ENV not in plist["EnvironmentVariables"]
     assert str(token_file) in rendered
     assert "secret-token" not in rendered
-    assert plist["ProgramArguments"][:4] == [
+    expected_arguments = [
         config["python"],
         "-m",
         "echobot",
         "app",
+        "--host",
+        str(config["host"]),
+        "--port",
+        str(config["port"]),
+        "--workspace",
+        str(repo_root),
+        "--env-file",
+        str(config["env_file"]),
+        "--channel-config",
+        str(config["channel_config"]),
     ]
+    assert plist["ProgramArguments"] == expected_arguments
+    assert plist["WorkingDirectory"] == str(repo_root)
+    assert "/bin/zsh" not in expected_arguments
+    assert "-lc" not in expected_arguments
     assert captured == {
+        "argv": expected_arguments[1:],
         "token": None,
         "token_file": str(token_file),
         "token_file_value": "secret-token\n",
@@ -153,11 +172,35 @@ def test_launchd_app_plist_preserves_direct_token_without_file_source(tmp_path: 
     )
 
     assert TOKEN_FILE_ENV not in plist["EnvironmentVariables"]
+    assert captured.pop("argv") == plist["ProgramArguments"][1:]
     assert captured == {
         "token": "direct-secret",
         "token_file": None,
         "token_file_value": None,
     }
+
+
+def test_python_path_resolution_uses_absolute_discovered_executable(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    entrypoint = _load_script("echobot_entrypoint")
+    executable = tmp_path / "bin" / "python-local"
+    executable.parent.mkdir()
+    executable.touch()
+    monkeypatch.setattr(
+        entrypoint.shutil,
+        "which",
+        lambda value: str(executable) if value == "python-local" else None,
+    )
+
+    resolved = entrypoint._resolve_python_path("python-local", tmp_path)
+
+    assert resolved == executable.resolve()
+    assert resolved.is_absolute()
+    assert entrypoint._resolve_python_path(".venv/bin/python", tmp_path) == (
+        tmp_path / ".venv" / "bin" / "python"
+    ).resolve()
 
 
 def test_launchd_openwebui_tunnel_plist_maps_remote_to_local_port() -> None:
