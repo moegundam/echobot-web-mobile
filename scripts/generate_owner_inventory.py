@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import ast
 import fnmatch
+import hashlib
 import os
 import re
 import subprocess
@@ -19,6 +20,12 @@ OUTPUT_NAMES = (
     "MODULE_FILE_INDEX.md",
     "TEST_FILE_INDEX.md",
     "ENVIRONMENT_KEY_INDEX.md",
+    "GENERATED_MANIFEST.md",
+)
+GENERATOR_VERSION = "2"
+GENERATION_COMMAND = (
+    "python scripts/generate_owner_inventory.py "
+    "--output-dir <owner-docs>/generated"
 )
 HTTP_METHODS = {
     "get",
@@ -398,14 +405,67 @@ def _environment_index() -> str:
     return "\n".join(lines) + "\n"
 
 
+def _git_output(*args: str) -> str:
+    try:
+        return subprocess.check_output(
+            ["git", *args],
+            cwd=ROOT,
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise InventoryError("Cannot resolve the source snapshot with git") from exc
+
+
+def _add_manifest_link(content: str) -> str:
+    marker = "\n\n"
+    if marker not in content:
+        raise InventoryError("Generated index is missing its heading separator")
+    provenance = "Provenance: [Generation Manifest](./GENERATED_MANIFEST.md)"
+    return content.replace(marker, f"{marker}{provenance}{marker}", 1)
+
+
+def _manifest(indexes: dict[str, str]) -> str:
+    source_sha = _git_output("rev-parse", "HEAD")
+    source_commit_time = _git_output("show", "-s", "--format=%cI", "HEAD")
+    tree_state = (
+        "dirty"
+        if _git_output("status", "--porcelain", "--untracked-files=no")
+        else "clean"
+    )
+    lines = [
+        "# Generated Inventory Manifest / 產生索引清單",
+        "",
+        "This file binds every generated owner index to one repository snapshot.",
+        "",
+        f"Source SHA: **`{source_sha}`**",
+        f"Source tree state: **{tree_state}**",
+        f"Generated at: **{source_commit_time}**",
+        f"Generator version: **{GENERATOR_VERSION}**",
+        f"Generation command: `{GENERATION_COMMAND}`",
+        "",
+        "| Index | SHA-256 |",
+        "| --- | --- |",
+    ]
+    for name, content in indexes.items():
+        fingerprint = hashlib.sha256(content.encode("utf-8")).hexdigest()
+        lines.append(f"| `{name}` | `{fingerprint}` |")
+    return "\n".join(lines) + "\n"
+
+
 def generate() -> dict[str, str]:
-    outputs = {
+    indexes = {
         "API_OPERATION_INDEX.md": _api_index(),
         "API_SCHEMA_INDEX.md": _schema_index(),
         "MODULE_FILE_INDEX.md": _module_index(),
         "TEST_FILE_INDEX.md": _test_index(),
         "ENVIRONMENT_KEY_INDEX.md": _environment_index(),
     }
+    outputs = {
+        name: _add_manifest_link(content)
+        for name, content in indexes.items()
+    }
+    outputs["GENERATED_MANIFEST.md"] = _manifest(outputs)
     if tuple(outputs) != OUTPUT_NAMES:
         raise InventoryError("Internal output set does not match the required inventory files")
     return outputs

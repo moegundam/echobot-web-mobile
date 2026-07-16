@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import hashlib
 import subprocess
 import sys
 import tempfile
@@ -13,6 +14,7 @@ SCRIPT = ROOT / "scripts" / "generate_owner_inventory.py"
 OUTPUT_NAMES = {
     "API_OPERATION_INDEX.md",
     "API_SCHEMA_INDEX.md",
+    "GENERATED_MANIFEST.md",
     "MODULE_FILE_INDEX.md",
     "TEST_FILE_INDEX.md",
     "ENVIRONMENT_KEY_INDEX.md",
@@ -68,6 +70,25 @@ class OwnerInventoryGeneratorTests(unittest.TestCase):
         combined = "\n".join(first.values())
         self.assertNotIn(str(ROOT), combined)
         self.assertNotIn(str(Path.home()), combined)
+
+        manifest = first["GENERATED_MANIFEST.md"]
+        source_sha = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"],
+            cwd=ROOT,
+            text=True,
+        ).strip()
+        self.assertIn(f"Source SHA: **`{source_sha}`**", manifest)
+        self.assertIn("Source tree state: **", manifest)
+        self.assertIn("Generated at: **", manifest)
+        self.assertIn("Generator version: **", manifest)
+        self.assertIn(
+            "`python scripts/generate_owner_inventory.py --output-dir <owner-docs>/generated`",
+            manifest,
+        )
+        for name in OUTPUT_NAMES - {"GENERATED_MANIFEST.md"}:
+            self.assertIn("[Generation Manifest](./GENERATED_MANIFEST.md)", first[name])
+            fingerprint = hashlib.sha256(first[name].encode("utf-8")).hexdigest()
+            self.assertIn(f"| `{name}` | `{fingerprint}` |", manifest)
 
         api = first["API_OPERATION_INDEX.md"]
         self.assertIn("`GET` | `/api/web/live2d/{asset_path:path}`", api)
