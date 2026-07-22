@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import os
 import re
+import stat
+import tempfile
 import threading
 from copy import deepcopy
 from datetime import datetime, timezone
@@ -23,10 +25,9 @@ from .model_profiles import (
 
 
 class LLMModelRepository:
-    """LLM model repository with a local store and compatibility mirror."""
+    """Canonical LLM model repository seeded once from the legacy store."""
 
     def __init__(self, model_profiles: ModelProfileService) -> None:
-        self._model_profiles = model_profiles
         self._store = _DomainStore(
             path=model_profiles.storage_root / "llm_models.json",
             secret_path=model_profiles.storage_root / "llm_model_secrets.json",
@@ -39,7 +40,6 @@ class LLMModelRepository:
             secret_sections=("chat",),
             secret_env_names={"chat": "LLM_API_KEY"},
         )
-        self._mirror = _CompatibilityMirror(model_profiles)
 
     def list_payload(self) -> dict[str, Any]:
         return self._store.list_legacy_payload()
@@ -51,7 +51,6 @@ class LLMModelRepository:
         source_model_id: str | None = None,
     ) -> dict[str, Any]:
         item = self._store.create(name=name, source_id=source_model_id)
-        self._mirror.upsert(item["id"], item["name"], {"chat": _llm_item_to_chat(item)})
         return self._store.legacy_profile(item["id"])
 
     def update(self, model_id: str, updates: dict[str, Any]) -> dict[str, Any]:
@@ -71,13 +70,10 @@ class LLMModelRepository:
                 item_updates[key] = updates[key]
 
         item = self._store.update(model_id, item_updates)
-        self._mirror.upsert(item["id"], item["name"], {"chat": _llm_item_to_chat(item)})
         return self._store.legacy_profile(item["id"])
 
     def activate(self, model_id: str) -> dict[str, Any]:
-        item = self._store.activate(model_id)
-        self._mirror.upsert(item["id"], item["name"], {"chat": _llm_item_to_chat(item)})
-        self._mirror.activate_if_present(item["id"])
+        self._store.activate(model_id)
         return self.list_payload()
 
     def delete(self, model_id: str) -> dict[str, Any]:
@@ -92,10 +88,9 @@ class LLMModelRepository:
 
 
 class VoiceModelRepository:
-    """Voice profile repository with independent STT/TTS storage."""
+    """Canonical voice profile repository seeded once from the legacy store."""
 
     def __init__(self, model_profiles: ModelProfileService) -> None:
-        self._model_profiles = model_profiles
         self._store = _DomainStore(
             path=model_profiles.storage_root / "voice_profiles.json",
             secret_path=model_profiles.storage_root / "voice_profile_secrets.json",
@@ -111,7 +106,6 @@ class VoiceModelRepository:
                 "asr": "ECHOBOT_ASR_OPENAI_API_KEY",
             },
         )
-        self._mirror = _CompatibilityMirror(model_profiles)
 
     def list_payload(self) -> dict[str, Any]:
         return self._store.list_legacy_payload()
@@ -123,7 +117,6 @@ class VoiceModelRepository:
         source_profile_id: str | None = None,
     ) -> dict[str, Any]:
         item = self._store.create(name=name, source_id=source_profile_id)
-        self._mirror.upsert(item["id"], item["name"], _voice_item_to_sections(item))
         return self._store.legacy_profile(item["id"])
 
     def update(self, profile_id: str, updates: dict[str, Any]) -> dict[str, Any]:
@@ -136,13 +129,10 @@ class VoiceModelRepository:
             item_updates["asr"] = dict(updates["stt"] or {})
 
         item = self._store.update(profile_id, item_updates)
-        self._mirror.upsert(item["id"], item["name"], _voice_item_to_sections(item))
         return self._store.legacy_profile(item["id"])
 
     def activate(self, profile_id: str) -> dict[str, Any]:
-        item = self._store.activate(profile_id)
-        self._mirror.upsert(item["id"], item["name"], _voice_item_to_sections(item))
-        self._mirror.activate_if_present(item["id"])
+        self._store.activate(profile_id)
         return self.list_payload()
 
     def delete(self, profile_id: str) -> dict[str, Any]:
@@ -157,10 +147,9 @@ class VoiceModelRepository:
 
 
 class Live2DModelRepository:
-    """Live2D model repository with independent visual-profile storage."""
+    """Canonical Live2D repository seeded once from the legacy store."""
 
     def __init__(self, model_profiles: ModelProfileService) -> None:
-        self._model_profiles = model_profiles
         self._store = _DomainStore(
             path=model_profiles.storage_root / "live2d_models.json",
             secret_path=None,
@@ -173,7 +162,6 @@ class Live2DModelRepository:
             secret_sections=(),
             secret_env_names={},
         )
-        self._mirror = _CompatibilityMirror(model_profiles)
 
     def list_payload(self) -> dict[str, Any]:
         return self._store.list_legacy_payload()
@@ -185,7 +173,6 @@ class Live2DModelRepository:
         source_model_id: str | None = None,
     ) -> dict[str, Any]:
         item = self._store.create(name=name, source_id=source_model_id)
-        self._mirror.upsert(item["id"], item["name"], {"live2d": _live2d_item_to_section(item)})
         return self._store.legacy_profile(item["id"])
 
     def update(self, model_id: str, updates: dict[str, Any]) -> dict[str, Any]:
@@ -196,13 +183,10 @@ class Live2DModelRepository:
             item_updates["selection_key"] = updates["selection_key"]
 
         item = self._store.update(model_id, item_updates)
-        self._mirror.upsert(item["id"], item["name"], {"live2d": _live2d_item_to_section(item)})
         return self._store.legacy_profile(item["id"])
 
     def activate(self, model_id: str) -> dict[str, Any]:
-        item = self._store.activate(model_id)
-        self._mirror.upsert(item["id"], item["name"], {"live2d": _live2d_item_to_section(item)})
-        self._mirror.activate_if_present(item["id"])
+        self._store.activate(model_id)
         return self.list_payload()
 
     def delete(self, model_id: str) -> dict[str, Any]:
@@ -233,6 +217,7 @@ class _DomainStore:
     ) -> None:
         self._path = path
         self._secret_path = secret_path
+        self._transaction_path = path.with_name(f".{path.name}.transaction")
         self._active_key = active_key
         self._collection_key = collection_key
         self._default_item = default_item
@@ -309,8 +294,7 @@ class _DomainStore:
                     item[key] = value
             _apply_secret_updates(secrets, normalized_id, normalized_updates.get("secrets", {}))
             item["updated_at"] = _now_iso()
-            self._save_state_unlocked(state)
-            self._save_secrets_unlocked(secrets)
+            self._save_state_and_secrets_unlocked(state, secrets)
             return self._public_item(item, secrets)
 
     def activate(self, item_id: str) -> dict[str, Any]:
@@ -335,10 +319,10 @@ class _DomainStore:
             state[self._collection_key].pop(normalized_id, None)
             secrets = self._load_secrets_unlocked()
             secrets.setdefault("profiles", {}).pop(normalized_id, None)
-            self._save_state_unlocked(state)
-            self._save_secrets_unlocked(secrets)
+            self._save_state_and_secrets_unlocked(state, secrets)
 
     def _load_state_unlocked(self) -> dict[str, Any]:
+        self._recover_transaction_unlocked()
         if not self._path.exists():
             state = self._default_state()
             self._save_state_unlocked(state)
@@ -369,13 +353,10 @@ class _DomainStore:
         return state
 
     def _save_state_unlocked(self, state: dict[str, Any]) -> None:
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        self._path.write_text(
-            json.dumps(state, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
-        )
+        self._atomic_write_json_unlocked(self._path, state)
 
     def _load_secrets_unlocked(self) -> dict[str, Any]:
+        self._recover_transaction_unlocked()
         if self._secret_path is None or not self._secret_path.exists():
             secrets = self._seed_secrets()
             return secrets if isinstance(secrets, dict) else {"profiles": {}}
@@ -388,15 +369,125 @@ class _DomainStore:
     def _save_secrets_unlocked(self, secrets: dict[str, Any]) -> None:
         if self._secret_path is None:
             return
-        self._secret_path.parent.mkdir(parents=True, exist_ok=True)
-        self._secret_path.write_text(
-            json.dumps(secrets, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
+        self._atomic_write_json_unlocked(self._secret_path, secrets)
+
+    def _save_state_and_secrets_unlocked(
+        self,
+        state: dict[str, Any],
+        secrets: dict[str, Any],
+    ) -> None:
+        if self._secret_path is None:
+            self._save_state_unlocked(state)
+            return
+
+        state_snapshot = _snapshot_file(self._path)
+        secret_snapshot = _snapshot_file(self._secret_path)
+        self._atomic_write_json_unlocked(
+            self._transaction_path,
+            {
+                "version": 1,
+                "state": state,
+                "secrets": secrets,
+            },
         )
         try:
-            self._secret_path.chmod(0o600)
-        except OSError:
-            pass
+            self._save_secrets_unlocked(secrets)
+            self._save_state_unlocked(state)
+        except Exception:
+            rollback_errors: list[Exception] = []
+            for path, snapshot in (
+                (self._secret_path, secret_snapshot),
+                (self._path, state_snapshot),
+            ):
+                try:
+                    self._restore_snapshot_unlocked(path, snapshot)
+                except Exception as rollback_error:
+                    rollback_errors.append(rollback_error)
+            if not rollback_errors:
+                try:
+                    self._clear_transaction_unlocked()
+                except OSError as rollback_error:
+                    rollback_errors.append(rollback_error)
+            if rollback_errors:
+                raise RuntimeError(
+                    "Runtime model store update failed and rollback was incomplete"
+                ) from rollback_errors[0]
+            raise
+        self._clear_transaction_unlocked()
+
+    def _recover_transaction_unlocked(self) -> None:
+        if self._secret_path is None or not self._transaction_path.exists():
+            return
+        try:
+            transaction = json.loads(
+                self._transaction_path.read_text(encoding="utf-8")
+            )
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ValueError("Runtime model transaction journal is invalid") from exc
+        state = transaction.get("state") if isinstance(transaction, dict) else None
+        secrets = transaction.get("secrets") if isinstance(transaction, dict) else None
+        if (
+            not isinstance(transaction, dict)
+            or transaction.get("version") != 1
+            or not isinstance(state, dict)
+            or not isinstance(secrets, dict)
+        ):
+            raise ValueError("Runtime model transaction journal is invalid")
+        self._save_secrets_unlocked(secrets)
+        self._save_state_unlocked(state)
+        self._clear_transaction_unlocked()
+
+    def _clear_transaction_unlocked(self) -> None:
+        self._transaction_path.unlink(missing_ok=True)
+        _fsync_directory(self._transaction_path.parent)
+
+    def _restore_snapshot_unlocked(
+        self,
+        path: Path,
+        snapshot: tuple[bytes, int] | None,
+    ) -> None:
+        if snapshot is None:
+            path.unlink(missing_ok=True)
+            _fsync_directory(path.parent)
+            return
+        content, mode = snapshot
+        if path == self._secret_path:
+            mode = 0o600
+        self._atomic_write_bytes_unlocked(path, content, mode=mode)
+
+    def _atomic_write_json_unlocked(self, path: Path, payload: dict[str, Any]) -> None:
+        content = (json.dumps(payload, ensure_ascii=False, indent=2) + "\n").encode(
+            "utf-8"
+        )
+        self._atomic_write_bytes_unlocked(path, content, mode=0o600)
+
+    def _atomic_write_bytes_unlocked(
+        self,
+        path: Path,
+        content: bytes,
+        *,
+        mode: int,
+    ) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        descriptor, temporary_name = tempfile.mkstemp(
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+        )
+        temporary_path = Path(temporary_name)
+        try:
+            os.fchmod(descriptor, mode)
+            with os.fdopen(descriptor, "wb") as handle:
+                descriptor = -1
+                handle.write(content)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary_path, path)
+            _fsync_directory(path.parent)
+        finally:
+            if descriptor >= 0:
+                os.close(descriptor)
+            temporary_path.unlink(missing_ok=True)
 
     def _default_state(self) -> dict[str, Any]:
         seeded_state = self._seed_state()
@@ -479,36 +570,6 @@ class _DomainStore:
                 self._secret_env_names.get(section, ""),
             )
         return public
-
-
-class _CompatibilityMirror:
-    def __init__(self, model_profiles: ModelProfileService) -> None:
-        self._model_profiles = model_profiles
-
-    def upsert(
-        self,
-        profile_id: str,
-        label: str,
-        sections: dict[str, dict[str, Any]],
-    ) -> None:
-        updates: dict[str, Any] = {"label": label}
-        updates.update(sections)
-        mirror_id = self._ensure_profile(profile_id, label)
-        self._model_profiles.update_profile(mirror_id, updates)
-
-    def activate_if_present(self, profile_id: str) -> None:
-        try:
-            self._model_profiles.activate_profile(profile_id)
-        except ValueError:
-            pass
-
-    def _ensure_profile(self, profile_id: str, label: str) -> str:
-        try:
-            self._model_profiles.get_profile(profile_id)
-            return profile_id
-        except ValueError:
-            created = self._model_profiles.create_profile(label=label)
-            return str(created.get("profile_id") or profile_id)
 
 
 def _seed_llm_state(model_profiles: ModelProfileService) -> dict[str, Any]:
@@ -971,3 +1032,22 @@ def _env_text(name: str, default: str = "") -> str:
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _snapshot_file(path: Path) -> tuple[bytes, int] | None:
+    try:
+        file_stat = path.stat()
+        return path.read_bytes(), stat.S_IMODE(file_stat.st_mode)
+    except FileNotFoundError:
+        return None
+
+
+def _fsync_directory(path: Path) -> None:
+    try:
+        descriptor = os.open(path, os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)

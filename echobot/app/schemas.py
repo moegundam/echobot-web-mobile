@@ -4,22 +4,17 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..models import LLMMessage, normalize_message_content
 from ..orchestration import (
     DEFAULT_ROUTE_MODE,
     RouteMode,
-    role_name_from_metadata,
-    route_mode_from_metadata,
 )
-from .session_metadata import (
-    channel_integration_id_from_metadata,
-    channel_type_from_metadata,
-)
-from ..runtime.sessions import ChatSession, SessionInfo
+from ..session_contracts import MAX_SESSION_NAME_LENGTH
 
 
 MAX_CHAT_IMAGES = 20
 MAX_CHAT_FILES = 20
+MAX_CHAT_PROMPT_LENGTH = 64 * 1024
+MAX_TTS_TEXT_LENGTH = 8 * 1024
 
 
 class ToolCallModel(BaseModel):
@@ -58,7 +53,7 @@ class SessionDetailModel(BaseModel):
 
 
 class CreateSessionRequest(BaseModel):
-    name: str | None = None
+    name: str | None = Field(default=None, max_length=MAX_SESSION_NAME_LENGTH)
     role_name: str | None = None
     route_mode: RouteMode | None = None
     channel_type: str | None = None
@@ -66,11 +61,11 @@ class CreateSessionRequest(BaseModel):
 
 
 class SetCurrentSessionRequest(BaseModel):
-    name: str
+    name: str = Field(..., max_length=MAX_SESSION_NAME_LENGTH)
 
 
 class RenameSessionRequest(BaseModel):
-    name: str
+    name: str = Field(..., max_length=MAX_SESSION_NAME_LENGTH)
 
 
 class SetSessionRoleRequest(BaseModel):
@@ -86,14 +81,21 @@ class SetSessionChannelBindingRequest(BaseModel):
     channel_integration_id: str = ""
 
 
+class UpdateSessionConfigurationRequest(BaseModel):
+    role_name: str = "default"
+    route_mode: RouteMode = DEFAULT_ROUTE_MODE
+    channel_type: str = ""
+    channel_integration_id: str = ""
+
+
 class ChatRequest(BaseModel):
-    prompt: str
-    session_name: str = "default"
-    role_name: str | None = None
+    prompt: str = Field(..., max_length=MAX_CHAT_PROMPT_LENGTH)
+    session_name: str = Field(default="default", max_length=MAX_SESSION_NAME_LENGTH)
+    role_name: str | None = Field(default=None, max_length=128)
     route_mode: RouteMode | None = None
     response_language: str | None = Field(default=None, max_length=32)
-    temperature: float | None = None
-    max_tokens: int | None = None
+    temperature: float | None = Field(default=None, ge=0, le=2)
+    max_tokens: int | None = Field(default=None, ge=1, le=200000)
     images: list["ChatImageInput"] = Field(
         default_factory=list,
         max_length=MAX_CHAT_IMAGES,
@@ -267,6 +269,23 @@ class CharacterProfileModel(BaseModel):
     deletable: bool = True
     source_path: str | None = None
     prompt: str = ""
+    model_profile_id: str = ""
+    llm_model_id: str = ""
+    voice_profile_id: str = ""
+    live2d_model_id: str = ""
+    default_channel_type: str = ""
+    default_channel_integration_id: str = ""
+    effective_model_profile_id: str = ""
+    model_profile_label: str = ""
+    chat_model: str = ""
+    tts_voice: str = ""
+    asr_model: str = ""
+    live2d_selection_key: str = ""
+    emotion_maps: list[CharacterEmotionMapModel] = Field(default_factory=list)
+
+
+class SessionCharacterRuntimeModel(BaseModel):
+    name: str
     model_profile_id: str = ""
     llm_model_id: str = ""
     voice_profile_id: str = ""
@@ -478,10 +497,11 @@ class SessionStageRuntimeContextModel(StrictSchemaModel):
 
 
 class SessionRuntimeContextResponse(StrictSchemaModel):
+    revision: str = "ctx-00000000-00000000"
     session_name: str = "default"
     role_name: str = "default"
     route_mode: RouteMode = DEFAULT_ROUTE_MODE
-    character: CharacterProfileModel | None = None
+    character: SessionCharacterRuntimeModel | None = None
     llm_model: LLMModelAdminModel | None = None
     voice_profile: VoiceProfileAdminModel | None = None
     live2d_model: Live2DModelAdminModel | None = None
@@ -490,6 +510,8 @@ class SessionRuntimeContextResponse(StrictSchemaModel):
 
 
 class UpdateSessionRuntimeOverridesRequest(StrictSchemaModel):
+    role_name: str = Field(default="", max_length=128)
+    route_mode: RouteMode | None = None
     model_profile_id: str = ""
     llm_model_id: str = ""
     voice_profile_id: str = ""
@@ -582,12 +604,12 @@ class UpdateLive2DModelRequest(StrictSchemaModel):
 
 
 class TTSRequest(BaseModel):
-    text: str
-    provider: str | None = None
-    voice: str | None = None
-    rate: str | None = None
-    volume: str | None = None
-    pitch: str | None = None
+    text: str = Field(..., max_length=MAX_TTS_TEXT_LENGTH)
+    provider: str | None = Field(default=None, max_length=64)
+    voice: str | None = Field(default=None, max_length=256)
+    rate: str | None = Field(default=None, max_length=32)
+    volume: str | None = Field(default=None, max_length=32)
+    pitch: str | None = Field(default=None, max_length=32)
 
 
 class TTSVoiceModel(BaseModel):
@@ -733,13 +755,21 @@ class WebRuntimeConfigModel(BaseModel):
     web_private_network_enabled: bool = False
 
 
+class WebAccessContextModel(BaseModel):
+    role: str = "user"
+    can_access_console: bool = False
+    can_manage_admin: bool = False
+    can_use_agent: bool = False
+
+
 class WebConfigResponse(BaseModel):
     session_name: str = "default"
     role_name: str = "default"
     route_mode: RouteMode = DEFAULT_ROUTE_MODE
     model_profile_scope: str = "default"
     model_profiles: ModelProfilesResponse = Field(default_factory=ModelProfilesResponse)
-    runtime: WebRuntimeConfigModel = Field(default_factory=WebRuntimeConfigModel)
+    access: WebAccessContextModel = Field(default_factory=WebAccessContextModel)
+    runtime: WebRuntimeConfigModel | None = None
     live2d: WebLive2DConfigModel = Field(default_factory=WebLive2DConfigModel)
     stage: WebStageConfigModel = Field(default_factory=WebStageConfigModel)
     asr: WebASRConfigModel = Field(default_factory=WebASRConfigModel)
@@ -757,97 +787,3 @@ class UpdateWebRuntimeConfigRequest(BaseModel):
 class ASRTranscriptionResponse(BaseModel):
     text: str = ""
     language: str = ""
-
-
-def message_model_from_message(
-    message: LLMMessage,
-    *,
-    sanitize_user_content: bool = False,
-) -> MessageModel:
-    del sanitize_user_content
-    content = normalize_message_content(message.content)
-
-    return MessageModel(
-        role=message.role,
-        content=content,
-        name=message.name,
-        tool_call_id=message.tool_call_id,
-        tool_calls=[
-            ToolCallModel(
-                id=tool_call.id,
-                name=tool_call.name,
-                arguments=tool_call.arguments,
-            )
-            for tool_call in message.tool_calls
-        ],
-    )
-
-
-def session_summary_model_from_info(info: SessionInfo) -> SessionSummaryModel:
-    return SessionSummaryModel(
-        name=info.name,
-        message_count=info.message_count,
-        updated_at=info.updated_at,
-        role_name=role_name_from_metadata(info.metadata),
-        route_mode=route_mode_from_metadata(info.metadata),
-        channel_type=channel_type_from_metadata(info.metadata),
-        channel_integration_id=channel_integration_id_from_metadata(info.metadata),
-    )
-
-
-def session_detail_model_from_session(session: ChatSession) -> SessionDetailModel:
-    return SessionDetailModel(
-        name=session.name,
-        updated_at=session.updated_at,
-        compressed_summary=session.compressed_summary,
-        role_name=role_name_from_metadata(session.metadata),
-        route_mode=route_mode_from_metadata(session.metadata),
-        channel_type=channel_type_from_metadata(session.metadata),
-        channel_integration_id=channel_integration_id_from_metadata(session.metadata),
-        history=[
-            message_model_from_message(
-                message,
-                sanitize_user_content=True,
-            )
-            for message in session.history
-        ],
-    )
-
-
-CHANNEL_SECRET_FIELD_NAMES = {
-    "api_key",
-    "bot_token",
-    "client_secret",
-    "password",
-    "secret",
-    "token",
-    "webhook_url",
-    "webhook_secret",
-}
-
-
-def channel_config_payload(config: dict[str, Any]) -> dict[str, Any]:
-    return {
-        str(channel_name): _redact_channel_config(channel_config)
-        for channel_name, channel_config in dict(config).items()
-    }
-
-
-def _redact_channel_config(channel_config: Any) -> Any:
-    if not isinstance(channel_config, dict):
-        return channel_config
-
-    payload: dict[str, Any] = {}
-    for key, value in channel_config.items():
-        key_text = str(key)
-        if _is_secret_channel_field(key_text):
-            payload[key_text] = ""
-            payload[f"{key_text}_configured"] = bool(str(value or "").strip())
-            continue
-        payload[key_text] = value
-    return payload
-
-
-def _is_secret_channel_field(field_name: str) -> bool:
-    normalized = field_name.strip().lower()
-    return normalized in CHANNEL_SECRET_FIELD_NAMES

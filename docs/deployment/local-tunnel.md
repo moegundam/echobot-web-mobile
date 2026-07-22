@@ -14,7 +14,7 @@
 - Python 3.11+
 - Cloudflare 帳號、已託管的 domain、可建立 named Tunnel
 - `cloudflared` 已安裝並登入
-- `.env.local-tunnel.example` 已複製成 `.env`
+- 已決定使用 Compose 或直接 Python；兩種方式的設定檔位置不同，請依下方步驟操作
 
 ### 安裝
 
@@ -22,31 +22,44 @@
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.local-tunnel.example .env
+cp .env.local-tunnel.example docker.env.local
 ```
 
-填入 `.env` 的 LLM key，並保留內測安全預設：
+Compose 使用 `docker.env.local` 同時做 Compose 變數插值與 container env；不要只複製成 `.env`。填入 LLM key，並保留內測安全預設：
 
 ```text
+LLM_BASE_URL=https://your-provider.example/v1
+LLM_MODEL=your-model-name
+LLM_API_KEY=your-secret-key
 ECHOBOT_TRUSTED_USER_HEADER_ENABLED=true
 ECHOBOT_TRUSTED_USER_REQUIRED=true
+ECHOBOT_TRUSTED_USER_ASSERTION_REQUIRED=true
 ECHOBOT_TRUSTED_USER_HEADER=Cf-Access-Authenticated-User-Email
+ECHOBOT_ADMIN_ALLOWLIST=admin@example.com
+ECHOBOT_ADMIN_REQUIRED=true
+ECHOBOT_OPERATOR_ALLOWLIST=operator@example.com
 ECHOBOT_SHELL_SAFETY_MODE=workspace-write
 ECHOBOT_WEB_PRIVATE_NETWORK_ENABLED=false
 ```
+
+Admin email 可管理 secrets、provider、Channel、部署與 `/admin*`；Operator email 只能進 `/web`、`/console` 並套用 Session 暫時設定。一般 Access 使用者仍只使用 Messenger、Stage 與自己的 Session。不要把 `*` 放進 exposed profile 的任一管理清單。
 
 ### 啟動 EchoBot 與 Ingress
 
 建議使用 Compose；只有 Nginx ingress 對 host 發布 loopback port：
 
 ```shell
-docker compose up --build --detach
+docker compose --env-file docker.env.local config
+docker compose --env-file docker.env.local up --build --detach
 curl --fail http://127.0.0.1:8080/healthz
 ```
+
+`/healthz` 只證明 Web process 可回應，不代表 LLM provider 已連線。以 Admin 登入 HTTPS 網址後，到 `/admin/models` 選擇 profile 並按「測試連線」；只有 smoke 成功才可把模型視為 ready。
 
 開發者需要直接跑 Python 時，app 仍只聽 loopback，並另外啟動 `deploy/nginx/echobot.conf`：
 
 ```shell
+cp .env.local-tunnel.example .env
 source .venv/bin/activate
 python -m echobot app --host 127.0.0.1 --port 8000
 nginx -t -c "$(pwd)/deploy/nginx/echobot.conf"
@@ -72,7 +85,7 @@ mkdir -p ~/.cloudflared
 cp docs/deployment/cloudflared-local-tunnel.example.yml ~/.cloudflared/echobot-web-mobile.yml
 ```
 
-編輯 `~/.cloudflared/echobot-web-mobile.yml`，替換 tunnel、credentials-file 與 hostname。
+編輯 `~/.cloudflared/echobot-web-mobile.yml`，替換 tunnel、credentials-file、hostname、Cloudflare team name 與 Access application audience tag。保留 `originRequest.access.required: true`，讓 `cloudflared` 在請求進入 Nginx 前驗證 Access JWT。
 
 驗證設定：
 
@@ -90,13 +103,14 @@ cloudflared tunnel --config ~/.cloudflared/echobot-web-mobile.yml run echobot-we
 - Policy：只允許內測 10 人的 email 或 email domain
 - Identity provider：使用你已配置的 Google、GitHub 或 One-time PIN
 
-Access 必須注入預設 header：
+Access 必須注入預設使用者 header 與 assertion header：
 
 ```text
 Cf-Access-Authenticated-User-Email
+Cf-Access-Jwt-Assertion
 ```
 
-EchoBot 只信任這個由 Cloudflare Access 注入的 header。缺少或非法時，`/web`、`/api/*`、`/api/web/asr/ws` 都會拒絕。
+`cloudflared` 先驗證 assertion 的簽章、issuer 與 audience；EchoBot 再確認 assertion 內的 email 與使用者 header 相符。任一 header 缺少、非法或不一致時，受保護頁面、`/api/*` 與 `/api/web/asr/ws` 都會拒絕。App port `8000` 與 ingress `8080` 仍只允許 loopback/internal 存取，不能繞過 Tunnel 直接發布。
 
 ### Health Check
 
@@ -177,7 +191,14 @@ Discord 支援兩種模式：
 - Live2D uploads
 - stage backgrounds
 
-備份時至少保存 `.echobot/users/`，也建議保存 `.env` 的安全副本。
+Compose 的資料在 named volume `echobot_data:/app/.echobot`，不是 checkout 內的 `.echobot/`。在 Compose 專案目錄執行：
+
+```shell
+mkdir -p backups
+docker compose cp echobot:/app/.echobot ./backups/echobot-data
+```
+
+還原前先停止寫入，再把備份內容複製回 container volume。`docker.env.local` 含 secrets，若另行備份，必須放在權限受控且不會進 Git 的位置。
 
 ### Mobile Acceptance
 
@@ -199,12 +220,11 @@ Discord 支援兩種模式：
 ### 停止
 
 ```shell
-# EchoBot: Ctrl-C
-docker compose down
-cloudflared tunnel cleanup echobot-web-mobile
+# 前景執行的 cloudflared：Ctrl-C
+docker compose --env-file docker.env.local down
 ```
 
-`cleanup` 只清理 tunnel 連線狀態，不刪除 Cloudflare Access application 或 DNS route。
+正常停止不需要執行 `cloudflared tunnel cleanup`。只有 Cloudflare 顯示殘留的失效連線（stale connections）時，才依官方說明執行 `cloudflared tunnel cleanup echobot-web-mobile`；它不是一般關機步驟。
 
 ## English version
 
@@ -220,7 +240,7 @@ This profile does not publish the EchoBot application to the LAN. Cloudflare Tun
 - Python 3.11+
 - Cloudflare account, a managed domain, and permission to create a named Tunnel
 - `cloudflared` installed and authenticated
-- `.env.local-tunnel.example` copied to `.env`
+- Decide whether to use Compose or direct Python; the environment-file location differs between these paths
 
 ### Install
 
@@ -228,31 +248,41 @@ This profile does not publish the EchoBot application to the LAN. Cloudflare Tun
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.local-tunnel.example .env
+cp .env.local-tunnel.example docker.env.local
 ```
 
-Fill in the LLM key in `.env`, and keep the testing safety defaults:
+Compose uses `docker.env.local` for both Compose interpolation and the container environment. Do not copy only to `.env`. Fill in the LLM key and keep the testing safety defaults:
 
 ```text
 ECHOBOT_TRUSTED_USER_HEADER_ENABLED=true
 ECHOBOT_TRUSTED_USER_REQUIRED=true
+ECHOBOT_TRUSTED_USER_ASSERTION_REQUIRED=true
 ECHOBOT_TRUSTED_USER_HEADER=Cf-Access-Authenticated-User-Email
+ECHOBOT_ADMIN_ALLOWLIST=admin@example.com
+ECHOBOT_ADMIN_REQUIRED=true
+ECHOBOT_OPERATOR_ALLOWLIST=operator@example.com
 ECHOBOT_SHELL_SAFETY_MODE=workspace-write
 ECHOBOT_WEB_PRIVATE_NETWORK_ENABLED=false
 ```
+
+Admin identities manage secrets, providers, channels, deployment, and `/admin*`. Operator identities can enter `/web` and `/console` and apply temporary Session settings only. Other Access users stay on Messenger, Stage, and their own sessions. Do not use `*` in either privileged allowlist for an exposed profile.
 
 ### Start EchoBot And The Ingress
 
 Compose is the recommended path. Only the Nginx ingress publishes a loopback host port:
 
 ```shell
-docker compose up --build --detach
+docker compose --env-file docker.env.local config
+docker compose --env-file docker.env.local up --build --detach
 curl --fail http://127.0.0.1:8080/healthz
 ```
+
+`/healthz` proves only that the Web process responds; it does not verify the LLM provider. Sign in as an Admin through the HTTPS hostname, open `/admin/models`, select a profile, and press Test connection. Treat the model as ready only after that smoke succeeds.
 
 For direct Python development, keep the app on loopback and start the supplied Nginx configuration separately:
 
 ```shell
+cp .env.local-tunnel.example .env
 source .venv/bin/activate
 python -m echobot app --host 127.0.0.1 --port 8000
 nginx -t -c "$(pwd)/deploy/nginx/echobot.conf"
@@ -278,7 +308,7 @@ mkdir -p ~/.cloudflared
 cp docs/deployment/cloudflared-local-tunnel.example.yml ~/.cloudflared/echobot-web-mobile.yml
 ```
 
-Edit `~/.cloudflared/echobot-web-mobile.yml`, replacing the tunnel, credentials-file, and hostname placeholders.
+Edit `~/.cloudflared/echobot-web-mobile.yml`, replacing the tunnel, credentials-file, hostname, Cloudflare team name, and Access application audience tag. Keep `originRequest.access.required: true` so `cloudflared` validates the Access JWT before forwarding the request to Nginx.
 
 Validate the config:
 
@@ -296,13 +326,14 @@ Create a Self-hosted application in Cloudflare Zero Trust:
 - Policy: allow only the 10 tester emails or email domain
 - Identity provider: use your configured Google, GitHub, or One-time PIN provider
 
-Access must inject the default header:
+Access must inject the default user and assertion headers:
 
 ```text
 Cf-Access-Authenticated-User-Email
+Cf-Access-Jwt-Assertion
 ```
 
-EchoBot trusts only this Cloudflare Access-injected header. If the header is missing or invalid, `/web`, `/api/*`, and `/api/web/asr/ws` are rejected.
+`cloudflared` validates the assertion signature, issuer, and audience first. EchoBot then checks that the assertion email matches the forwarded user header. Missing, invalid, or mismatched headers are rejected on protected pages, `/api/*`, and `/api/web/asr/ws`. Keep application port `8000` and ingress port `8080` loopback/internal only; never publish a direct bypass around the Tunnel.
 
 ### Health Check
 
@@ -383,7 +414,14 @@ Each Access user gets isolated:
 - Live2D uploads
 - stage backgrounds
 
-Backups should at least preserve `.echobot/users/`, and a secure copy of `.env` is also recommended.
+Compose stores data in the named volume `echobot_data:/app/.echobot`, not in the checkout's `.echobot/` directory. From the Compose project directory, run:
+
+```shell
+mkdir -p backups
+docker compose cp echobot:/app/.echobot ./backups/echobot-data
+```
+
+Stop writes before restoring the backup into the container volume. `docker.env.local` contains secrets; if it is backed up separately, keep it in access-controlled storage outside Git.
 
 ### Mobile Acceptance
 
@@ -405,9 +443,8 @@ Required behavior:
 ### Stop
 
 ```shell
-# EchoBot: Ctrl-C
-docker compose down
-cloudflared tunnel cleanup echobot-web-mobile
+# Foreground cloudflared: Ctrl-C
+docker compose --env-file docker.env.local down
 ```
 
-`cleanup` only clears tunnel connection state. It does not delete the Cloudflare Access application or DNS route.
+Normal shutdown does not use `cloudflared tunnel cleanup`. Run `cloudflared tunnel cleanup echobot-web-mobile` only when Cloudflare reports stale connections and the official troubleshooting flow calls for it; cleanup is not a normal stop command.

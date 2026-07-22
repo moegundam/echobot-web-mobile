@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import io
 import os
 import platform
 import tempfile
 import unittest
 from pathlib import Path
+from urllib import error
 from unittest.mock import patch
 
 from echobot.agent import AgentCore, AgentRunResult
@@ -53,6 +55,32 @@ class FakeProvider(LLMProvider):
             message=LLMMessage(role="assistant", content="ok"),
             model="fake-model",
         )
+
+
+class OpenAICompatibleProviderSecurityTests(unittest.TestCase):
+    def test_http_error_body_is_not_reflected_in_runtime_error(self) -> None:
+        provider = OpenAICompatibleProvider(
+            OpenAICompatibleSettings(
+                api_key="provider-key",
+                model="test-model",
+            ),
+        )
+        upstream_error = error.HTTPError(
+            "https://provider.example/v1/chat/completions",
+            500,
+            "Internal Server Error",
+            {},
+            io.BytesIO(b'{"error":"sentinel-upstream-secret"}'),
+        )
+
+        with patch(
+            "echobot.providers.openai_compatible.open_http_url",
+            side_effect=upstream_error,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "status=500") as raised:
+                provider._post_json({"messages": []})
+
+        self.assertNotIn("sentinel-upstream-secret", str(raised.exception))
 
 
 class FakeMemorySupport:
@@ -225,6 +253,50 @@ class FakeToolProvider(LLMProvider):
         return LLMResponse(
             message=LLMMessage(role="assistant", content="done"),
             model="fake-model",
+            finish_reason="stop",
+        )
+
+
+class PausingToolProvider(LLMProvider):
+    def __init__(self) -> None:
+        self.calls = 0
+        self.first_call_started = asyncio.Event()
+        self.release_first_call = asyncio.Event()
+
+    async def generate(
+        self,
+        messages,
+        *,
+        tools=None,
+        tool_choice=None,
+        temperature=None,
+        max_tokens=None,
+    ) -> LLMResponse:
+        del messages, tools, tool_choice, temperature, max_tokens
+        self.calls += 1
+        if self.calls == 1:
+            self.first_call_started.set()
+            await self.release_first_call.wait()
+            tool_calls = [
+                ToolCall(
+                    id="call_snapshot",
+                    name="echo_tool",
+                    arguments='{"text":"snapshot"}',
+                )
+            ]
+            return LLMResponse(
+                message=LLMMessage(
+                    role="assistant",
+                    content="",
+                    tool_calls=tool_calls,
+                ),
+                model="snapshot-model",
+                finish_reason="tool_calls",
+                tool_calls=tool_calls,
+            )
+        return LLMResponse(
+            message=LLMMessage(role="assistant", content="snapshot-complete"),
+            model="snapshot-model",
             finish_reason="stop",
         )
 
@@ -651,6 +723,37 @@ class SessionAgentRunnerTests(unittest.IsolatedAsyncioTestCase):
             await runner.run_prompt("demo", "hello")
 
             self.assertEqual(77, agent.max_steps_seen)
+
+    async def test_run_prompt_keeps_provider_snapshot_across_tool_steps(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            session_store = SessionStore(Path(temp_dir) / "sessions")
+            initial_provider = FakeProvider()
+            replacement_provider = FakeProvider()
+            snapshot_provider = PausingToolProvider()
+            runner = SessionAgentRunner(
+                AgentCore(initial_provider),
+                session_store,
+                tool_registry_factory=lambda *_args: ToolRegistry([EchoTool()]),
+            )
+
+            run_task = asyncio.create_task(
+                runner.run_prompt(
+                    "snapshot",
+                    "use a tool",
+                    provider=snapshot_provider,
+                )
+            )
+            await snapshot_provider.first_call_started.wait()
+            runner.set_provider(replacement_provider)
+            snapshot_provider.release_first_call.set()
+            result = await run_task
+
+            self.assertEqual(2, snapshot_provider.calls)
+            self.assertEqual([], replacement_provider.last_messages)
+            self.assertEqual(
+                "snapshot-complete",
+                result.agent_result.response.message.content,
+            )
 
 
 class SystemPromptTests(unittest.TestCase):
@@ -1179,6 +1282,47 @@ class OpenAICompatibleProviderTests(unittest.TestCase):
         )
 
         self.assertEqual("", chunk)
+
+    def test_stream_generate_filters_thinking_tags_split_across_chunks(self) -> None:
+        def stream_chunks(_payload):
+            yield "<thi"
+            yield "nk>hidden"
+            yield " reasoning</thi"
+            yield "nk>final answer"
+
+        async def collect_chunks() -> list[str]:
+            return [
+                chunk
+                async for chunk in self.provider.stream_generate(
+                    [LLMMessage(role="user", content="hello")]
+                )
+            ]
+
+        with patch.object(self.provider, "_stream_text_chunks", stream_chunks):
+            chunks = asyncio.run(collect_chunks())
+
+        self.assertEqual("final answer", "".join(chunks))
+
+    def test_stream_text_chunks_rejects_eof_before_completion_signal(self) -> None:
+        class IncompleteResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args) -> None:
+                return None
+
+            def __iter__(self):
+                yield (
+                    b'data: {"choices":[{"delta":{"content":"partial"},'
+                    b'"finish_reason":null}]}\n'
+                )
+
+        with patch(
+            "echobot.providers.openai_compatible.open_http_url",
+            return_value=IncompleteResponse(),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "before completion"):
+                list(self.provider._stream_text_chunks({"stream": True}))
 
     def test_unconfigured_provider_fails_before_network_request(self) -> None:
         provider = OpenAICompatibleProvider(

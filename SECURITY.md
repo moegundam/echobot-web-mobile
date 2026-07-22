@@ -4,7 +4,7 @@
 
 ### 支援範圍
 
-本 repo 目前是 EchoBot Web/Mobile 管理版的內測與開發分支。公開展示或 10 人內測前，請使用最新的 `feat/web-mobile-local-tunnel` 分支或後續合併後的 `main`。
+本 repo 是 EchoBot Web/Mobile 管理版的開發來源。公開展示或 10 人內測前，請使用經當次 CI、security scan 與部署驗收通過的 `main` commit 或正式 release；不要依賴舊 feature branch 名稱。
 
 ### 回報安全問題
 
@@ -18,7 +18,7 @@
 - 預期行為與實際行為。
 - 風險分類，例如資料外洩、越權、XSS、SSRF、任意檔案讀寫、工具權限提升或 denial of service。
 
-若 repo 已公開，請先用 GitHub private security advisory 或私下聯絡維護者處理，不要先公開 exploit 細節。
+若 repo 已公開，請使用 [GitHub Security Advisory](https://github.com/moegundam/echobot-web-mobile/security/advisories/new) 私下回報，不要先建立公開 issue 或公開 exploit 細節。
 
 ### 公開部署安全基準
 
@@ -26,9 +26,13 @@
 
 1. 使用 HTTPS，手機麥克風功能不得走明文 HTTP。
 2. 使用 Cloudflare Access 或可信 reverse proxy auth。
-3. 啟用：
+3. Tunnel/production profile 至少啟用以下 fail-closed 設定，並把範例 email 換成真實管理員：
+   - `ECHOBOT_DEPLOYMENT_PROFILE=tunnel`
    - `ECHOBOT_TRUSTED_USER_HEADER_ENABLED=true`
    - `ECHOBOT_TRUSTED_USER_REQUIRED=true`
+   - `ECHOBOT_TRUSTED_USER_ASSERTION_REQUIRED=true`
+   - `ECHOBOT_ADMIN_ALLOWLIST=admin@example.com`
+   - `ECHOBOT_ADMIN_REQUIRED=true`
 4. 不匿名公開 `/admin`、`/docs`、`/redoc`、`/openapi.json` 或 `/api/*`。
 5. `ECHOBOT_SHELL_SAFETY_MODE` 預設使用 `workspace-write` 或 `read-only`。
 6. Open WebUI bridge 必須設定強隨機 `ECHOBOT_OPENWEBUI_BRIDGE_TOKEN`。
@@ -55,7 +59,7 @@
 
 ### Supported Scope
 
-This repository is currently the private-test and development branch for the EchoBot Web/Mobile management edition. For public demos or 10-user testing, use the latest `feat/web-mobile-local-tunnel` branch or the later merged `main`.
+This repository is the development source for the EchoBot Web/Mobile management edition. For public demos or 10-user testing, use a specific `main` commit or release that passed the current CI, security scan, and deployment acceptance; do not rely on an old feature-branch name.
 
 ### Reporting Security Issues
 
@@ -69,7 +73,7 @@ Useful report contents:
 - Expected and actual behavior.
 - Risk category, such as data exposure, authorization bypass, XSS, SSRF, arbitrary file read/write, tool privilege escalation, or denial of service.
 
-If the repository is public, use a GitHub private security advisory or contact the maintainer privately before publishing exploit details.
+If the repository is public, use a [GitHub Security Advisory](https://github.com/moegundam/echobot-web-mobile/security/advisories/new) for private disclosure. Do not open a public issue or publish exploit details first.
 
 ### Public Deployment Security Baseline
 
@@ -77,9 +81,13 @@ Before exposing the service publicly or to a 10-user test, require at least:
 
 1. HTTPS. Mobile microphone features must not use plaintext HTTP.
 2. Cloudflare Access or trusted reverse proxy authentication.
-3. Enable:
+3. For Tunnel/production profiles, enable at least these fail-closed settings and replace the example email with the real administrator:
+   - `ECHOBOT_DEPLOYMENT_PROFILE=tunnel`
    - `ECHOBOT_TRUSTED_USER_HEADER_ENABLED=true`
    - `ECHOBOT_TRUSTED_USER_REQUIRED=true`
+   - `ECHOBOT_TRUSTED_USER_ASSERTION_REQUIRED=true`
+   - `ECHOBOT_ADMIN_ALLOWLIST=admin@example.com`
+   - `ECHOBOT_ADMIN_REQUIRED=true`
 4. Do not anonymously expose `/admin`, `/docs`, `/redoc`, `/openapi.json`, or `/api/*`.
 5. Use `workspace-write` or `read-only` as the default `ECHOBOT_SHELL_SAFETY_MODE`.
 6. Set a strong random `ECHOBOT_OPENWEBUI_BRIDGE_TOKEN`.

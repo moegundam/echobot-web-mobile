@@ -7,7 +7,7 @@ from .session_catalog import project_voice_profiles, voice_profile_from_profile
 
 
 class VoiceModelService:
-    """Voice-profile use cases and API projection."""
+    """Voice-profile use cases returning transport-independent payloads."""
 
     def __init__(self, repository: VoiceModelRepository) -> None:
         self._repository = repository
@@ -16,10 +16,7 @@ class VoiceModelService:
         payload = self._repository.list_payload()
         return {
             "active_voice_profile_id": str(payload.get("active_profile_id") or "a"),
-            "profiles": [
-                profile.model_dump(mode="json")
-                for profile in project_voice_profiles(payload)
-            ],
+            "profiles": project_voice_profiles(payload),
         }
 
     def legacy_payload(self) -> dict[str, Any]:
@@ -35,11 +32,11 @@ class VoiceModelService:
             name=name,
             source_profile_id=source_profile_id,
         )
-        return voice_profile_from_profile(profile).model_dump(mode="json")
+        return voice_profile_from_profile(profile)
 
     def update_profile(self, profile_id: str, updates: dict[str, Any]) -> dict[str, Any]:
         profile = self._repository.update(profile_id, updates)
-        return voice_profile_from_profile(profile).model_dump(mode="json")
+        return voice_profile_from_profile(profile)
 
     def activate_profile(self, profile_id: str) -> dict[str, Any]:
         self._repository.activate(profile_id)

@@ -27,6 +27,7 @@ export const sessionState = {
     currentSessionUpdatedAt: "",
     currentSessionHistory: [],
     currentRouteMode: "auto",
+    runtimeContext: null,
     stageTargets: [],
     sessions: [],
     sessionLoading: false,
@@ -44,6 +45,7 @@ export const roleState = {
 export const panelState = {
     live2dDrawerOpen: false,
     live2dDrawerTab: "expression",
+    mobileWorkspaceView: "stage",
     roleSidebarOpen: false,
     sessionSidebarOpen: false,
     cronPollTimerId: 0,

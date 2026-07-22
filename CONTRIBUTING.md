@@ -21,6 +21,17 @@
 5. 新安全邊界、外部 provider、通訊平台或 Agent 工具要補測試。
 6. 提交前至少跑最小可重現檢查。
 
+### 開發環境
+
+```shell
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements-dev.txt
+playwright install chromium
+```
+
+`requirements.txt` 是 runtime 安裝；開發、pytest 與瀏覽器 smoke 請使用 `requirements-dev.txt`。
+
 ### 必跑檢查
 
 ```shell
@@ -75,6 +86,17 @@ This repository currently focuses on the EchoBot Web/Mobile management edition. 
 4. Add attribution to `NOTICE.md` or the adjacent directory for new third-party sources.
 5. Add tests for new security boundaries, external providers, channel integrations, or Agent tools.
 6. Run at least the smallest rerunnable verification before committing.
+
+### Development Environment
+
+```shell
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements-dev.txt
+playwright install chromium
+```
+
+`requirements.txt` is the runtime install. Use `requirements-dev.txt` for development, pytest, and browser smoke checks.
 
 ### Required Checks
 

@@ -128,36 +128,12 @@ export function createAsrModule(deps) {
             await stopAlwaysListen();
         }
 
-        asrState.asrProviderUpdating = true;
-        updateVoiceInputControls();
-        setRunStatus(t("console.switchingAsrProvider"));
-
-        try {
-            const payload = await requestJson("/api/web/asr/provider", {
-                method: "PATCH",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                    provider: nextProvider,
-                }),
-            });
-            applyAsrStatus(payload);
-            const providerStatus = findAsrProviderStatus(payload, nextProvider);
-            setRunStatus(
-                providerStatus && providerStatus.available
-                    ? t("console.providerEnabled", { provider: providerStatus.label })
-                    : t("console.asrProviderWaiting"),
-            );
-        } catch (error) {
-            console.error(error);
-            DOM.asrProviderSelect.value = currentProvider;
-            addSystemMessage(`${t("console.asrProviderSwitchFailed")}: ${error.message || error}`);
-            setRunStatus(error.message || t("console.asrProviderSwitchFailed"));
-        } finally {
-            asrState.asrProviderUpdating = false;
-            updateVoiceInputControls();
-        }
+        const providerStatus = applyRuntimeAsrProvider(nextProvider);
+        setRunStatus(
+            providerStatus && providerStatus.available
+                ? t("console.providerEnabled", { provider: providerStatus.label })
+                : t("console.asrProviderWaiting"),
+        );
     }
 
     async function handleRecordButtonClick() {
@@ -214,8 +190,30 @@ export function createAsrModule(deps) {
         await stopVoiceInputForPageHide();
     }
 
+    async function stopVoiceInputForSessionSwitch() {
+        if (asrState.alwaysListenEnabled) {
+            await stopAlwaysListen({ flushFirst: false });
+            return;
+        }
+        if (asrState.microphoneCaptureMode !== "manual") {
+            return;
+        }
+        asrState.microphoneCaptureMode = "idle";
+        asrState.manualRecordingChunks = [];
+        audioCapture.stopMicrophoneCapture();
+        updateVoiceInputControls();
+    }
+
+    function applyRuntimeVoiceProfile(voiceProfile) {
+        const stt = voiceProfile && typeof voiceProfile.stt === "object"
+            ? voiceProfile.stt
+            : {};
+        return applyRuntimeAsrProvider(String(stt.provider || "").trim());
+    }
+
     return {
         applyAsrStatus: applyAsrStatus,
+        applyRuntimeVoiceProfile: applyRuntimeVoiceProfile,
         drainVoicePromptQueue: promptQueue.drainVoicePromptQueue,
         handleAlwaysListenToggle: handleAlwaysListenToggle,
         handleAsrProviderChange: handleAsrProviderChange,
@@ -225,8 +223,32 @@ export function createAsrModule(deps) {
         refreshLocalizedText: updateVoiceInputControls,
         syncAlwaysListenPauseState: syncAlwaysListenPauseState,
         startAsrStatusPolling: startAsrStatusPolling,
+        stopVoiceInputForSessionSwitch: stopVoiceInputForSessionSwitch,
         updateVoiceInputControls: updateVoiceInputControls,
     };
+
+    function applyRuntimeAsrProvider(providerName) {
+        const normalizedProvider = String(providerName || "").trim();
+        if (!normalizedProvider || !asrState.asrConfig) {
+            return null;
+        }
+        const providerStatus = findAsrProviderStatus(asrState.asrConfig, normalizedProvider);
+        if (!providerStatus) {
+            return null;
+        }
+        applyAsrStatus({
+            ...asrState.asrConfig,
+            available: providerStatus.available,
+            state: providerStatus.state,
+            detail: providerStatus.detail,
+            selected_asr_provider: normalizedProvider,
+            asr_providers: asrState.asrConfig.asr_providers.map((item) => ({
+                ...item,
+                selected: item.name === normalizedProvider,
+            })),
+        });
+        return providerStatus;
+    }
 
     function renderAsrProviderOptions(asrConfig) {
         if (!DOM.asrProviderSelect) {

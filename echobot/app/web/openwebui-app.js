@@ -1,6 +1,7 @@
-import { initShellI18n } from "./shell-i18n.js?v=ux-public-1";
+import { initShellI18n } from "./shell-i18n.js?v=ux-public-1&uiux=2";
 import { initShellDisplayMode } from "./shell-display-mode.js?v=site-public-6";
 import { initShellSessionLinks } from "./shell-session-links.js?v=site-public-6";
+import { requestJson } from "./modules/api.js";
 
 const bridgeContent = {
     en: {
@@ -218,15 +219,7 @@ function renderAll() {
 
 async function loadBridgeStatus() {
     try {
-        const response = await fetch("/api/openwebui/status", {
-            headers: {
-                "Accept": "application/json",
-            },
-        });
-        if (!response.ok) {
-            throw await responseToError(response);
-        }
-        statusPayload = await response.json();
+        statusPayload = await requestJson("/api/openwebui/status");
         statusError = "";
     } catch (error) {
         statusPayload = null;
@@ -400,17 +393,4 @@ function appendInlineCode(element, text) {
         }
         element.appendChild(document.createTextNode(part));
     });
-}
-
-async function responseToError(response) {
-    let detail = `${response.status} ${response.statusText}`;
-    try {
-        const payload = await response.json();
-        if (payload && typeof payload.detail === "string") {
-            detail = payload.detail;
-        }
-    } catch (_error) {
-        return new Error(detail);
-    }
-    return new Error(detail);
 }

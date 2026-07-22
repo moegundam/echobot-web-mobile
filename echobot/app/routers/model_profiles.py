@@ -27,7 +27,10 @@ router = APIRouter(tags=["model-profiles"])
 
 
 @router.get("/model-profiles", response_model=ModelProfilesResponse)
-async def list_model_profiles(runtime=Depends(get_app_runtime)) -> ModelProfilesResponse:
+async def list_model_profiles(
+    runtime=Depends(get_app_runtime),
+    _admin_user: str = Depends(require_admin_user),
+) -> ModelProfilesResponse:
     _ensure_model_profiles_ready(runtime)
     payload = await model_profiles_payload(runtime)
     return ModelProfilesResponse(**payload)
@@ -48,6 +51,7 @@ async def create_model_profile(
 @router.get("/model-profiles/role-bindings", response_model=dict[str, str])
 async def list_model_profile_role_bindings(
     runtime=Depends(get_app_runtime),
+    _admin_user: str = Depends(require_admin_user),
 ) -> dict[str, str]:
     _ensure_model_profiles_ready(runtime)
     return await model_profile_role_bindings(runtime)
@@ -88,6 +92,7 @@ async def clear_model_profile_role_binding(
 async def get_model_profile(
     profile_id: str,
     runtime=Depends(get_app_runtime),
+    _admin_user: str = Depends(require_admin_user),
 ) -> ModelProfileModel:
     _ensure_model_profiles_ready(runtime)
     payload = await model_profiles_payload(runtime)

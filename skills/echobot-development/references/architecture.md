@@ -78,6 +78,18 @@ If a feature should exist in chat, gateway, and app, wire it here once.
 - `echobot/cli/session_commands.py` handles `/session ...` inside the interactive CLI chat loop.
 - `echobot/app/routers/` exposes HTTP endpoints for chat, sessions, roles, cron, heartbeat, channels, attachments, and web-console assets.
 
+### HTTP and application boundaries
+
+- `echobot/app/create_app.py` is assembly only: middleware, routers, page routes, and static mounts.
+- `echobot/app/routers/` owns HTTP dependencies, request/response contracts, and HTTP error mapping.
+- `echobot/app/schemas.py` owns Pydantic contracts; `echobot/app/mappers.py` maps domain session/message objects into those contracts.
+- `echobot/app/services/session_application.py` owns Session use cases.
+- `echobot/app/services/character_profile_application.py` owns character mutations across role cards, profile settings, and live runtime bindings.
+- `echobot/app/services/runtime_catalog_application.py` owns cross-store model deletion and Console runtime overrides.
+- `echobot/app/services/deployment_status.py` owns read-only deployment probes and moves blocking Git/cloudflared/file checks off the event loop.
+- `echobot/network/http.py` is the single shared HTTP URL and SSRF policy for providers, channels, speech, and web tools.
+- Browser entrypoints use `echobot/app/web/modules/api.js` plus feature API modules; page files should not create duplicate JSON or NDJSON clients.
+
 ## Skills and role cards
 
 - `SkillRegistry.discover(...)` searches project skills first, then local managed roots, then built-in skills.
@@ -88,9 +100,10 @@ If a feature should exist in chat, gateway, and app, wire it here once.
 
 ## State files and managed directories
 
-- Sessions: `.echobot/sessions/`
-- Agent-side session history: `.echobot/agent_sessions/`
-- Agent traces: `.echobot/agent_traces/`
+- Per-user runtime root: `.echobot/users/<user_storage_key>/`
+- Sessions: `.echobot/users/<user_storage_key>/sessions/`
+- Agent-side session history: `.echobot/users/<user_storage_key>/agent_sessions/`
+- Agent traces: `.echobot/users/<user_storage_key>/agent_traces/`
 - Runtime settings: `.echobot/runtime_settings.json`
 - Cron store: `.echobot/cron/jobs.json`
 - Heartbeat file: `.echobot/HEARTBEAT.md`
@@ -111,8 +124,11 @@ If a feature should exist in chat, gateway, and app, wire it here once.
 - `echobot/commands/`: command parsing and execution for route mode, runtime settings, roles, and saved sessions
 - `echobot/channels/`: channel configs, message bus, manager, registry, and platform adapters
 - `echobot/gateway/`: route-session mapping, delivery state, and gateway runtime wiring
+- `echobot/network/`: shared HTTP transport validation and private-network SSRF policy
+- `echobot/app/services/`: application use cases, user/runtime scopes, catalog services, Stage broker, and deployment probes
+- `echobot/app/mappers.py` and `echobot/app/schemas.py`: API mapping and transport contracts
 - `echobot/app/services/web_console/`: Live2D, stage, and runtime-settings helpers for the browser UI
-- `echobot/app/web/features/`: browser-side features grouped by chat, sessions, layout, Live2D, TTS, and ASR
+- `echobot/app/web/features/`: browser-side features grouped by chat, sessions, layout, Stage, Live2D, TTS, and ASR
 - `echobot/attachments.py` and `echobot/images.py`: attachment persistence plus image limits and promotion
 - `echobot/memory/`: ReMeLight integration
 - `echobot/asr/` and `echobot/tts/`: speech services

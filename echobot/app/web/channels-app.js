@@ -1,6 +1,7 @@
-import { initShellI18n } from "./shell-i18n.js?v=language-menu-1";
+import { initShellI18n } from "./shell-i18n.js?v=language-menu-1&uiux=2";
 import { initShellDisplayMode } from "./shell-display-mode.js?v=session-centered-2";
 import { initShellSessionLinks } from "./shell-session-links.js?v=site-public-6";
+import { requestJson } from "./modules/api.js";
 
 const PLANNED_CHANNELS = [
     { name: "line", label: "LINE" },
@@ -1051,34 +1052,4 @@ function plannedChannelCard(channel) {
             "webhook_url / polling",
         ],
     });
-}
-
-async function requestJson(url, options = {}) {
-    const headers = {
-        Accept: "application/json",
-    };
-    const requestInit = { ...options };
-    const explicitContentType = requestInit.headers
-        ? (requestInit.headers["Content-Type"] || requestInit.headers["content-type"])
-        : null;
-    if (requestInit.body && !explicitContentType) {
-        headers["Content-Type"] = "application/json";
-    }
-    requestInit.headers = {
-        ...headers,
-        ...(requestInit.headers || {}),
-    };
-
-    const response = await fetch(url, requestInit);
-    if (!response.ok) {
-        let detail = `${response.status} ${response.statusText}`;
-        try {
-            const payload = await response.json();
-            detail = payload.detail || detail;
-        } catch (_error) {
-            // Keep the HTTP status fallback for non-JSON responses.
-        }
-        throw new Error(detail);
-    }
-    return response.json();
 }

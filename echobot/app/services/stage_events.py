@@ -26,6 +26,7 @@ VALID_STAGE_EVENT_KINDS = {
     "assistant_delta",
     "assistant_final",
     "character_state",
+    "runtime_context_changed",
     "state",
     "subtitle",
 }

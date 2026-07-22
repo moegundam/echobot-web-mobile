@@ -27,6 +27,7 @@ export function createStageBackgroundController(deps) {
 
     let transformSaveTimerId = 0;
     let pendingTransformSave = null;
+    let runtimeBackgroundOption = null;
 
     function stageBackgroundOptionLabel(background) {
         if (
@@ -218,6 +219,12 @@ export function createStageBackgroundController(deps) {
     }
 
     function currentStageBackgroundOption() {
+        if (
+            runtimeBackgroundOption
+            && runtimeBackgroundOption.key === live2dState.selectedStageBackgroundKey
+        ) {
+            return runtimeBackgroundOption;
+        }
         if (!appState.config || !appState.config.stage) {
             return null;
         }
@@ -286,6 +293,7 @@ export function createStageBackgroundController(deps) {
 
     function applyStageBackgroundByKey(stageConfig, backgroundKey) {
         flushStageBackgroundTransformPersist();
+        runtimeBackgroundOption = null;
 
         const selectedOption = findStageBackgroundOption(stageConfig, backgroundKey)
             || findStageBackgroundOption(stageConfig, stageConfig.default_background_key)
@@ -300,6 +308,43 @@ export function createStageBackgroundController(deps) {
         applyStageBackgroundOption(selectedOption, nextTransform);
         syncStageBackgroundTransformInputs(selectedOption, nextTransform);
         updateStageBackgroundDetail(selectedOption, nextTransform);
+        updateStageBackgroundControls();
+    }
+
+    function applyStageBackgroundRuntimeOverride(background) {
+        if (!background || typeof background !== "object") {
+            return;
+        }
+        flushStageBackgroundTransformPersist();
+        const stageConfig = normalizeStageConfig(appState.config && appState.config.stage);
+        const backgroundKey = String(background.key || "default").trim() || "default";
+        const selectedOption = findStageBackgroundOption(stageConfig, backgroundKey) || {
+            key: backgroundKey,
+            label: String(background.label || backgroundKey).trim(),
+            url: String(background.url || "").trim(),
+            kind: String(background.kind || "uploaded").trim() || "uploaded",
+        };
+        const transform = normalizeStageBackgroundTransform(background.transform);
+
+        runtimeBackgroundOption = selectedOption;
+        live2dState.selectedStageBackgroundKey = selectedOption.key;
+        live2dState.currentStageBackgroundTransform = transform;
+        renderStageBackgroundOptions(stageConfig, selectedOption.key);
+        if (
+            DOM.stageBackgroundSelect
+            && !Array.from(DOM.stageBackgroundSelect.options).some(
+                (option) => option.value === selectedOption.key,
+            )
+        ) {
+            const option = document.createElement("option");
+            option.value = selectedOption.key;
+            option.textContent = stageBackgroundOptionLabel(selectedOption);
+            DOM.stageBackgroundSelect.appendChild(option);
+            DOM.stageBackgroundSelect.value = selectedOption.key;
+        }
+        applyStageBackgroundOption(selectedOption, transform);
+        syncStageBackgroundTransformInputs(selectedOption, transform);
+        updateStageBackgroundDetail(selectedOption, transform);
         updateStageBackgroundControls();
     }
 
@@ -796,6 +841,7 @@ export function createStageBackgroundController(deps) {
 
     return {
         applyStageBackgroundByKey,
+        applyStageBackgroundRuntimeOverride,
         applyStageBackgroundTransform,
         currentStageBackgroundOverride,
         currentStageBackgroundOption,

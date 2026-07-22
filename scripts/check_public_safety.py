@@ -55,10 +55,10 @@ SCAN_EXCLUDED_SUFFIXES = (
 
 
 def main() -> int:
-    tracked_files = _git_tracked_files()
+    candidate_files = _git_candidate_files()
     findings: list[str] = []
-    findings.extend(_tracked_path_findings(tracked_files))
-    findings.extend(_secret_pattern_findings(tracked_files))
+    findings.extend(_tracked_path_findings(candidate_files))
+    findings.extend(_secret_pattern_findings(candidate_files))
 
     if findings:
         print("Public safety check failed:", file=sys.stderr)
@@ -70,9 +70,9 @@ def main() -> int:
     return 0
 
 
-def _git_tracked_files() -> list[str]:
+def _git_candidate_files() -> list[str]:
     output = subprocess.check_output(
-        ["git", "ls-files"],
+        ["git", "ls-files", "-co", "--exclude-standard"],
         cwd=ROOT,
         text=True,
     )

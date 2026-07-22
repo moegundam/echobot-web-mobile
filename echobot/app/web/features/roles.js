@@ -1,9 +1,4 @@
-import {
-    DEFAULT_SESSION_NAME,
-    chatState,
-    roleState,
-    sessionState,
-} from "../core/store.js";
+import { chatState, roleState } from "../core/store.js";
 import { DOM } from "../core/dom.js";
 
 export function createRolesModule(deps) {
@@ -13,12 +8,13 @@ export function createRolesModule(deps) {
         normalizeSessionName,
         requestJson,
         setRunStatus,
-        syncModelProfileFromServer = async () => null,
+        selectRuntimeProfile = async () => null,
         t = (key) => key,
     } = deps;
 
     let sessionHooks = {
-        applySessionDetail() {},
+        markRuntimeDirty() {},
+        refreshSessionSettings() {},
     };
 
     function bindSessionHooks(hooks) {
@@ -239,11 +235,14 @@ export function createRolesModule(deps) {
         setRoleControlsBusy(true, t("console.switchingRole"));
         try {
             const expectedBoundProfile = modelProfileForRole(nextRoleName);
-            await setCurrentSessionRole(nextRoleName, { silent: true });
+            roleState.currentRoleName = nextRoleName;
+            renderRoleSelectOptions();
             if (expectedBoundProfile) {
-                await syncModelProfileFromServer();
+                await selectRuntimeProfile(expectedBoundProfile.profile_id);
             }
             await refreshCurrentRoleCard({ silent: true });
+            sessionHooks.refreshSessionSettings();
+            sessionHooks.markRuntimeDirty();
             const boundProfile = modelProfileForRole(roleState.currentRoleName);
             if (boundProfile) {
                 setRunStatus(t("console.roleSwitchedWithProfile", {
@@ -285,27 +284,6 @@ export function createRolesModule(deps) {
         const code = profileId ? profileId.toUpperCase() : "";
         const label = String(profile.label || code || t("models.defaultProfile")).trim();
         return code ? `${code} · ${label}` : label;
-    }
-
-    async function setCurrentSessionRole(roleName, options = {}) {
-        const sessionName = normalizeSessionName(
-            sessionState.currentSessionName || DEFAULT_SESSION_NAME,
-        );
-        const sessionDetail = await requestJson(
-            `/api/sessions/${encodeURIComponent(sessionName)}/role`,
-            {
-                method: "PUT",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({ role_name: roleName }),
-            },
-        );
-        sessionHooks.applySessionDetail(sessionDetail);
-        if (!options.silent) {
-            setRunStatus(t("console.roleSwitched", { role: sessionDetail.role_name || roleName }));
-        }
-        return sessionDetail;
     }
 
     return {

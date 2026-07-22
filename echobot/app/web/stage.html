@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title data-i18n-key="stage.pageTitle">EchoBot</title>
-    <link rel="stylesheet" href="/web/assets/styles/shell-pages.css?v=stage-view-1">
+    <link rel="stylesheet" href="/web/assets/styles/shell-pages.css?v=stage-view-1&uiux=5">
 </head>
 <body class="stage-page" data-page-title-key="stage.pageTitle">
     <main id="stage-root" class="stage-root">
@@ -31,7 +31,7 @@
                 </div>
             </div>
             <button id="stage-menu-backdrop" class="stage-menu-backdrop" type="button" aria-label="Close stage menu" data-i18n-aria-label-key="stage.menu.close" hidden></button>
-            <aside id="stage-menu-panel" class="stage-menu-panel" aria-hidden="true" aria-labelledby="stage-menu-title">
+            <aside id="stage-menu-panel" class="stage-menu-panel" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="stage-menu-title">
                 <header class="stage-menu-header">
                     <div>
                         <p class="stage-menu-eyebrow" data-i18n-key="stage.menu.eyebrow">Stage controls</p>
@@ -53,6 +53,18 @@
                     <section class="stage-view-controls" aria-label="Stage view controls" data-i18n-aria-label-key="stage.viewControlsAria">
                         <p class="stage-menu-eyebrow" data-i18n-key="stage.viewControls">View</p>
                         <p class="stage-view-help" data-i18n-key="stage.viewHelp">Drag character to move. Wheel or pinch to zoom.</p>
+                        <div class="stage-view-preferences">
+                            <button
+                                id="stage-fullscreen-toggle"
+                                class="stage-ghost-button stage-fullscreen-button"
+                                type="button"
+                                data-i18n-key="stage.fullscreen"
+                            >Full screen</button>
+                            <label class="stage-auto-hide-control" for="stage-controls-auto-hide">
+                                <input id="stage-controls-auto-hide" type="checkbox" checked>
+                                <span data-i18n-key="stage.controlsAutoHide">Auto-hide controls</span>
+                            </label>
+                        </div>
                         <div class="stage-view-control-row">
                             <button id="stage-zoom-out" class="stage-ghost-button stage-view-button" type="button" data-i18n-key="stage.zoomOut">Zoom out</button>
                             <button id="stage-zoom-reset" class="stage-ghost-button stage-view-button" type="button" data-i18n-key="stage.zoomReset">Reset</button>
@@ -60,10 +72,11 @@
                         </div>
                     </section>
                     <nav class="stage-quick-nav" aria-label="Stage quick navigation" data-i18n-aria-label-key="stage.quickNavAria">
-                        <a href="/console" data-i18n-key="admin.console">Console</a>
+                        <a href="/console" data-operator-only hidden data-i18n-key="admin.console">Console</a>
                         <a href="/messenger?session_name=default" data-session-link data-i18n-key="console.openMessenger">Messenger</a>
-                        <a href="/admin/sessions" data-i18n-key="admin.sessions">Sessions</a>
-                        <a href="/admin" data-i18n-key="console.openAdmin">Admin</a>
+                        <a href="/guide" data-i18n-key="admin.guide">Guide</a>
+                        <a href="/admin/sessions" data-admin-only hidden data-i18n-key="admin.sessions">Sessions</a>
+                        <a href="/admin" data-admin-only hidden data-i18n-key="console.openAdmin">Admin</a>
                     </nav>
                     <dl class="stage-context-list" aria-label="Stage runtime context" data-i18n-aria-label-key="stage.contextAria">
                         <div>
@@ -93,11 +106,12 @@
             <div id="stage-subtitle-panel" class="stage-subtitle-panel">
                 <p id="stage-subtitle" class="stage-subtitle" data-i18n-key="stage.waiting">Waiting for stage events...</p>
             </div>
+            <p id="stage-announcement" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></p>
         </section>
     </main>
     <script src="/web/assets/vendor/pixi.min.js"></script>
     <script src="/web/assets/vendor/live2dcubismcore.min.js"></script>
     <script src="/web/assets/vendor/cubism4.min.js"></script>
-    <script type="module" src="/web/assets/stage-app.js?v=stage-view-1"></script>
+    <script type="module" src="/web/assets/stage-app.js?v=session-runtime-p1-3&uiux=8"></script>
 </body>
 </html>

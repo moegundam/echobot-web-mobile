@@ -150,6 +150,36 @@ class EmptyStreamProvider(LLMProvider):
         return
 
 
+class PartialThenFailingStreamProvider(LLMProvider):
+    async def generate(
+        self,
+        messages,
+        *,
+        tools=None,
+        tool_choice=None,
+        temperature=None,
+        max_tokens=None,
+    ) -> LLMResponse:
+        del messages, tools, tool_choice, temperature, max_tokens
+        return LLMResponse(
+            message=LLMMessage(role="assistant", content="must not recover"),
+            model="partial-stream-provider",
+        )
+
+    async def stream_generate(
+        self,
+        messages,
+        *,
+        tools=None,
+        tool_choice=None,
+        temperature=None,
+        max_tokens=None,
+    ):
+        del messages, tools, tool_choice, temperature, max_tokens
+        yield "partial answer"
+        raise RuntimeError("stream disconnected")
+
+
 class EmptyThenSuccessProvider(LLMProvider):
     def __init__(self) -> None:
         self.calls = 0
@@ -340,6 +370,25 @@ class RoleplayEngineTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual("non-stream recovery", result)
         self.assertEqual(["non-stream recovery"], chunks)
+
+    async def test_stream_chat_reply_rejects_partial_response_after_stream_failure(self) -> None:
+        engine, role_card = self._build_engine(PartialThenFailingStreamProvider())
+        session = self._session_with_history()
+        chunks: list[str] = []
+
+        async def on_chunk(chunk: str) -> None:
+            chunks.append(chunk)
+
+        with self.assertLogs("echobot.orchestration.roleplay", level="ERROR"):
+            with self.assertRaisesRegex(RuntimeError, "partial response"):
+                await engine.stream_chat_reply(
+                    session=session,
+                    user_input="继续聊天",
+                    role_card=role_card,
+                    on_chunk=on_chunk,
+                )
+
+        self.assertEqual(["partial answer"], chunks)
 
     async def test_chat_reply_retries_when_generation_has_no_visible_content(self) -> None:
         provider = EmptyThenSuccessProvider()

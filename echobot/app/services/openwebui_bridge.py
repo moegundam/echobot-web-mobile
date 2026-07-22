@@ -18,6 +18,7 @@ BRIDGE_DEFAULT_USER_ENV = "ECHOBOT_OPENWEBUI_BRIDGE_USER_ID"
 BRIDGE_AGENT_ENABLED_ENV = "ECHOBOT_OPENWEBUI_OPERATOR_AGENT_ENABLED"
 BRIDGE_ALLOWED_TARGET_USERS_ENV = "ECHOBOT_OPENWEBUI_ALLOWED_TARGET_USERS"
 BRIDGE_REQUIRE_TARGET_USER_ENV = "ECHOBOT_OPENWEBUI_REQUIRE_TARGET_USER"
+MIN_BRIDGE_TOKEN_LENGTH = 32
 
 
 @dataclass(slots=True, frozen=True)
@@ -38,6 +39,9 @@ class OpenWebUIBridgeSettings:
             if resolved_token is not None:
                 token = resolved_token.value.strip()
         except SecretStoreError:
+            token_configuration_error = True
+        if token and len(token) < MIN_BRIDGE_TOKEN_LENGTH:
+            token = ""
             token_configuration_error = True
         return cls(
             token=token,
@@ -189,13 +193,13 @@ def build_openwebui_tools_openapi() -> dict[str, Any]:
                                         "target_user_id",
                                     ],
                                     "properties": {
-                                        "session_name": {"type": "string"},
-                                        "text": {"type": "string"},
-                                        "target_user_id": {"type": "string"},
-                                        "emotion": {"type": "string"},
-                                        "expression": {"type": "string"},
-                                        "motion": {"type": "string"},
-                                        "speaker": {"type": "string"},
+                                        "session_name": {"type": "string", "maxLength": 128},
+                                        "text": {"type": "string", "maxLength": 8192},
+                                        "target_user_id": {"type": "string", "maxLength": 320},
+                                        "emotion": {"type": "string", "maxLength": 128},
+                                        "expression": {"type": "string", "maxLength": 512},
+                                        "motion": {"type": "string", "maxLength": 512},
+                                        "speaker": {"type": "string", "maxLength": 128},
                                     },
                                 }
                             }
@@ -220,9 +224,9 @@ def build_openwebui_tools_openapi() -> dict[str, Any]:
                                         "target_user_id",
                                     ],
                                     "properties": {
-                                        "session_name": {"type": "string"},
-                                        "prompt": {"type": "string"},
-                                        "target_user_id": {"type": "string"},
+                                        "session_name": {"type": "string", "maxLength": 128},
+                                        "prompt": {"type": "string", "maxLength": 65536},
+                                        "target_user_id": {"type": "string", "maxLength": 320},
                                         "route_mode": {
                                             "type": "string",
                                             "enum": ["chat_only", "auto", "force_agent"],
@@ -244,7 +248,7 @@ def build_openwebui_tools_openapi() -> dict[str, Any]:
                             "name": "target_user_id",
                             "in": "query",
                             "required": True,
-                            "schema": {"type": "string"},
+                            "schema": {"type": "string", "maxLength": 320},
                         }
                     ],
                     "responses": {"200": {"description": "Session list"}},

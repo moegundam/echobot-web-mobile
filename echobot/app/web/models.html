@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title data-i18n-key="models.pageTitle">EchoBot</title>
-    <link rel="stylesheet" href="/web/assets/styles/shell-pages.css?v=ux-audit-1">
+    <link rel="stylesheet" href="/web/assets/styles/shell-pages.css?v=ux-audit-1&uiux=2">
 </head>
 <body class="admin-page models-page" data-page-title-key="models.pageTitle">
     <main id="models-root" class="admin-root models-root">
@@ -42,8 +42,9 @@
                         <p id="model-profile-status" data-i18n-key="models.loading">loading...</p>
                     </div>
                     <div class="model-profile-actions">
-                        <button id="model-profile-activate" type="button" data-i18n-key="models.activate">Activate</button>
-                        <button id="model-profile-save" type="submit" data-i18n-key="models.save">Save</button>
+                        <button id="model-profile-save" class="model-profile-save" type="submit" data-i18n-key="models.save">Save</button>
+                        <button id="model-profile-smoke" type="button" data-i18n-key="models.smokeTest">Test connection</button>
+                        <button id="model-profile-activate" class="model-profile-activate" type="button" data-i18n-key="models.activate">Activate</button>
                         <button id="model-profile-delete" class="model-profile-delete" type="button" data-i18n-key="models.delete">Delete</button>
                     </div>
                 </div>
@@ -88,6 +89,7 @@
             </form>
         </section>
     </main>
-    <script type="module" src="/web/assets/models-app.js?v=language-menu-1"></script>
+    <script type="module" src="/web/assets/shell-admin-navigation.js?v=uiux-2"></script>
+    <script type="module" src="/web/assets/models-app.js?v=language-menu-1&uiux=2"></script>
 </body>
 </html>

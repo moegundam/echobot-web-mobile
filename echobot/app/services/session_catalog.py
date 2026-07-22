@@ -4,12 +4,8 @@ from typing import Any
 
 from ..schemas import (
     ChannelIntegrationAdminModel,
-    LLMModelAdminModel,
-    Live2DModelAdminModel,
-    SpeechModelAdminConfigModel,
-    VoiceProfileAdminModel,
-    channel_config_payload,
 )
+from .channel_config import channel_config_payload
 
 
 def profile_lookup(profile_payload: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -34,14 +30,14 @@ def effective_profile_id(profile_payload: dict[str, Any], role_name: str) -> str
     return str(bindings.get(role_name) or profile_payload.get("active_profile_id") or "")
 
 
-def project_llm_models(profile_payload: dict[str, Any]) -> list[LLMModelAdminModel]:
+def project_llm_models(profile_payload: dict[str, Any]) -> list[dict[str, Any]]:
     return [
         llm_model_from_profile(profile)
         for profile in profiles_list(profile_payload)
     ]
 
 
-def project_voice_profiles(profile_payload: dict[str, Any]) -> list[VoiceProfileAdminModel]:
+def project_voice_profiles(profile_payload: dict[str, Any]) -> list[dict[str, Any]]:
     return [
         voice_profile_from_profile(profile)
         for profile in profiles_list(profile_payload)
@@ -51,7 +47,7 @@ def project_voice_profiles(profile_payload: dict[str, Any]) -> list[VoiceProfile
 def project_live2d_models(
     profile_payload: dict[str, Any],
     catalog: list[dict[str, Any]],
-) -> list[Live2DModelAdminModel]:
+) -> list[dict[str, Any]]:
     catalog_by_key = {
         str(item.get("selection_key") or ""): item
         for item in catalog
@@ -63,51 +59,51 @@ def project_live2d_models(
     ]
 
 
-def llm_model_from_profile(profile: dict[str, Any]) -> LLMModelAdminModel:
+def llm_model_from_profile(profile: dict[str, Any]) -> dict[str, Any]:
     profile_id = str(profile.get("profile_id") or "")
     chat = _section(profile, "chat")
-    return LLMModelAdminModel(
-        id=profile_id,
-        name=str(profile.get("label") or profile_id),
-        provider=str(chat.get("provider") or "openai-compatible"),
-        model=str(chat.get("model") or ""),
-        base_url=str(chat.get("base_url") or ""),
-        temperature=chat.get("temperature"),
-        max_tokens=chat.get("max_tokens"),
-        api_key_configured=bool(chat.get("api_key_configured")),
-        api_key_source=str(chat.get("api_key_source") or ""),
-        source_model_profile_id=profile_id,
-    )
+    return {
+        "id": profile_id,
+        "name": str(profile.get("label") or profile_id),
+        "provider": str(chat.get("provider") or "openai-compatible"),
+        "model": str(chat.get("model") or ""),
+        "base_url": str(chat.get("base_url") or ""),
+        "temperature": chat.get("temperature"),
+        "max_tokens": chat.get("max_tokens"),
+        "api_key_configured": bool(chat.get("api_key_configured")),
+        "api_key_source": str(chat.get("api_key_source") or ""),
+        "source_model_profile_id": profile_id,
+    }
 
 
-def voice_profile_from_profile(profile: dict[str, Any]) -> VoiceProfileAdminModel:
+def voice_profile_from_profile(profile: dict[str, Any]) -> dict[str, Any]:
     profile_id = str(profile.get("profile_id") or "")
-    return VoiceProfileAdminModel(
-        id=profile_id,
-        name=str(profile.get("label") or profile_id),
-        tts=_speech_config_from_section(_section(profile, "tts")),
-        stt=_speech_config_from_section(_section(profile, "asr")),
-        source_model_profile_id=profile_id,
-    )
+    return {
+        "id": profile_id,
+        "name": str(profile.get("label") or profile_id),
+        "tts": _speech_config_from_section(_section(profile, "tts")),
+        "stt": _speech_config_from_section(_section(profile, "asr")),
+        "source_model_profile_id": profile_id,
+    }
 
 
 def live2d_model_from_profile(
     profile: dict[str, Any],
     catalog_by_key: dict[str, dict[str, Any]] | None = None,
-) -> Live2DModelAdminModel:
+) -> dict[str, Any]:
     profile_id = str(profile.get("profile_id") or "")
     live2d = _section(profile, "live2d")
     selection_key = str(live2d.get("selection_key") or "")
     catalog_item = (catalog_by_key or {}).get(selection_key, {})
-    return Live2DModelAdminModel(
-        id=profile_id,
-        name=str(profile.get("label") or profile_id),
-        selection_key=selection_key,
-        source_model_profile_id=profile_id,
-        available=bool(catalog_item) if selection_key else False,
-        model_name=str(catalog_item.get("model_name") or ""),
-        model_url=str(catalog_item.get("model_url") or ""),
-    )
+    return {
+        "id": profile_id,
+        "name": str(profile.get("label") or profile_id),
+        "selection_key": selection_key,
+        "source_model_profile_id": profile_id,
+        "available": bool(catalog_item) if selection_key else False,
+        "model_name": str(catalog_item.get("model_name") or ""),
+        "model_url": str(catalog_item.get("model_url") or ""),
+    }
 
 
 def project_channel_integrations(
@@ -183,16 +179,16 @@ def channel_integration_by_id(
     return None
 
 
-def _speech_config_from_section(section: dict[str, Any]) -> SpeechModelAdminConfigModel:
-    return SpeechModelAdminConfigModel(
-        provider=str(section.get("provider") or ""),
-        model=str(section.get("model") or ""),
-        base_url=str(section.get("base_url") or ""),
-        voice=str(section.get("voice") or ""),
-        language=str(section.get("language") or ""),
-        api_key_configured=bool(section.get("api_key_configured")),
-        api_key_source=str(section.get("api_key_source") or ""),
-    )
+def _speech_config_from_section(section: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "provider": str(section.get("provider") or ""),
+        "model": str(section.get("model") or ""),
+        "base_url": str(section.get("base_url") or ""),
+        "voice": str(section.get("voice") or ""),
+        "language": str(section.get("language") or ""),
+        "api_key_configured": bool(section.get("api_key_configured")),
+        "api_key_source": str(section.get("api_key_source") or ""),
+    }
 
 
 def _section(profile: dict[str, Any], section_name: str) -> dict[str, Any]:

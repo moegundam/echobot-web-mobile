@@ -7,9 +7,9 @@ from collections import deque
 from dataclasses import dataclass
 import mimetypes
 from typing import TYPE_CHECKING, Any
-from urllib import error, request
+from urllib import error
 
-from ...speech_assets import validate_http_url
+from ...network.http import open_http_url, validate_http_url
 from ..base import BaseChannel
 from ..types import OutboundMessage
 from ...models import (
@@ -522,7 +522,7 @@ def _download_image_as_attachment(
 ) -> dict[str, str] | None:
     try:
         validated_url = validate_http_url(url)
-        with request.urlopen(validated_url, timeout=30.0) as response:  # nosec B310  # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
+        with open_http_url(validated_url, timeout_seconds=30.0) as response:
             image_bytes = _read_response_bytes_with_limit(
                 response,
                 max_bytes=attachment_store.image_budget.max_input_bytes,
@@ -553,7 +553,7 @@ def _download_file_as_attachment(
 ) -> dict[str, str] | None:
     try:
         validated_url = validate_http_url(url)
-        with request.urlopen(validated_url, timeout=30.0) as response:  # nosec B310  # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
+        with open_http_url(validated_url, timeout_seconds=30.0) as response:
             file_bytes = _read_response_bytes_with_limit(
                 response,
                 max_bytes=attachment_store.file_budget.max_input_bytes,

@@ -9,9 +9,12 @@ import pytest
 
 from echobot.app import create_app
 from echobot.app.auth import (
+    AccessRole,
     AdminAccessConfig,
     DeploymentSecurityConfig,
+    OperatorAccessConfig,
     TrustedUserConfig,
+    resolve_access_role,
     validate_deployment_security,
 )
 from echobot.runtime.bootstrap import RuntimeOptions
@@ -41,20 +44,93 @@ def test_exposed_profile_rejects_wildcard_admin_access() -> None:
     with pytest.raises(ValueError, match="explicit admin allowlist"):
         validate_deployment_security(
             DeploymentSecurityConfig(profile="tunnel"),
-            TrustedUserConfig(enabled=True, required=True),
+            TrustedUserConfig(
+                enabled=True,
+                required=True,
+                assertion_required=True,
+            ),
             AdminAccessConfig(allowlist=frozenset({"*"}), required=True),
+        )
+
+
+def test_exposed_profile_requires_proxy_validated_access_assertion() -> None:
+    with pytest.raises(ValueError, match="Access JWT assertion"):
+        validate_deployment_security(
+            DeploymentSecurityConfig(profile="tunnel"),
+            TrustedUserConfig(enabled=True, required=True),
+            AdminAccessConfig(
+                allowlist=frozenset({"admin@example.test"}),
+                required=True,
+            ),
         )
 
 
 def test_exposed_profile_accepts_required_identity_and_named_admin() -> None:
     validate_deployment_security(
         DeploymentSecurityConfig(profile="tunnel"),
-        TrustedUserConfig(enabled=True, required=True),
+        TrustedUserConfig(
+            enabled=True,
+            required=True,
+            assertion_required=True,
+        ),
         AdminAccessConfig(
             allowlist=frozenset({"admin@example.test"}),
             required=True,
         ),
     )
+
+
+def test_access_role_resolution_prefers_admin_then_operator_then_user() -> None:
+    trusted_user = TrustedUserConfig(enabled=True, required=True)
+    admin_access = AdminAccessConfig(
+        allowlist=frozenset({"admin@example.test", "both@example.test"}),
+        required=True,
+    )
+    operator_access = OperatorAccessConfig(
+        allowlist=frozenset({"operator@example.test", "both@example.test"}),
+    )
+
+    assert resolve_access_role(
+        "admin@example.test",
+        trusted_user,
+        admin_access,
+        operator_access,
+    ) is AccessRole.ADMIN
+    assert resolve_access_role(
+        "both@example.test",
+        trusted_user,
+        admin_access,
+        operator_access,
+    ) is AccessRole.ADMIN
+    assert resolve_access_role(
+        "operator@example.test",
+        trusted_user,
+        admin_access,
+        operator_access,
+    ) is AccessRole.OPERATOR
+    assert resolve_access_role(
+        "user@example.test",
+        trusted_user,
+        admin_access,
+        operator_access,
+    ) is AccessRole.USER
+
+
+def test_exposed_profile_rejects_wildcard_operator_access() -> None:
+    with pytest.raises(ValueError, match="explicit operator allowlist"):
+        validate_deployment_security(
+            DeploymentSecurityConfig(profile="tunnel"),
+            TrustedUserConfig(
+                enabled=True,
+                required=True,
+                assertion_required=True,
+            ),
+            AdminAccessConfig(
+                allowlist=frozenset({"admin@example.test"}),
+                required=True,
+            ),
+            OperatorAccessConfig(allowlist=frozenset({"*"})),
+        )
 
 
 def test_create_app_loads_deployment_security_from_runtime_env_file() -> None:
@@ -66,8 +142,10 @@ def test_create_app_loads_deployment_security_from_runtime_env_file() -> None:
                     "ECHOBOT_DEPLOYMENT_PROFILE=tunnel",
                     "ECHOBOT_TRUSTED_USER_HEADER_ENABLED=true",
                     "ECHOBOT_TRUSTED_USER_REQUIRED=true",
+                    "ECHOBOT_TRUSTED_USER_ASSERTION_REQUIRED=true",
                     "ECHOBOT_ADMIN_ALLOWLIST=admin@example.test",
                     "ECHOBOT_ADMIN_REQUIRED=true",
+                    "ECHOBOT_OPERATOR_ALLOWLIST=operator@example.test",
                 ]
             )
             + "\n",
@@ -89,7 +167,9 @@ def test_create_app_loads_deployment_security_from_runtime_env_file() -> None:
 
         assert app.state.deployment_security_config.profile == "tunnel"
         assert app.state.trusted_user_config.required is True
+        assert app.state.trusted_user_config.assertion_required is True
         assert app.state.admin_access_config.is_admin("admin@example.test") is True
+        assert app.state.operator_access_config.is_operator("operator@example.test") is True
 
 
 def test_create_app_rejects_incomplete_public_env_file() -> None:

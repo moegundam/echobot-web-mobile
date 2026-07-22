@@ -5,7 +5,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from ...orchestration import RoleCard, normalize_role_name
+from ...orchestration import RoleCard
 from ..schemas import (
     CharacterPackageCharacterModel,
     CharacterProfileModel,
@@ -20,10 +20,9 @@ from ..services.character_packages import (
     normalize_character_package_import,
     safe_model_profile_snapshot,
 )
-from ..services.character_profiles import normalize_emotion_maps
-from ..services.runtime_profile_composer import (
-    SPLIT_RUNTIME_PROFILE_FIELDS,
-    apply_runtime_profile_for_role,
+from ..services.character_profile_application import (
+    CharacterProfileApplicationService,
+    CharacterProfileState,
 )
 from ..services.model_profile_compat import model_profiles_payload
 from ..state import get_app_runtime, require_admin_user
@@ -35,9 +34,14 @@ router = APIRouter(tags=["character-profiles"])
 @router.get("/character-profiles", response_model=CharacterProfilesResponse)
 async def list_character_profiles(
     runtime=Depends(get_app_runtime),
+    _admin_user: str = Depends(require_admin_user),
 ) -> CharacterProfilesResponse:
     roles, profile_payload = await _load_character_profile_sources(runtime)
-    return _character_profiles_response(runtime, roles, profile_payload)
+    settings_by_role = await asyncio.to_thread(
+        runtime.character_profile_settings_service.settings_for_roles,
+        [role.name for role in roles],
+    )
+    return _character_profiles_response(roles, profile_payload, settings_by_role)
 
 
 @router.post("/character-profiles", response_model=CharacterProfileModel)
@@ -48,74 +52,42 @@ async def create_character_profile(
 ) -> CharacterProfileModel:
     _ensure_character_services_ready(runtime)
     try:
-        emotion_maps = normalize_emotion_maps(request.emotion_maps)
-        card = await runtime.role_service.create_role(request.name, request.prompt)
-        await asyncio.to_thread(
-            runtime.character_profile_settings_service.set_emotion_maps,
-            card.name,
-            emotion_maps,
-        )
-        await _set_runtime_bindings_from_request(runtime, card.name, request)
-        profile_payload = await _set_or_clear_binding(
-            runtime,
-            card.name,
-            request.model_profile_id,
-        )
-        profile_payload = await _activate_binding_for_current_role(
-            runtime,
-            card.name,
-            request.model_profile_id or "",
-            profile_payload,
+        state = await _character_app(runtime).create(
+            request.model_dump(mode="json"),
         )
     except ValueError as exc:
         raise _character_profile_http_exception(exc) from exc
-    return _character_model_from_role_card(
-        card,
-        profile_payload,
-        await _emotion_maps_for_role(runtime, card.name),
-        await _runtime_bindings_for_role(runtime, card.name),
-    )
+    return _character_model_from_state(state)
 
 
 @router.get("/character-profiles/{role_name}", response_model=CharacterProfileModel)
 async def get_character_profile(
     role_name: str,
     runtime=Depends(get_app_runtime),
+    _admin_user: str = Depends(require_admin_user),
 ) -> CharacterProfileModel:
     _ensure_character_services_ready(runtime)
     try:
-        card = await runtime.role_service.get_role(role_name)
+        state = await _character_app(runtime).get(role_name)
     except ValueError as exc:
         raise _character_profile_http_exception(exc) from exc
-    profile_payload = await model_profiles_payload(runtime)
-    return _character_model_from_role_card(
-        card,
-        profile_payload,
-        await _emotion_maps_for_role(runtime, card.name),
-        await _runtime_bindings_for_role(runtime, card.name),
-    )
+    return _character_model_from_state(state)
 
 
 @router.get("/character-profiles/{role_name}/package", response_model=CharacterProfilePackageModel)
 async def export_character_profile_package(
     role_name: str,
     runtime=Depends(get_app_runtime),
+    _admin_user: str = Depends(require_admin_user),
 ) -> CharacterProfilePackageModel:
     _ensure_character_services_ready(runtime)
     try:
-        card = await runtime.role_service.get_role(role_name)
+        state = await _character_app(runtime).get(role_name)
     except ValueError as exc:
         raise _character_profile_http_exception(exc) from exc
-    profile_payload = await model_profiles_payload(runtime)
-    emotion_maps = await _emotion_maps_for_role(runtime, card.name)
-    character = _character_model_from_role_card(
-        card,
-        profile_payload,
-        emotion_maps,
-        await _runtime_bindings_for_role(runtime, card.name),
-    )
+    character = _character_model_from_state(state)
     model_profile_snapshot = safe_model_profile_snapshot(
-        _profile_lookup(profile_payload).get(character.effective_model_profile_id),
+        _profile_lookup(state.profile_payload).get(character.effective_model_profile_id),
     )
     return CharacterProfilePackageModel(
         package_version=CHARACTER_PACKAGE_VERSION,
@@ -144,47 +116,10 @@ async def import_character_profile_package(
     try:
         request_payload = await request.json()
         package = normalize_character_package_import(request_payload)
-        card = await _create_or_update_package_role(runtime, package)
-        await asyncio.to_thread(
-            runtime.character_profile_settings_service.set_emotion_maps,
-            card.name,
-            package["emotion_maps"],
-        )
-        await asyncio.to_thread(
-            runtime.character_profile_settings_service.set_runtime_bindings,
-            card.name,
-            {
-                "llm_model_id": await _existing_model_profile_id(
-                    runtime,
-                    package["llm_model_id"],
-                ),
-                "voice_profile_id": await _existing_model_profile_id(
-                    runtime,
-                    package["voice_profile_id"],
-                ),
-                "live2d_model_id": await _existing_model_profile_id(
-                    runtime,
-                    package["live2d_model_id"],
-                ),
-                "default_channel_type": package["default_channel_type"],
-                "default_channel_integration_id": package[
-                    "default_channel_integration_id"
-                ],
-            },
-        )
-        profile_payload = await _set_or_clear_binding(
-            runtime,
-            card.name,
-            await _existing_model_profile_id(runtime, package["model_profile_id"]),
-        )
+        state = await _character_app(runtime).import_package(package)
     except ValueError as exc:
         raise _character_profile_http_exception(exc) from exc
-    return _character_model_from_role_card(
-        card,
-        profile_payload,
-        await _emotion_maps_for_role(runtime, card.name),
-        await _runtime_bindings_for_role(runtime, card.name),
-    )
+    return _character_model_from_state(state)
 
 
 @router.patch("/character-profiles/{role_name}", response_model=CharacterProfileModel)
@@ -196,72 +131,13 @@ async def update_character_profile(
 ) -> CharacterProfileModel:
     _ensure_character_services_ready(runtime)
     try:
-        card = await runtime.role_service.get_role(role_name)
-        if request.name is not None and not str(request.name or "").strip():
-            raise ValueError("Role name cannot be empty")
-
-        requested_name = str(request.name or "").strip()
-        if requested_name and normalize_role_name(requested_name) != card.name:
-            old_role_name = card.name
-            existing_emotion_maps = await _emotion_maps_for_role(runtime, old_role_name)
-            existing_runtime_bindings = await _runtime_bindings_for_role(
-                runtime,
-                old_role_name,
-            )
-            existing_model_profile_id = await asyncio.to_thread(
-                runtime.character_profile_settings_service.model_profile_id_for_role,
-                old_role_name,
-            )
-            card = await runtime.role_service.rename_role(
-                old_role_name,
-                requested_name,
-                prompt=request.prompt,
-            )
-            await _migrate_character_settings(
-                runtime,
-                old_role_name=old_role_name,
-                new_role_name=card.name,
-                emotion_maps=existing_emotion_maps,
-                runtime_bindings=existing_runtime_bindings,
-                model_profile_id=existing_model_profile_id,
-            )
-        elif request.prompt is not None:
-            card = await runtime.role_service.update_role(card.name, request.prompt)
-
-        if request.emotion_maps is not None:
-            emotion_maps = normalize_emotion_maps(request.emotion_maps)
-            await asyncio.to_thread(
-                runtime.character_profile_settings_service.set_emotion_maps,
-                card.name,
-                emotion_maps,
-            )
-
-        await _set_runtime_bindings_from_request(runtime, card.name, request)
-
-        if request.clear_model_profile_binding:
-            profile_payload = await _clear_model_profile_binding(runtime, card.name)
-        elif request.model_profile_id is not None:
-            profile_payload = await _set_or_clear_binding(
-                runtime,
-                card.name,
-                request.model_profile_id,
-            )
-        else:
-            profile_payload = await model_profiles_payload(runtime)
-        profile_payload = await _activate_binding_for_current_role(
-            runtime,
-            card.name,
-            request.model_profile_id or "",
-            profile_payload,
+        state = await _character_app(runtime).update(
+            role_name,
+            request.model_dump(mode="json", exclude_unset=True),
         )
     except ValueError as exc:
         raise _character_profile_http_exception(exc) from exc
-    return _character_model_from_role_card(
-        card,
-        profile_payload,
-        await _emotion_maps_for_role(runtime, card.name),
-        await _runtime_bindings_for_role(runtime, card.name),
-    )
+    return _character_model_from_state(state)
 
 
 @router.delete("/character-profiles/{role_name}")
@@ -272,13 +148,7 @@ async def delete_character_profile(
 ) -> dict[str, object]:
     _ensure_character_services_ready(runtime)
     try:
-        card = await runtime.role_service.get_role(role_name)
-        deleted_name = await runtime.role_service.delete_role(card.name)
-        await _clear_model_profile_binding(runtime, deleted_name)
-        await asyncio.to_thread(
-            runtime.character_profile_settings_service.clear_role,
-            deleted_name,
-        )
+        deleted_name = await _character_app(runtime).delete(role_name)
     except ValueError as exc:
         raise _character_profile_http_exception(exc) from exc
     return {
@@ -303,167 +173,14 @@ def _ensure_character_services_ready(runtime) -> None:
         raise HTTPException(status_code=503, detail="Character profile settings service is not ready")
 
 
-async def _set_or_clear_binding(
-    runtime,
-    role_name: str,
-    model_profile_id: str | None,
-) -> dict[str, Any]:
-    normalized_profile_id = str(model_profile_id or "").strip()
-    if not normalized_profile_id:
-        return await _clear_model_profile_binding(runtime, role_name)
-
-    payload = await _set_model_profile_binding(
-        runtime,
-        role_name,
-        normalized_profile_id,
-    )
-    return await _activate_binding_for_current_role(
-        runtime,
-        role_name,
-        normalized_profile_id,
-        payload,
-    )
-
-
-async def _create_or_update_package_role(runtime, package: dict[str, Any]) -> RoleCard:
-    try:
-        existing_card = await runtime.role_service.get_role(package["name"])
-    except ValueError:
-        existing_card = None
-
-    if existing_card is not None:
-        if not package["overwrite"]:
-            raise ValueError(f"Role already exists: {existing_card.name}")
-        return await runtime.role_service.update_role(
-            existing_card.name,
-            package["prompt"],
-        )
-
-    return await runtime.role_service.create_role(
-        package["name"],
-        package["prompt"],
-    )
-
-
-async def _existing_model_profile_id(runtime, profile_id: str) -> str:
-    normalized_id = str(profile_id or "").strip()
-    if not normalized_id:
-        return ""
-    try:
-        await asyncio.to_thread(runtime.model_profile_service.get_profile, normalized_id)
-    except ValueError:
-        return ""
-    return normalized_id
-
-
-async def _runtime_bindings_for_role(runtime, role_name: str) -> dict[str, str]:
-    return await asyncio.to_thread(
-        runtime.character_profile_settings_service.runtime_bindings_for_role,
-        role_name,
-    )
-
-
-async def _set_runtime_bindings_from_request(
-    runtime,
-    role_name: str,
-    request: CreateCharacterProfileRequest | UpdateCharacterProfileRequest,
-) -> dict[str, str]:
-    request_payload = request.model_dump(exclude_unset=True)
-    updates: dict[str, str] = {}
-    for field_name in (
-        "llm_model_id",
-        "voice_profile_id",
-        "live2d_model_id",
-        "default_channel_type",
-        "default_channel_integration_id",
-    ):
-        if field_name not in request_payload:
-            continue
-        updates[field_name] = str(request_payload.get(field_name) or "").strip()
-
-    for field_name in SPLIT_RUNTIME_PROFILE_FIELDS:
-        if updates.get(field_name):
-            await _require_model_profile(runtime, updates[field_name])
-
-    if not updates:
-        return await _runtime_bindings_for_role(runtime, role_name)
-    return await asyncio.to_thread(
-        runtime.character_profile_settings_service.set_runtime_bindings,
-        role_name,
-        updates,
-    )
-
-
-async def _migrate_character_settings(
-    runtime,
-    *,
-    old_role_name: str,
-    new_role_name: str,
-    emotion_maps: list[dict[str, str]],
-    runtime_bindings: dict[str, str],
-    model_profile_id: str,
-) -> None:
-    await asyncio.to_thread(
-        runtime.character_profile_settings_service.set_emotion_maps,
-        new_role_name,
-        emotion_maps,
-    )
-    await asyncio.to_thread(
-        runtime.character_profile_settings_service.set_runtime_bindings,
-        new_role_name,
-        runtime_bindings,
-    )
-    await asyncio.to_thread(
-        runtime.character_profile_settings_service.clear_role,
-        old_role_name,
-    )
-    await asyncio.to_thread(
-        runtime.character_profile_settings_service.clear_model_profile_binding,
-        old_role_name,
-    )
-    await asyncio.to_thread(
-        runtime.model_profile_service.clear_role_binding,
-        old_role_name,
-    )
-    if model_profile_id:
-        await _set_or_clear_binding(runtime, new_role_name, model_profile_id)
-
-
-async def _require_model_profile(runtime, profile_id: str) -> None:
-    try:
-        await asyncio.to_thread(runtime.model_profile_service.get_profile, profile_id)
-    except ValueError as exc:
-        raise _character_profile_http_exception(exc) from exc
-
-
-async def _activate_binding_for_current_role(
-    runtime,
-    role_name: str,
-    profile_id: str,
-    payload: dict[str, Any],
-) -> dict[str, Any]:
-    if runtime.session_service is None or runtime.context is None:
-        return payload
-
-    current_session = await runtime.session_service.load_current_session()
-    current_role_name = await runtime.context.coordinator.current_role_name(
-        current_session.name,
-    )
-    if current_role_name != role_name:
-        return payload
-
-    applied_payload = await apply_runtime_profile_for_role(
-        runtime,
-        role_name,
-        preferred_profile_id=profile_id,
-    )
-    return applied_payload or payload
+def _character_app(runtime) -> CharacterProfileApplicationService:
+    return CharacterProfileApplicationService(runtime)
 
 
 def _character_profiles_response(
-    runtime,
     roles: list[RoleCard],
     profile_payload: dict[str, Any],
+    settings_by_role: dict[str, dict[str, Any]],
 ) -> CharacterProfilesResponse:
     return CharacterProfilesResponse(
         active_model_profile_id=str(profile_payload.get("active_profile_id") or "a"),
@@ -471,8 +188,8 @@ def _character_profiles_response(
             _character_model_from_role_card(
                 role,
                 profile_payload,
-                runtime.character_profile_settings_service.emotion_maps_for_role(role.name),
-                runtime.character_profile_settings_service.runtime_bindings_for_role(role.name),
+                settings_by_role.get(role.name, {}).get("emotion_maps", []),
+                settings_by_role.get(role.name, {}).get("runtime_bindings", {}),
             )
             for role in sorted(roles, key=lambda item: item.name)
         ],
@@ -480,6 +197,17 @@ def _character_profiles_response(
             ModelProfileModel(**profile)
             for profile in _profiles_list(profile_payload)
         ],
+    )
+
+
+def _character_model_from_state(
+    state: CharacterProfileState,
+) -> CharacterProfileModel:
+    return _character_model_from_role_card(
+        state.card,
+        state.profile_payload,
+        state.emotion_maps,
+        state.runtime_bindings,
     )
 
 
@@ -533,13 +261,6 @@ def _character_model_from_role_card(
     )
 
 
-async def _emotion_maps_for_role(runtime, role_name: str) -> list[dict[str, str]]:
-    return await asyncio.to_thread(
-        runtime.character_profile_settings_service.emotion_maps_for_role,
-        role_name,
-    )
-
-
 def _profile_lookup(profile_payload: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return {
         str(profile.get("profile_id") or ""): profile
@@ -553,35 +274,6 @@ def _profiles_list(profile_payload: dict[str, Any]) -> list[dict[str, Any]]:
     if not isinstance(profiles, list):
         return []
     return [profile for profile in profiles if isinstance(profile, dict)]
-
-
-async def _set_model_profile_binding(
-    runtime,
-    role_name: str,
-    profile_id: str,
-) -> dict[str, Any]:
-    await asyncio.to_thread(
-        runtime.character_profile_settings_service.set_model_profile_binding,
-        role_name,
-        profile_id,
-    )
-    # Keep the legacy model profile payload stable for existing clients.
-    return await asyncio.to_thread(
-        runtime.model_profile_service.set_role_binding,
-        role_name,
-        profile_id,
-    )
-
-
-async def _clear_model_profile_binding(runtime, role_name: str) -> dict[str, Any]:
-    await asyncio.to_thread(
-        runtime.character_profile_settings_service.clear_model_profile_binding,
-        role_name,
-    )
-    return await asyncio.to_thread(
-        runtime.model_profile_service.clear_role_binding,
-        role_name,
-    )
 
 
 def _section(profile: dict[str, Any], section_name: str) -> dict[str, Any]:

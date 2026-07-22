@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from dataclasses import replace
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -15,7 +15,9 @@ from .auth import (
     TRUSTED_USER_STATE_KEY,
     AdminAccessConfig,
     DeploymentSecurityConfig,
+    OperatorAccessConfig,
     TrustedUserConfig,
+    is_cross_site_mutation,
     is_protected_path,
     resolve_trusted_user_id,
     validate_deployment_security,
@@ -38,6 +40,7 @@ from .routers import (
     web,
 )
 from .runtime import ASRServiceBuilder, AppRuntime, RuntimeContextBuilder, TTSServiceBuilder
+from .state import require_admin_user, require_operator_user
 from .web_pages import WEB_PAGE_ROUTES
 
 
@@ -76,23 +79,34 @@ def create_app(
 
     app = FastAPI(
         title="EchoBot API",
-        description="Runtime API for EchoBot daemon and future web console.",
+        description="Runtime API for the EchoBot Web, Console, Stage, Messenger, and Admin interfaces.",
         lifespan=lifespan,
     )
     deployment_security_config = DeploymentSecurityConfig.from_env()
     trusted_user_config = TrustedUserConfig.from_env()
     admin_access_config = AdminAccessConfig.from_env()
+    operator_access_config = OperatorAccessConfig.from_env()
     validate_deployment_security(
         deployment_security_config,
         trusted_user_config,
         admin_access_config,
+        operator_access_config,
     )
     app.state.deployment_security_config = deployment_security_config
     app.state.trusted_user_config = trusted_user_config
     app.state.admin_access_config = admin_access_config
+    app.state.operator_access_config = operator_access_config
 
     @app.middleware("http")
     async def trusted_user_middleware(request, call_next):
+        if is_protected_path(request.url.path) and is_cross_site_mutation(
+            request.method,
+            request.headers,
+        ):
+            return JSONResponse(
+                {"detail": "Cross-site mutation is not allowed"},
+                status_code=403,
+            )
         if trusted_user_config.enabled and is_protected_path(request.url.path):
             try:
                 user_id = resolve_trusted_user_id(request.headers, trusted_user_config)
@@ -170,13 +184,27 @@ def _load_runtime_env(options: RuntimeOptions) -> None:
 
 def _register_web_page_routes(app: FastAPI) -> None:
     for route in WEB_PAGE_ROUTES:
+        dependencies = []
+        if _web_page_requires_admin(route.path):
+            dependencies.append(Depends(require_admin_user))
+        elif _web_page_requires_operator(route.path):
+            dependencies.append(Depends(require_operator_user))
         app.add_api_route(
             route.path,
             _web_page_handler(route.asset_name),
             methods=["GET"],
             include_in_schema=False,
             name=route.route_name,
+            dependencies=dependencies,
         )
+
+
+def _web_page_requires_admin(path: str) -> bool:
+    return path == "/admin" or path.startswith("/admin/")
+
+
+def _web_page_requires_operator(path: str) -> bool:
+    return path in {"/web", "/console"}
 
 
 def _web_page_handler(asset_name: str):

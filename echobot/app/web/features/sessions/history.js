@@ -27,7 +27,9 @@ export function renderSessionHistory(history, deps) {
 
     const messageHistory = normalizeHistory(history);
     if (messageHistory.length === 0) {
-        addSystemMessage(t("console.emptySessionStart"));
+        addSystemMessage(t("console.emptySessionStart"), {
+            contentKey: "console.emptySessionStart",
+        });
         return;
     }
 

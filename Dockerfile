@@ -26,7 +26,12 @@ ENV PATH="/opt/venv/bin:${PATH}" \
     HOME=/app \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    ECHOBOT_SHELL_SAFETY_MODE=workspace-write
+    ECHOBOT_SHELL_SAFETY_MODE=workspace-write \
+    ECHOBOT_DEPLOYMENT_PROFILE=production \
+    ECHOBOT_TRUSTED_USER_HEADER_ENABLED=true \
+    ECHOBOT_TRUSTED_USER_REQUIRED=true \
+    ECHOBOT_TRUSTED_USER_ASSERTION_REQUIRED=true \
+    ECHOBOT_ADMIN_REQUIRED=true
 
 USER root
 
@@ -49,4 +54,4 @@ VOLUME ["/app/.echobot"]
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=5).read()"
 
-CMD ["python", "-m", "echobot", "app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["python", "-m", "echobot", "app", "--host", "127.0.0.1", "--port", "8000"]

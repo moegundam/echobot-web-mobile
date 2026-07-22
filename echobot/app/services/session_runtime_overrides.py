@@ -41,9 +41,55 @@ class SessionRuntimeOverrideService:
         with self._lock:
             self._overrides.pop(normalized_session_name, None)
 
+    def clear_profile_references(
+        self,
+        profile_id: str,
+        field_names: tuple[str, ...],
+    ) -> int:
+        """Remove deleted profile IDs from every ephemeral Session override."""
+        normalized_profile_id = str(profile_id or "").strip()
+        normalized_fields = tuple(
+            field_name
+            for field_name in field_names
+            if field_name in {
+                "model_profile_id",
+                "llm_model_id",
+                "voice_profile_id",
+                "live2d_model_id",
+            }
+        )
+        if not normalized_profile_id or not normalized_fields:
+            return 0
+
+        cleared = 0
+        with self._lock:
+            for session_name in list(self._overrides):
+                override = self._overrides[session_name]
+                changed = False
+                for field_name in normalized_fields:
+                    if str(override.get(field_name) or "") == normalized_profile_id:
+                        override.pop(field_name, None)
+                        changed = True
+                if not changed:
+                    continue
+                cleared += 1
+                if set(override).issubset({"updated_at"}):
+                    self._overrides.pop(session_name, None)
+                    continue
+                override["updated_at"] = datetime.now().astimezone().isoformat(
+                    timespec="microseconds",
+                )
+        return cleared
+
 
 def _clean_override(override: dict[str, Any]) -> dict[str, Any]:
     cleaned: dict[str, Any] = {}
+    role_name = _clean_text(override.get("role_name"), max_length=128)
+    if role_name:
+        cleaned["role_name"] = role_name
+    route_mode = _clean_text(override.get("route_mode"), max_length=32)
+    if route_mode:
+        cleaned["route_mode"] = route_mode
     for field_name in (
         "model_profile_id",
         "llm_model_id",

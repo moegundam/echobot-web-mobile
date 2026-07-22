@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title data-i18n-key="guide.pageTitle">EchoBot</title>
-    <link rel="stylesheet" href="/web/assets/styles/shell-pages.css?v=ux-public-2">
+    <link rel="stylesheet" href="/web/assets/styles/shell-pages.css?v=ux-public-2&uiux=2">
 </head>
 <body class="admin-page guide-page" data-page-title-key="guide.pageTitle">
     <main id="guide-root" class="admin-root guide-root">
@@ -19,22 +19,23 @@
             </div>
         </header>
         <nav class="admin-grid guide-nav" aria-label="Guide quick links" data-i18n-aria-label-key="guide.linksAria">
-            <a href="/admin" data-i18n-key="guide.backToAdmin">Back to Admin</a>
+            <a href="/admin" data-admin-only hidden data-i18n-key="guide.backToAdmin">Back to Admin</a>
             <a href="/stage?session_name=default" data-session-link data-i18n-key="guide.openStage">Open Stage</a>
             <a href="/messenger?session_name=default" data-session-link data-i18n-key="guide.openMessenger">Open Messenger</a>
-            <a href="/console" data-i18n-key="guide.openConsole">Open Console</a>
-            <a href="/admin/structure" data-i18n-key="guide.openStructure">Site Structure</a>
-            <a href="/admin/sessions" data-i18n-key="admin.sessions">Sessions</a>
-            <a href="/admin/characters" data-i18n-key="admin.characters">Characters</a>
-            <a href="/admin/models" data-i18n-key="admin.llmModels">LLM Models</a>
-            <a href="/admin/voice-models" data-i18n-key="admin.voiceModels">Voice Models</a>
-            <a href="/admin/live2d" data-i18n-key="admin.live2d">Live2D</a>
-            <a href="/admin/channels" data-i18n-key="admin.channels">Channels</a>
-            <a href="/admin/deployment" data-i18n-key="admin.deployment">Deployment</a>
-            <a href="/admin/openwebui" data-i18n-key="admin.openwebui">Open WebUI Bridge</a>
+            <a href="/console" data-operator-only hidden data-i18n-key="guide.openConsole">Open Console</a>
+            <a href="/admin/structure" data-admin-only hidden data-i18n-key="guide.openStructure">Site Structure</a>
+            <a href="/admin/sessions" data-admin-only hidden data-i18n-key="admin.sessions">Sessions</a>
+            <a href="/admin/characters" data-admin-only hidden data-i18n-key="admin.characters">Characters</a>
+            <a href="/admin/models" data-admin-only hidden data-i18n-key="admin.llmModels">LLM Models</a>
+            <a href="/admin/voice-models" data-admin-only hidden data-i18n-key="admin.voiceModels">Voice Models</a>
+            <a href="/admin/live2d" data-admin-only hidden data-i18n-key="admin.live2d">Live2D</a>
+            <a href="/admin/channels" data-admin-only hidden data-i18n-key="admin.channels">Channels</a>
+            <a href="/admin/deployment" data-admin-only hidden data-i18n-key="admin.deployment">Deployment</a>
+            <a href="/admin/openwebui" data-admin-only hidden data-i18n-key="admin.openwebui">Open WebUI Bridge</a>
         </nav>
         <section id="guide-content" class="guide-content" aria-live="polite" aria-label="Operation guide content" data-i18n-aria-label-key="guide.contentAria"></section>
     </main>
-    <script type="module" src="/web/assets/guide-app.js?v=ux-public-1"></script>
+    <script type="module" src="/web/assets/shell-admin-navigation.js?v=uiux-2"></script>
+    <script type="module" src="/web/assets/guide-app.js?v=ux-public-1&uiux=2"></script>
 </body>
 </html>

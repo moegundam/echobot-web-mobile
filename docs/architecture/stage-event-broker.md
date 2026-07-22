@@ -35,20 +35,19 @@ flowchart LR
 - 所有 channel 都有 subscriber 時，新增 channel 會明確拒絕，不做無界成長。
 - 適用單 process / 單 worker；不宣稱跨 worker delivery。
 
-### Redis Streams adapter foundation
+### Redis Streams adapter
 
 - 每個 user/session 產生獨立 SHA-256 component key；Redis key 不含原始 email 或 Session name。
 - 每個 stream 個別執行 exact `MAXLEN` 與 positive TTL，publish 時刷新 expiry。
 - 支援 Redis stream id cursor replay、lazy client factory 與 async subscription。
-- 目前只有 fake-client contract tests；尚未安裝成預設 dependency、尚未加入 runtime selector，也尚未做真 Redis 跨 process/load/reconnect 驗收。
+- 已加入 runtime selector：`ECHOBOT_STAGE_BROKER=memory|redis`。Redis mode 必須提供 `ECHOBOT_STAGE_REDIS_URL`，不會靜默切回 memory。
+- async Redis client 已鎖定在 requirements；目前有 fake-client contract tests，但尚未做真 Redis 跨 process/load/reconnect/TTL/tenant isolation 驗收。
 
 ### 升級 Gate
 
-1. 新增明確的 `ECHOBOT_STAGE_BROKER=memory|redis` 設定與 fail-closed startup validation。
-2. 以 optional dependency 或 deployment image 提供 pinned Redis client。
-3. 在真 Redis 上驗證兩個 app process 的 publish/subscribe、cursor reconnect、TTL、retention 與 tenant isolation。
-4. 驗證 Redis unavailable 時的 degraded-mode 決策；不可靜默切回 memory 造成跨 worker 訊息分裂。
-5. 只有完成上述 Gate 才可把 Phase 2 Redis broker 標為 `Done`。
+1. 在真 Redis 上驗證兩個 app process 的 publish/subscribe、cursor reconnect、TTL、retention 與 tenant isolation。
+2. 驗證 Redis unavailable 時的 degraded-mode 決策；不可靜默切回 memory 造成跨 worker 訊息分裂。
+3. 只有完成上述 Gate 才可把 Redis production acceptance 標為 `Done`。
 
 ## English version
 
@@ -72,6 +71,6 @@ Producers publish through the Stage Event API and the `StageEventBrokerProtocol`
 
 Each user/session has independent history and subscribers. Channel count is bounded with idle LRU eviction, and capacity is rejected when every channel is active. This implementation is for one process/worker and does not claim cross-worker delivery.
 
-### Redis Foundation And Remaining Gates
+### Redis Adapter And Remaining Gates
 
-Redis uses separate SHA-256-derived keys per user/session, exact per-stream `MAXLEN`, a positive TTL refreshed on publish, stream-id cursor replay, and lazy async clients. Current evidence is fake-client contract testing only. Before production activation, add an explicit fail-closed runtime selector, a pinned optional Redis dependency, real two-process Redis isolation/reconnect/load tests, and a documented unavailable/degraded-mode policy. Silent fallback to memory is not acceptable because it would split events between workers.
+Redis uses separate SHA-256-derived keys per user/session, exact per-stream `MAXLEN`, a positive TTL refreshed on publish, stream-id cursor replay, and lazy async clients. The async Redis dependency is pinned, and the runtime selector plus fail-closed memory/multi-worker checks are implemented. Current evidence is still fake-client contract testing only. Before production activation, run real two-process Redis isolation/reconnect/load tests and document the unavailable/degraded-mode policy. Silent fallback to memory is not acceptable because it would split events between workers.

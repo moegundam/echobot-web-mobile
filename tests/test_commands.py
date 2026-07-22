@@ -235,8 +235,11 @@ class CommandExecutionTests(unittest.IsolatedAsyncioTestCase):
         assert result is not None
         self.assertIn("Available commands:", result.text)
         self.assertIn("/new [title] - Start a new session", result.text)
-        self.assertIn("/route auto", result.text)
+        self.assertIn("/route chat_only", result.text)
         self.assertIn("/runtime get <name>", result.text)
+        self.assertNotIn("/route auto", result.text)
+        self.assertNotIn("/runtime set <name> <value>", result.text)
+        self.assertNotIn("/role set <name>", result.text)
 
     async def test_execute_runtime_command_updates_coordinator_and_persists(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

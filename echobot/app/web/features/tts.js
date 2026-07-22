@@ -1,4 +1,4 @@
-import { createTtsOptionsController } from "./tts/options.js?v=site-public-6";
+import { createTtsOptionsController } from "./tts/options.js?v=site-public-7";
 import { createTtsPlaybackController } from "./tts/playback.js?v=site-public-6";
 
 export function createTtsModule(deps) {
@@ -31,6 +31,7 @@ export function createTtsModule(deps) {
     }
 
     return {
+        applyRuntimeVoiceProfile: options.applyRuntimeVoiceProfile,
         bindHooks: bindHooks,
         createSpeechSession: playback.createSpeechSession,
         ensureAudioContextReady: playback.ensureAudioContextReady,

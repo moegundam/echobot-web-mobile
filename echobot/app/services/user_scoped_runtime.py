@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import logging
+from collections.abc import Awaitable, Callable
 from copy import deepcopy
 from dataclasses import replace
 from pathlib import Path
@@ -11,7 +13,6 @@ from ...channels import ChannelsConfig, OutboundMessage
 from ...concurrency import AsyncReentrantLock
 from ...gateway import DeliveryStore, GatewaySessionService, RouteSessionStore
 from ...runtime.bootstrap import RuntimeContext
-from ...runtime.session_service import SessionLifecycleService
 from ...tts import TTSService
 from ..auth import TrustedUserConfig, user_storage_key
 from .chat import ChatService
@@ -20,15 +21,33 @@ from .live2d_models import Live2DModelService
 from .llm_models import LLMModelService
 from .model_profiles import ModelProfileService
 from .roles import RoleService
-from .runtime_model_services import active_runtime_profile, build_runtime_model_services
+from .runtime_composition import build_runtime_composition
+from .runtime_context_events import notify_session_runtime_context_changed
+from .runtime_model_services import active_runtime_profile
 from .runtime_profile_applier import RuntimeProfileApplier
 from .session_runtime_overrides import SessionRuntimeOverrideService
-from .stage_events import StageEventBroker
+from .session_turn_runtime import resolve_session_turn_runtime
+from .stage_events import StageEventBrokerProtocol
 from .voice_models import VoiceModelService
 from .web_console import WebConsoleService
 
 if TYPE_CHECKING:
     from ..runtime import AppRuntime
+
+
+logger = logging.getLogger(__name__)
+
+
+class UserScopedRuntimeStopError(RuntimeError):
+    """Reports user-runtime cleanup failures after all resources are attempted."""
+
+    def __init__(self, failures: list[tuple[str, Exception]]) -> None:
+        self.failures = tuple(failures)
+        details = "; ".join(
+            f"{name}: {type(error).__name__}: {error}"
+            for name, error in failures
+        )
+        super().__init__(f"User runtime cleanup failed: {details}")
 
 
 class UserScopedRuntime:
@@ -58,7 +77,7 @@ class UserScopedRuntime:
         self.last_applied_model_profile: dict[str, object] = {}
         self.model_profile_lock = AsyncReentrantLock()
         self.model_profile_revision = 0
-        self.stage_event_broker: StageEventBroker = parent.stage_event_broker
+        self.stage_event_broker: StageEventBrokerProtocol = parent.stage_event_broker
         self.session_binding_lock = asyncio.Lock()
         self.session_runtime_override_service = SessionRuntimeOverrideService()
         self.tts_service: TTSService | None = None
@@ -74,76 +93,79 @@ class UserScopedRuntime:
     async def start(self) -> None:
         if self._started:
             return
+
+        try:
+            await self._start_resources()
+        except BaseException:
+            self._started = True
+            try:
+                await self.stop()
+            except Exception:
+                logger.exception("Failed to fully roll back user runtime startup")
+            raise
+
+    async def _start_resources(self) -> None:
         if self.parent.context is None:
             raise RuntimeError("Parent app runtime has not been started")
 
         options = replace(
             self.parent.runtime_options,
             storage_root=self.storage_root,
+            tool_workspace=self.storage_root / "workspace",
+            memory_workspace=self.storage_root / "memory",
         )
         self.context = self.parent._context_builder(options)
-        self.delivery_store = DeliveryStore(self.storage_root / "delivery.json")
-        self.route_session_store = RouteSessionStore(
-            self.storage_root / "route_sessions.json",
-        )
-        core_session_service = SessionLifecycleService(
-            self.context.session_store,
-            self.context.agent_session_store,
-            coordinator=self.context.coordinator,
-        )
-        self.session_service = GatewaySessionService(
-            core_session_service,
-            route_session_store=self.route_session_store,
-            delivery_store=self.delivery_store,
-        )
-        self.chat_service = ChatService(self.context.coordinator)
-        self.role_service = RoleService(
-            self.context.role_registry,
-            self.context.session_store,
-        )
-        self.character_profile_settings_service = CharacterProfileSettingsService(
-            self.storage_root,
-        )
-        if self.parent.character_profile_settings_service is not None:
-            self.character_profile_settings_service.seed_from(
-                self.parent.character_profile_settings_service,
-            )
-        self.model_profile_service = ModelProfileService(self.storage_root)
-        if self.parent.model_profile_service is not None:
-            self.model_profile_service.seed_from(self.parent.model_profile_service)
-        (
-            self.llm_model_service,
-            self.voice_model_service,
-            self.live2d_model_service,
-        ) = build_runtime_model_services(self.model_profile_service)
         self.asr_service = self.parent._asr_service_builder(self.context.workspace)
         self.tts_service = self.parent._tts_service_builder(self.context.workspace)
-        self.web_console_service = WebConsoleService(
-            self.context.workspace,
-            self.tts_service,
-            self.asr_service,
-            storage_root=self.storage_root,
-        )
-        self.runtime_profile_applier = RuntimeProfileApplier(
+        composition = build_runtime_composition(
             context=self.context,
-            web_console_service=self.web_console_service,
+            storage_root=self.storage_root,
+            tts_service=self.tts_service,
+            asr_service=self.asr_service,
+            model_profile_seed=self.parent.model_profile_service,
+            character_profile_seed=self.parent.character_profile_settings_service,
         )
-        asr_initialized = await self.web_console_service.initialize_runtime_settings()
-        if not asr_initialized:
-            await self.asr_service.on_startup()
+        composition.install_on(self)
+        self.context.coordinator.set_turn_runtime_resolver(
+            lambda session_name, role_name: resolve_session_turn_runtime(
+                self,
+                session_name,
+                role_name,
+            )
+        )
+        await composition.initialize_speech()
         await self.apply_active_model_profile()
         self._started = True
 
     async def stop(self) -> None:
         if not self._started:
             return
+        failures: list[tuple[str, Exception]] = []
         if self.context is not None:
-            await self.context.coordinator.close()
+            await _attempt_async_cleanup(
+                failures,
+                "coordinator",
+                self.context.coordinator.close,
+            )
+            memory_support = getattr(self.context, "memory_support", None)
+            if memory_support is not None:
+                await _attempt_async_cleanup(
+                    failures,
+                    "memory",
+                    memory_support.close,
+                )
         if self.tts_service is not None:
-            await self.tts_service.close()
+            await _attempt_async_cleanup(failures, "tts", self.tts_service.close)
         if self.asr_service is not None:
-            await self.asr_service.close()
+            await _attempt_async_cleanup(failures, "asr", self.asr_service.close)
+        if self.context is not None:
+            try:
+                self.context.close_session_stores()
+            except Exception as exc:
+                failures.append(("session repositories", exc))
         self._started = False
+        if failures:
+            raise UserScopedRuntimeStopError(failures)
 
     def channel_status(self) -> dict[str, dict[str, bool]]:
         return self.parent.channel_status()
@@ -167,6 +189,17 @@ class UserScopedRuntime:
                 session_name=session_name,
                 outbound=outbound,
             )
+
+    async def notify_session_runtime_context_changed(
+        self,
+        session_name: str,
+        reason: str,
+    ) -> None:
+        await notify_session_runtime_context_changed(
+            self,
+            session_name,
+            reason=reason,
+        )
 
     async def reload_channels(
         self,
@@ -213,6 +246,17 @@ class UserScopedRuntime:
                 await self.runtime_profile_applier.apply(profile)
             self.last_applied_model_profile = deepcopy(profile)
             self.model_profile_revision += 1
+
+
+async def _attempt_async_cleanup(
+    failures: list[tuple[str, Exception]],
+    name: str,
+    cleanup: Callable[[], Awaitable[None]],
+) -> None:
+    try:
+        await cleanup()
+    except Exception as exc:
+        failures.append((name, exc))
 
 
 def _user_stage_scope_key(user_id: str) -> str:

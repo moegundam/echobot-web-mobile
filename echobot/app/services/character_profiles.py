@@ -63,6 +63,21 @@ class CharacterProfileSettingsService:
                 for field_name in CHARACTER_RUNTIME_BINDING_FIELDS
             }
 
+    def settings_for_roles(
+        self,
+        role_names: Iterable[Any],
+    ) -> dict[str, dict[str, Any]]:
+        """Read all requested character settings from one consistent store snapshot."""
+        normalized_role_names = tuple(
+            dict.fromkeys(_normalize_role_name(role_name) for role_name in role_names)
+        )
+        with self._lock:
+            state = self._load_state_unlocked()
+            return {
+                role_name: _role_settings_snapshot(state["roles"].get(role_name, {}))
+                for role_name in normalized_role_names
+            }
+
     def model_profile_id_for_role(self, role_name: str) -> str:
         return self.runtime_bindings_for_role(role_name).get("model_profile_id", "")
 
@@ -110,6 +125,44 @@ class CharacterProfileSettingsService:
                 for role_name, role_settings in state["roles"].items()
                 if isinstance(role_settings, dict)
                 and str(role_settings.get("model_profile_id") or "")
+            }
+
+    def clear_runtime_bindings_for_profile(
+        self,
+        profile_id: str,
+        field_names: Iterable[str],
+    ) -> dict[str, dict[str, str]]:
+        normalized_profile_id = _clean_map_value(profile_id)
+        normalized_fields = tuple(
+            field_name
+            for field_name in dict.fromkeys(field_names)
+            if field_name in CHARACTER_RUNTIME_BINDING_FIELDS
+        )
+        if not normalized_profile_id or not normalized_fields:
+            return {}
+
+        with self._lock:
+            state = self._load_state_unlocked()
+            for role_name in list(state["roles"]):
+                role_settings = state["roles"].get(role_name, {})
+                if not isinstance(role_settings, dict):
+                    continue
+                for field_name in normalized_fields:
+                    if (
+                        str(role_settings.get(field_name) or "")
+                        == normalized_profile_id
+                    ):
+                        role_settings.pop(field_name, None)
+                if not role_settings:
+                    state["roles"].pop(role_name, None)
+            self._save_state_unlocked(state)
+            return {
+                role_name: {
+                    field_name: str(role_settings.get(field_name) or "")
+                    for field_name in CHARACTER_RUNTIME_BINDING_FIELDS
+                }
+                for role_name, role_settings in state["roles"].items()
+                if isinstance(role_settings, dict)
             }
 
     def set_runtime_bindings(
@@ -270,6 +323,18 @@ def _normalize_runtime_binding_updates(updates: dict[str, Any]) -> dict[str, str
             continue
         normalized[field_name] = _clean_map_value(updates.get(field_name, ""))
     return normalized
+
+
+def _role_settings_snapshot(role_settings: Any) -> dict[str, Any]:
+    if not isinstance(role_settings, dict):
+        role_settings = {}
+    return {
+        "emotion_maps": deepcopy(role_settings.get("emotion_maps", [])),
+        "runtime_bindings": {
+            field_name: str(role_settings.get(field_name) or "")
+            for field_name in CHARACTER_RUNTIME_BINDING_FIELDS
+        },
+    }
 
 
 def _default_state() -> dict[str, Any]:

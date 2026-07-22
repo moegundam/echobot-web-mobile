@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title data-i18n-key="live2dAdmin.pageTitle">EchoBot</title>
-    <link rel="stylesheet" href="/web/assets/styles/shell-pages.css?v=ux-audit-1">
+    <link rel="stylesheet" href="/web/assets/styles/shell-pages.css?v=ux-audit-1&uiux=2">
 </head>
 <body class="admin-page models-page" data-page-title-key="live2dAdmin.pageTitle">
     <main id="live2d-root" class="admin-root models-root">
@@ -42,8 +42,8 @@
                         <p id="live2d-profile-status" data-i18n-key="models.loading">loading...</p>
                     </div>
                     <div class="model-profile-actions">
-                        <button id="live2d-profile-activate" type="button" data-i18n-key="models.activate">Activate</button>
-                        <button id="live2d-profile-save" type="submit" data-i18n-key="models.save">Save</button>
+                        <button id="live2d-profile-save" class="model-profile-save" type="submit" data-i18n-key="models.save">Save</button>
+                        <button id="live2d-profile-activate" class="model-profile-activate" type="button" data-i18n-key="models.activate">Activate</button>
                         <button id="live2d-profile-delete" class="model-profile-delete" type="button" data-i18n-key="models.delete">Delete</button>
                     </div>
                 </div>
@@ -66,6 +66,7 @@
             </form>
         </section>
     </main>
-    <script type="module" src="/web/assets/live2d-app.js?v=language-menu-1"></script>
+    <script type="module" src="/web/assets/shell-admin-navigation.js?v=uiux-2"></script>
+    <script type="module" src="/web/assets/live2d-app.js?v=language-menu-1&uiux=2"></script>
 </body>
 </html>

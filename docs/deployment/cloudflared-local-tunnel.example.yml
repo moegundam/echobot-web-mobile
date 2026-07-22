@@ -10,4 +10,9 @@ ingress:
       httpHostHeader: echobot.example.com
       connectTimeout: 30s
       noTLSVerify: false
+      access:
+        required: true
+        teamName: <CLOUDFLARE-TEAM-NAME>
+        audTag:
+          - <ACCESS-APPLICATION-AUDIENCE-TAG>
   - service: http_status:404

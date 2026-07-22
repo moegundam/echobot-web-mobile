@@ -92,6 +92,7 @@ class SessionAgentRunner:
         temperature: float | None = None,
         max_tokens: int | None = None,
         trace_run_id: str | None = None,
+        provider=None,
     ) -> SessionRunResult:
         lock = await self._session_lock(session_name)
         async with lock:
@@ -132,8 +133,15 @@ class SessionAgentRunner:
                 )
 
             try:
+                turn_agent = self._agent
+                if provider is not None:
+                    turn_agent = AgentCore(
+                        provider,
+                        system_prompt=self._agent.system_prompt,
+                        memory_support=self._agent.memory_support,
+                    )
                 result = await run_agent_turn(
-                    self._agent,
+                    turn_agent,
                     prompt,
                     list(session.history),
                     image_urls=image_urls,

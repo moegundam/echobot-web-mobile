@@ -219,3 +219,122 @@ def test_launchd_openwebui_tunnel_plist_maps_remote_to_local_port() -> None:
     assert plist["Label"] == entrypoint.OPENWEBUI_TUNNEL_LABEL
     assert "127.0.0.1:18001:127.0.0.1:8001" in plist["ProgramArguments"]
     assert "user@openwebui-host.local" in plist["ProgramArguments"]
+
+
+def test_doctor_reports_source_identity_with_git_output(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    entrypoint = _load_script("echobot_entrypoint")
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    token_file = tmp_path / "bridge-token"
+    token_file.write_text("token\n", encoding="utf-8")
+    channel_config = repo_root / "channels.json"
+    channel_config.write_text("{}", encoding="utf-8")
+
+    git_result_map = {
+        ("rev-parse", "--short", "HEAD"): "abcdef1",
+        ("rev-parse", "--abbrev-ref", "HEAD"): "main",
+        ("status", "--porcelain", "--untracked-files=normal"): "",
+    }
+
+    def fake_git_output(command: list[str], _repo_root: Path) -> str | None:
+        return git_result_map.get(tuple(command))
+
+    monkeypatch.setattr(entrypoint, "_git_output", fake_git_output)
+    monkeypatch.setattr(entrypoint, "_http_ok", lambda _url: True)
+    monkeypatch.setattr(entrypoint, "_remote_http_ok", lambda _config, _url: True)
+
+    config = entrypoint._config_from_args(
+        entrypoint.argparse.Namespace(
+            repo_root=repo_root,
+            host="127.0.0.1",
+            port=8001,
+            env_file=".env",
+            channel_config="channels.json",
+            token_file=str(token_file),
+            remote_host="127.0.0.1",
+            remote_bind="127.0.0.1",
+            remote_port=18001,
+            python=sys.executable,
+            ssh="/bin/sh",
+        )
+    )
+    (repo_root / ".venv" / "bin").mkdir(parents=True)
+
+    assert entrypoint._doctor(config) == 0
+    output = capsys.readouterr().out
+    assert "source_identity: ok - " in output
+
+
+def test_launchd_app_plist_includes_source_identity_environment(monkeypatch, tmp_path: Path) -> None:
+    entrypoint = _load_script("echobot_entrypoint")
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    token_file = tmp_path / "bridge-token"
+    token_file.write_text("secret-token\n", encoding="utf-8")
+
+    git_result_map = {
+        ("rev-parse", "--short", "HEAD"): "a1b2c3d",
+        ("rev-parse", "--abbrev-ref", "HEAD"): "feature/local-identity",
+        ("status", "--porcelain", "--untracked-files=normal"): "",
+    }
+
+    def fake_git_output(command: list[str], _repo_root: Path) -> str | None:
+        return git_result_map.get(tuple(command))
+
+    monkeypatch.setattr(entrypoint, "_git_output", fake_git_output)
+
+    config = {
+        "repo_root": repo_root,
+        "host": "127.0.0.1",
+        "port": 8001,
+        "env_file": repo_root / ".env",
+        "channel_config": repo_root / ".echobot/channels.json",
+        "token_file": str(token_file),
+        "python": sys.executable,
+    }
+
+    plist = entrypoint._build_app_plist(config)
+    identity = json.loads(plist["EnvironmentVariables"]["ECHOBOT_SOURCE_IDENTITY"])
+
+    assert identity == {
+        "version": "a1b2c3d",
+        "branch": "feature/local-identity",
+        "dirty": False,
+        "checkout_status": "attached",
+        "worktree_status": "clean",
+    }
+
+
+def test_launchd_app_plist_marks_source_identity_unknown_when_git_unavailable(monkeypatch, tmp_path: Path) -> None:
+    entrypoint = _load_script("echobot_entrypoint")
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    token_file = tmp_path / "bridge-token"
+    token_file.write_text("secret-token\n", encoding="utf-8")
+
+    monkeypatch.setattr(entrypoint, "_git_output", lambda _command, _repo_root: None)
+
+    config = {
+        "repo_root": repo_root,
+        "host": "127.0.0.1",
+        "port": 8001,
+        "env_file": repo_root / ".env",
+        "channel_config": repo_root / ".echobot/channels.json",
+        "token_file": str(token_file),
+        "python": sys.executable,
+    }
+
+    plist = entrypoint._build_app_plist(config)
+    identity = json.loads(plist["EnvironmentVariables"]["ECHOBOT_SOURCE_IDENTITY"])
+
+    assert identity == {
+        "version": "unknown",
+        "branch": "unknown",
+        "dirty": "unknown",
+        "checkout_status": "unknown",
+        "worktree_status": "unknown",
+    }

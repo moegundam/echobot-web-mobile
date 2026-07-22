@@ -5,10 +5,14 @@ import unittest
 from pathlib import Path
 
 from echobot import ChatSession, LLMMessage, SessionStore, ToolCall
-from echobot.runtime.sessions import normalize_session_name
+from echobot.runtime.sessions import MAX_SESSION_NAME_LENGTH, normalize_session_name
 
 
 class SessionStoreTests(unittest.TestCase):
+    def test_session_name_length_is_bounded_before_filesystem_use(self) -> None:
+        with self.assertRaisesRegex(ValueError, "128 characters or fewer"):
+            normalize_session_name("a" * (MAX_SESSION_NAME_LENGTH + 1))
+
     def test_compare_and_set_current_session_preserves_newer_pointer(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             session_store = SessionStore(Path(temp_dir) / "sessions")

@@ -17,6 +17,7 @@ router = APIRouter(tags=["heartbeat"])
 @router.get("/heartbeat", response_model=HeartbeatConfigResponse)
 async def get_heartbeat_config(
     runtime=Depends(get_app_runtime),
+    _admin_user: str = Depends(require_admin_user),
 ) -> HeartbeatConfigResponse:
     context = runtime.context
     if context is None:
@@ -60,7 +61,7 @@ def _build_heartbeat_response(
     return HeartbeatConfigResponse(
         enabled=enabled,
         interval_seconds=max(int(interval_seconds), 1),
-        file_path=str(file_path),
+        file_path=file_path.name,
         content=content,
         has_meaningful_content=has_meaningful_heartbeat_content(content),
     )

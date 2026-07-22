@@ -114,6 +114,18 @@ class DecisionEngine:
         if self._decider_agent is not None:
             self._decider_agent.provider = provider
 
+    def for_provider(self, provider) -> "DecisionEngine":
+        if provider is None or self._decider_agent is None:
+            return self
+        return DecisionEngine(
+            AgentCore(
+                provider,
+                system_prompt=self._decider_agent.system_prompt,
+                memory_support=self._decider_agent.memory_support,
+            ),
+            max_tokens=self._max_tokens,
+        )
+
     async def decide(
         self,
         user_input: str,

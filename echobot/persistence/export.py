@@ -4,11 +4,13 @@ import hashlib
 import json
 import os
 import re
+import sqlite3
 import tempfile
 from pathlib import Path
 from typing import Any
 
 from ..runtime.sessions import SessionStore, message_to_dict
+from ..runtime.sqlite_sessions import SQLiteSessionStore
 
 
 EXPORT_FORMAT = "echobot-postgres-seed-v2"
@@ -68,22 +70,54 @@ _CAMEL_WORD_BOUNDARY = re.compile(r"(.)([A-Z][a-z]+)")
 _CAMEL_CASE_BOUNDARY = re.compile(r"([a-z0-9])([A-Z])")
 
 
-def build_postgres_seed_export(workspace: str | Path) -> dict[str, Any]:
+def build_postgres_seed_export(
+    workspace: str | Path,
+    *,
+    session_source: str = "jsonl",
+    sqlite_source: str | Path | None = None,
+    session_store_backend: str | None = None,
+) -> dict[str, Any]:
+    """Build a PostgreSQL seed from one explicitly selected session source.
+
+    JSONL remains the compatibility default.  SQLite selection never falls
+    back to JSONL: ``sqlite_source`` may point at a SQLite storage root using
+    the runtime layout, or at one default ``sessions.sqlite3`` database.
+    Canonical non-session JSON stores continue to be read from ``workspace``;
+    the session source is recorded in the payload so an export cannot be
+    mistaken for a mixed-backend snapshot.
+
+    ``session_store_backend`` is accepted as a compatibility alias for callers
+    that already use the runtime selector.  Supplying both selectors with
+    different values is rejected.
+    """
     workspace_path = Path(workspace).expanduser().resolve()
     storage_root = workspace_path / ".echobot"
+    selected_source = _resolve_session_source(
+        session_source,
+        session_store_backend=session_store_backend,
+        sqlite_source=sqlite_source,
+    )
+    scope_sources = _session_scope_sources(
+        storage_root,
+        session_source=selected_source,
+        sqlite_source=sqlite_source,
+    )
     invalid_records: list[str] = []
     scopes = [
         _export_scope(
             workspace_path,
             owner_user_id=owner_user_id,
-            storage_root=scope_root,
+            storage_root=canonical_scope_root,
+            session_source=selected_source,
+            session_storage_root=session_scope_root,
             invalid_records=invalid_records,
         )
-        for owner_user_id, scope_root in _owner_scopes(storage_root)
+        for owner_user_id, canonical_scope_root, session_scope_root in scope_sources
     ]
     payload: dict[str, Any] = {
         "format": EXPORT_FORMAT,
         "schema_version": 2,
+        "session_source": selected_source,
         "scopes": scopes,
         "global": {
             "channels": _read_json_object(
@@ -97,6 +131,7 @@ def build_postgres_seed_export(workspace: str | Path) -> dict[str, Any]:
             "Attachment bytes are not embedded; the manifest records relative paths, sizes, and SHA-256 digests.",
             "Conversation history can contain sensitive user content and the resulting seed must be handled as private data.",
             "This is a validated migration seed, not a PostgreSQL runtime switch or import-completion claim.",
+            f"Session records were read exclusively from the selected {selected_source} source; no backend fallback or merge was performed.",
         ],
         "manifest": {
             "counts": {},
@@ -115,6 +150,9 @@ def validate_postgres_seed_export(payload: dict[str, Any]) -> list[str]:
         errors.append(f"unsupported export format: {payload.get('format')!r}")
     if payload.get("schema_version") != 2:
         errors.append("schema_version must be 2")
+    session_source = payload.get("session_source", "jsonl")
+    if not isinstance(session_source, str) or session_source not in {"jsonl", "sqlite"}:
+        errors.append("session_source must be one of: jsonl, sqlite")
 
     scopes = payload.get("scopes")
     if not isinstance(scopes, list):
@@ -155,8 +193,17 @@ def validate_postgres_seed_export(payload: dict[str, Any]) -> list[str]:
 def write_postgres_seed_export(
     workspace: str | Path,
     output_path: str | Path,
+    *,
+    session_source: str = "jsonl",
+    sqlite_source: str | Path | None = None,
+    session_store_backend: str | None = None,
 ) -> dict[str, Any]:
-    payload = build_postgres_seed_export(workspace)
+    payload = build_postgres_seed_export(
+        workspace,
+        session_source=session_source,
+        sqlite_source=sqlite_source,
+        session_store_backend=session_store_backend,
+    )
     errors = validate_postgres_seed_export(payload)
     if errors:
         raise ValueError("PostgreSQL seed validation failed: " + "; ".join(errors))
@@ -182,23 +229,141 @@ def _owner_scopes(storage_root: Path) -> list[tuple[str, Path]]:
     return scopes
 
 
+def _resolve_session_source(
+    session_source: str,
+    *,
+    session_store_backend: str | None,
+    sqlite_source: str | Path | None,
+) -> str:
+    selected = str(session_source or "jsonl").strip().lower()
+    if session_store_backend is not None:
+        backend = str(session_store_backend or "").strip().lower()
+        if selected != "jsonl" and selected != backend:
+            raise ValueError(
+                "session_source and session_store_backend must select the same backend"
+            )
+        selected = backend
+    if sqlite_source is not None and selected == "jsonl":
+        selected = "sqlite"
+    if selected not in {"jsonl", "sqlite"}:
+        raise ValueError(
+            "PostgreSQL seed session source must be one of: jsonl, sqlite"
+        )
+    if selected == "jsonl" and sqlite_source is not None:
+        raise ValueError("sqlite_source requires the sqlite session source")
+    return selected
+
+
+def _session_scope_sources(
+    storage_root: Path,
+    *,
+    session_source: str,
+    sqlite_source: str | Path | None,
+) -> list[tuple[str, Path, Path]]:
+    if session_source == "jsonl":
+        return [
+            (owner_user_id, scope_root, scope_root)
+            for owner_user_id, scope_root in _owner_scopes(storage_root)
+        ]
+
+    sqlite_path = (
+        Path(sqlite_source).expanduser().resolve()
+        if sqlite_source is not None
+        else storage_root
+    )
+    if sqlite_path.is_file() or (
+        sqlite_source is not None and sqlite_path.suffix.lower() in {".sqlite", ".sqlite3"}
+    ):
+        if sqlite_path.name != "sessions.sqlite3":
+            raise ValueError(
+                "SQLite seed source file must be named sessions.sqlite3; "
+                "use its storage root to export user scopes"
+            )
+        if not sqlite_path.exists():
+            raise FileNotFoundError(
+                f"Selected SQLite session source was not found: {sqlite_path}"
+            )
+        _reject_uncovered_user_scopes(storage_root)
+        return [("default", storage_root, sqlite_path.parent)]
+
+    if not sqlite_path.exists() or not sqlite_path.is_dir():
+        raise FileNotFoundError(
+            f"Selected SQLite session source root was not found: {sqlite_path}"
+        )
+    default_db = sqlite_path / "sessions.sqlite3"
+    if not default_db.is_file():
+        raise FileNotFoundError(
+            f"Selected SQLite session source is missing: {default_db}"
+        )
+
+    scopes: list[tuple[str, Path, Path]] = [("default", storage_root, sqlite_path)]
+    users_root = sqlite_path / "users"
+    if users_root.is_dir():
+        for source_scope in sorted(users_root.iterdir(), key=lambda item: item.name):
+            if not source_scope.is_dir() or source_scope.name.startswith("."):
+                continue
+            if not (source_scope / "sessions.sqlite3").is_file():
+                raise FileNotFoundError(
+                    "Selected SQLite session source is missing: "
+                    f"{source_scope / 'sessions.sqlite3'}"
+                )
+            scopes.append(
+                (
+                    source_scope.name,
+                    storage_root / "users" / source_scope.name,
+                    source_scope,
+                )
+            )
+    return scopes
+
+
+def _reject_uncovered_user_scopes(storage_root: Path) -> None:
+    users_root = storage_root / "users"
+    if not users_root.is_dir():
+        return
+    for scope_root in users_root.iterdir():
+        if not scope_root.is_dir() or scope_root.name.startswith("."):
+            continue
+        has_jsonl_sessions = any(scope_root.glob("sessions/*.jsonl"))
+        has_sqlite_sessions = (scope_root / "sessions.sqlite3").is_file()
+        if has_jsonl_sessions or has_sqlite_sessions:
+            raise ValueError(
+                "A single SQLite sessions database cannot cover user scopes; "
+                "select the SQLite storage root instead"
+            )
+
+
 def _export_scope(
     workspace: Path,
     *,
     owner_user_id: str,
     storage_root: Path,
+    session_source: str,
+    session_storage_root: Path,
     invalid_records: list[str],
 ) -> dict[str, Any]:
-    sessions, current_session = _export_sessions(
-        storage_root / "sessions",
-        workspace=workspace,
-        invalid_records=invalid_records,
-    )
-    agent_sessions, current_agent_session = _export_sessions(
-        storage_root / "agent_sessions",
-        workspace=workspace,
-        invalid_records=invalid_records,
-    )
+    if session_source == "jsonl":
+        sessions, current_session = _export_sessions(
+            session_storage_root / "sessions",
+            workspace=workspace,
+            invalid_records=invalid_records,
+        )
+        agent_sessions, current_agent_session = _export_sessions(
+            session_storage_root / "agent_sessions",
+            workspace=workspace,
+            invalid_records=invalid_records,
+        )
+    else:
+        sessions, current_session = _export_sqlite_sessions(
+            session_storage_root / "sessions.sqlite3",
+            workspace=workspace,
+            invalid_records=invalid_records,
+        )
+        agent_sessions, current_agent_session = _export_sqlite_sessions(
+            session_storage_root / "agent_sessions.sqlite3",
+            workspace=workspace,
+            invalid_records=invalid_records,
+        )
     stores: dict[str, Any] = {}
     for name, relative_path in _STORE_PATHS.items():
         path = storage_root / relative_path
@@ -229,6 +394,65 @@ def _export_scope(
             invalid_records=invalid_records,
         ),
     }
+
+
+def _export_sqlite_sessions(
+    database_path: Path,
+    *,
+    workspace: Path,
+    invalid_records: list[str],
+) -> tuple[list[dict[str, Any]], str | None]:
+    if not database_path.is_file():
+        return [], None
+
+    try:
+        store = SQLiteSessionStore.open_readonly(database_path)
+    except (OSError, ValueError, sqlite3.Error) as exc:
+        raise ValueError(
+            f"Unable to open selected SQLite session source {database_path}: "
+            f"{type(exc).__name__}"
+        ) from exc
+
+    sessions: list[dict[str, Any]] = []
+    try:
+        for info in store.list_sessions():
+            try:
+                session = store.load_session(info.name)
+            except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
+                invalid_records.append(_record_error(database_path, workspace, exc))
+                continue
+            sessions.append(
+                _sanitize_secrets(
+                    {
+                        "name": session.name,
+                        "updated_at": session.updated_at,
+                        "compressed_summary": session.compressed_summary,
+                        "metadata": dict(session.metadata),
+                        "history": [
+                            message_to_dict(message) for message in session.history
+                        ],
+                    }
+                )
+            )
+        sessions.sort(key=lambda item: str(item.get("name", "")))
+        try:
+            current_session = store.get_current_session_name()
+        except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
+            invalid_records.append(_record_error(database_path, workspace, exc))
+            current_session = None
+        return sessions, current_session
+    except Exception as exc:
+        if isinstance(
+            exc,
+            (OSError, UnicodeError, ValueError, json.JSONDecodeError, sqlite3.Error),
+        ):
+            raise ValueError(
+                f"Unable to read selected SQLite session source {database_path}: "
+                f"{type(exc).__name__}"
+            ) from exc
+        raise
+    finally:
+        store.close()
 
 
 def _export_sessions(

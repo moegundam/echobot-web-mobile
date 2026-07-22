@@ -5,6 +5,7 @@ import json
 import os
 import shlex
 import shutil
+import socket
 import subprocess
 import sys
 import threading
@@ -387,6 +388,34 @@ class BasicToolRegistryTests(unittest.IsolatedAsyncioTestCase):
         payload = json.loads(result.content)
         self.assertFalse(payload["ok"])
         self.assertIn("Private network addresses are not allowed", payload["error"])
+
+    async def test_web_request_tool_blocks_dns_rebinding_before_connect(self) -> None:
+        public_result = [
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 80))
+        ]
+        private_result = [
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("127.0.0.1", 80))
+        ]
+        registry = create_basic_tool_registry()
+
+        with patch(
+            "echobot.network.http.socket.getaddrinfo",
+            side_effect=[public_result, private_result],
+        ) as resolver:
+            with patch("echobot.network.http.socket.socket") as socket_factory:
+                result = await registry.execute(
+                    ToolCall(
+                        id="call_web_rebind",
+                        name="fetch_web_page",
+                        arguments='{"url": "http://rebind.example/private"}',
+                    )
+                )
+
+        payload = json.loads(result.content)
+        self.assertFalse(payload["ok"])
+        self.assertIn("private network host", payload["error"])
+        self.assertEqual(2, resolver.call_count)
+        socket_factory.assert_not_called()
 
     async def test_web_request_tool_extracts_html_text(self) -> None:
         registry = ToolRegistry([WebRequestTool(allow_private_network=True)])

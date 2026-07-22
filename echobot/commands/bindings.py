@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, cast
 
 from ..channels.types import ChannelAddress
@@ -38,6 +39,10 @@ if TYPE_CHECKING:
     from ..gateway.session_service import GatewaySessionService
 
 
+GATEWAY_ADMIN_REQUIRED = "Admin access is required; use EchoBot Admin or Console."
+RuntimeContextChangeNotifier = Callable[[str, str], Awaitable[None]]
+
+
 @dataclass(slots=True)
 class CliCommandContext:
     coordinator: ConversationCoordinator
@@ -57,6 +62,7 @@ class GatewayCommandContext:
     address: ChannelAddress
     metadata: dict[str, object]
     session_name: str = ""
+    runtime_context_change_notifier: RuntimeContextChangeNotifier | None = None
 
 
 async def dispatch_cli_command(
@@ -147,6 +153,8 @@ async def _execute_gateway_role(
     command_obj: object,
 ) -> CommandResult:
     command = cast(RoleCommand, command_obj)
+    if command.action == "set":
+        return CommandResult(text=GATEWAY_ADMIN_REQUIRED)
     session_name = await _gateway_session_name(context)
     try:
         text = await execute_role_command(
@@ -173,14 +181,20 @@ async def _execute_gateway_route_mode(
     command_obj: object,
 ) -> CommandResult:
     command = cast(RouteModeCommand, command_obj)
+    if command.action == "set" and command.argument != "chat_only":
+        return CommandResult(text=GATEWAY_ADMIN_REQUIRED)
     session_name = await _gateway_session_name(context)
-    return CommandResult(
-        text=await execute_route_mode_command(
-            context.coordinator,
-            session_name,
-            command,
-        )
+    text = await execute_route_mode_command(
+        context.coordinator,
+        session_name,
+        command,
     )
+    if command.action == "set" and context.runtime_context_change_notifier is not None:
+        await context.runtime_context_change_notifier(
+            session_name,
+            "gateway_route_mode_changed",
+        )
+    return CommandResult(text=text)
 
 
 async def _execute_gateway_runtime(
@@ -188,6 +202,8 @@ async def _execute_gateway_runtime(
     command_obj: object,
 ) -> CommandResult:
     command = cast(RuntimeCommand, command_obj)
+    if command.action == "set":
+        return CommandResult(text=GATEWAY_ADMIN_REQUIRED)
     await _gateway_session_name(context)
     return CommandResult(
         text=await execute_runtime_command(

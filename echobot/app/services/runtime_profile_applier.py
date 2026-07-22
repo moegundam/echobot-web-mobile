@@ -220,18 +220,37 @@ def _apply_chat_model_profile_to_context(
     context: RuntimeContext,
     chat: dict[str, object],
 ) -> None:
+    provider = build_chat_model_provider(context, chat)
+    if provider is None:
+        return
+    context.agent.provider = provider
+    context.coordinator.set_llm_provider(
+        provider,
+        update_decision=not context.dedicated_decision_provider,
+        update_roleplay=not context.dedicated_roleplay_provider,
+    )
+    context.coordinator.set_generation_defaults(
+        temperature=_optional_float(chat.get("temperature")),
+        max_tokens=_optional_int(chat.get("max_tokens")),
+    )
+
+
+def build_chat_model_provider(
+    context: RuntimeContext,
+    chat: Mapping[str, object],
+) -> OpenAICompatibleProvider | None:
     model = (
         str(chat.get("model") or "").strip()
         or os.environ.get("LLM_MODEL", "").strip()
     )
     if not model:
-        return
+        return None
     base_url = (
         str(chat.get("base_url") or "").strip()
         or os.environ.get("LLM_BASE_URL", "").strip()
         or "https://api.openai.com/v1"
     )
-    provider = OpenAICompatibleProvider(
+    return OpenAICompatibleProvider(
         OpenAICompatibleSettings(
             api_key=_profile_text(chat, "api_key", "LLM_API_KEY", "EMPTY"),
             model=model,
@@ -240,10 +259,4 @@ def _apply_chat_model_profile_to_context(
             extra_body=_profile_extra_body(),
         ),
         attachment_store=context.attachment_store,
-    )
-    context.agent.provider = provider
-    context.coordinator.set_llm_provider(provider)
-    context.coordinator.set_generation_defaults(
-        temperature=_optional_float(chat.get("temperature")),
-        max_tokens=_optional_int(chat.get("max_tokens")),
     )

@@ -174,16 +174,27 @@
 
     .stage-actions {
         display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: repeat(4, minmax(0, 1fr));
         gap: 8px;
     }
 
     .console-quick-nav {
         display: grid;
         grid-column: 1 / -1;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: repeat(4, minmax(0, 1fr));
         width: 100%;
         gap: 8px;
+    }
+
+    .console-language-switcher,
+    .console-display-mode-switcher {
+        grid-column: span 2;
+    }
+
+    .console-command-group {
+        grid-column: 1 / -1;
+        justify-content: flex-end;
+        width: 100%;
     }
 
     .console-nav-button {
@@ -193,13 +204,24 @@
 
     .stage-actions .ghost-button {
         min-width: 0;
+        min-height: 48px;
         padding: 10px 12px;
         font-size: 0.86rem;
+        line-height: 1.2;
+        overflow-wrap: anywhere;
         text-align: center;
     }
 
+    .stage-actions .console-command-button {
+        flex: 0 0 44px;
+        width: 44px;
+        min-width: 44px;
+        min-height: 44px;
+        padding: 0;
+    }
+
     #live2d-drawer-toggle {
-        grid-column: 1 / -1;
+        grid-column: auto;
     }
 
     .stage-header-meta {
@@ -214,6 +236,11 @@
     .model-profile-select-label {
         display: grid;
         grid-template-columns: auto minmax(0, 1fr);
+        width: 100%;
+    }
+
+    .model-profile-search-label {
+        flex-basis: 100%;
         width: 100%;
     }
 
@@ -386,6 +413,12 @@
 }
 
 @media (max-width: 380px) {
+    .console-nav-button {
+        padding-right: 4px;
+        padding-left: 4px;
+        font-size: 0.78rem;
+    }
+
     .composer-action-buttons {
         justify-content: space-between;
     }
@@ -395,19 +428,149 @@
     }
 }
 
-html[data-layout-mode="mobile"] body,
-html[data-layout-mode="tablet"]:not([data-viewport-orientation="landscape"]) body {
-    overflow: auto;
+.console-mobile-workspace-tabs {
+    display: none;
 }
 
-html[data-layout-mode="mobile"] .page-shell,
+.console-operations-workspace {
+    display: contents;
+}
+
+html[data-layout-mode="mobile"] .console-mobile-workspace-tabs,
+html[data-layout-mode="tablet"]:not([data-viewport-orientation="landscape"]) .console-mobile-workspace-tabs {
+    position: sticky;
+    top: max(8px, env(safe-area-inset-top));
+    z-index: 30;
+    display: grid;
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 4px;
+    width: 100%;
+    max-width: 100%;
+    padding: 4px;
+    border: 1px solid rgba(87, 57, 34, 0.16);
+    border-radius: 8px;
+    background: rgba(255, 249, 240, 0.96);
+    box-shadow: 0 8px 22px rgba(70, 37, 18, 0.12);
+    backdrop-filter: blur(14px);
+}
+
+html[data-layout-mode="mobile"] .console-mobile-workspace-tab,
+html[data-layout-mode="tablet"]:not([data-viewport-orientation="landscape"]) .console-mobile-workspace-tab {
+    min-width: 0;
+    min-height: 44px;
+    padding: 8px 6px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--muted);
+    font-size: 0.84rem;
+    font-weight: 800;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+}
+
+html[data-layout-mode="mobile"] .console-mobile-workspace-tab[aria-selected="true"],
+html[data-layout-mode="tablet"]:not([data-viewport-orientation="landscape"]) .console-mobile-workspace-tab[aria-selected="true"] {
+    background: var(--accent-strong);
+    color: #fffaf5;
+}
+
+html[data-layout-mode="mobile"] .console-mobile-workspace-tab:focus-visible,
+html[data-layout-mode="tablet"]:not([data-viewport-orientation="landscape"]) .console-mobile-workspace-tab:focus-visible {
+    outline: 3px solid rgba(202, 92, 54, 0.34);
+    outline-offset: 2px;
+}
+
+html[data-layout-mode="mobile"] .page-shell[data-mobile-workspace-view="stage"] .chat-panel,
+html[data-layout-mode="mobile"] .page-shell[data-mobile-workspace-view="operations"] .stage-panel,
+html[data-layout-mode="mobile"] .page-shell[data-mobile-workspace-view="operations"] .conversation-panel,
+html[data-layout-mode="mobile"] .page-shell[data-mobile-workspace-view="chat"] .stage-panel,
+html[data-layout-mode="mobile"] .page-shell[data-mobile-workspace-view="chat"] .console-operations-workspace {
+    display: none;
+}
+
+html[data-layout-mode="tablet"]:not([data-viewport-orientation="landscape"]) .page-shell[data-mobile-workspace-view="stage"] .chat-panel,
+html[data-layout-mode="tablet"]:not([data-viewport-orientation="landscape"]) .page-shell[data-mobile-workspace-view="operations"] .stage-panel,
+html[data-layout-mode="tablet"]:not([data-viewport-orientation="landscape"]) .page-shell[data-mobile-workspace-view="operations"] .conversation-panel,
+html[data-layout-mode="tablet"]:not([data-viewport-orientation="landscape"]) .page-shell[data-mobile-workspace-view="chat"] .stage-panel,
+html[data-layout-mode="tablet"]:not([data-viewport-orientation="landscape"]) .page-shell[data-mobile-workspace-view="chat"] .console-operations-workspace {
+    display: none;
+}
+
+html[data-layout-mode="mobile"] .page-shell[data-mobile-workspace-view="operations"] .console-operations-workspace {
+    display: block;
+    min-width: 0;
+}
+
+html[data-layout-mode="tablet"]:not([data-viewport-orientation="landscape"]) .page-shell[data-mobile-workspace-view="operations"] .console-operations-workspace {
+    display: block;
+    min-width: 0;
+}
+
+html[data-layout-mode="mobile"] .page-shell[data-mobile-workspace-view="stage"] .stage-panel,
+html[data-layout-mode="mobile"] .page-shell[data-mobile-workspace-view="chat"] .chat-panel {
+    height: 100%;
+    min-height: 0;
+}
+
+html[data-layout-mode="tablet"]:not([data-viewport-orientation="landscape"]) .page-shell[data-mobile-workspace-view="stage"] .stage-panel,
+html[data-layout-mode="tablet"]:not([data-viewport-orientation="landscape"]) .page-shell[data-mobile-workspace-view="chat"] .chat-panel {
+    height: 100%;
+    min-height: 0;
+}
+
+html[data-layout-mode="mobile"] .page-shell[data-mobile-workspace-view="operations"] .chat-panel {
+    height: 100%;
+    min-height: 0;
+}
+
+html[data-layout-mode="tablet"]:not([data-viewport-orientation="landscape"]) .page-shell[data-mobile-workspace-view="operations"] .chat-panel {
+    height: 100%;
+    min-height: 0;
+}
+
+html[data-layout-mode="mobile"] .live2d-stage {
+    min-height: 0;
+}
+
+html[data-layout-mode="mobile"] .page-shell[data-mobile-workspace-view="operations"] .chat-main {
+    overflow: auto;
+    overscroll-behavior: contain;
+}
+
+html[data-layout-mode="tablet"]:not([data-viewport-orientation="landscape"]) .page-shell[data-mobile-workspace-view="operations"] .chat-main {
+    overflow: auto;
+    overscroll-behavior: contain;
+}
+
+html[data-layout-mode="mobile"] body {
+    overflow: hidden;
+}
+
+html[data-layout-mode="mobile"] .page-shell {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: 14px;
+    height: 100vh;
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+    padding: 14px;
+}
+
+html[data-layout-mode="tablet"]:not([data-viewport-orientation="landscape"]) body {
+    overflow: hidden;
+}
+
 html[data-layout-mode="tablet"]:not([data-viewport-orientation="landscape"]) .page-shell {
     grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
     gap: 14px;
-    height: auto;
-    min-height: 100vh;
-    min-height: 100dvh;
-    overflow: visible;
+    height: 100vh;
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
     padding: 14px;
 }
 
@@ -416,15 +579,13 @@ html[data-layout-mode="tablet"] .page-resizer {
     display: none;
 }
 
-html[data-layout-mode="mobile"] .stage-panel,
 html[data-layout-mode="tablet"]:not([data-viewport-orientation="landscape"]) .stage-panel {
-    min-height: 56vh;
+    min-height: 0;
 }
 
-html[data-layout-mode="mobile"] .chat-panel,
 html[data-layout-mode="tablet"]:not([data-viewport-orientation="landscape"]) .chat-panel {
-    min-height: 640px;
-    height: auto;
+    min-height: 0;
+    height: 100%;
 }
 
 html[data-layout-mode="mobile"] .stage-header,
@@ -433,10 +594,41 @@ html[data-layout-mode="tablet"]:not([data-viewport-orientation="landscape"]) .st
     align-items: flex-start;
 }
 
+html[data-layout-mode="mobile"] .stage-header {
+    gap: 10px;
+    padding: 12px;
+}
+
+html[data-layout-mode="mobile"] .stage-header .eyebrow,
+html[data-layout-mode="mobile"] #access-role-badge,
+html[data-layout-mode="mobile"] .model-profile-manage-link,
+html[data-layout-mode="mobile"] .console-quick-nav {
+    display: none;
+}
+
+html[data-layout-mode="mobile"] .stage-header-meta,
+html[data-layout-mode="mobile"] .stage-actions,
+html[data-layout-mode="tablet"]:not([data-viewport-orientation="landscape"]) .stage-header-meta,
+html[data-layout-mode="tablet"]:not([data-viewport-orientation="landscape"]) .stage-actions {
+    flex: 0 0 auto;
+    width: 100%;
+}
+
 html[data-layout-mode="mobile"] .stage-actions,
 html[data-layout-mode="tablet"]:not([data-viewport-orientation="landscape"]) .stage-actions {
-    width: 100%;
     justify-content: space-between;
+}
+
+html[data-layout-mode="mobile"] .stage-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+}
+
+html[data-layout-mode="mobile"] .console-command-group {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+    width: 100%;
 }
 
 html[data-layout-mode="mobile"] .console-quick-nav,
@@ -446,9 +638,77 @@ html[data-layout-mode="tablet"]:not([data-viewport-orientation="landscape"]) .co
     width: 100%;
 }
 
+html[data-layout-mode="mobile"] .console-quick-nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+html[data-layout-mode="mobile"] .stage-actions .console-quick-nav {
+    display: none;
+}
+
+html[data-layout-mode="mobile"] .console-language-switcher .shell-language-select-label,
+html[data-layout-mode="mobile"] .console-display-mode-switcher .shell-display-mode-select-label {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+}
+
+html[data-layout-mode="mobile"] .console-language-switcher,
+html[data-layout-mode="mobile"] .console-display-mode-switcher {
+    grid-column: auto;
+    width: 100%;
+}
+
+html[data-layout-mode="mobile"] .console-language-switcher .shell-language-select-label > span:first-child,
+html[data-layout-mode="mobile"] .console-display-mode-switcher .shell-display-mode-select-label > span:first-child {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+}
+
+html[data-layout-mode="mobile"] .model-profile-badge {
+    padding: 4px 8px;
+}
+
+html[data-layout-mode="mobile"] .stage-header-meta {
+    gap: 8px;
+}
+
+html[data-layout-mode="mobile"] .stage-actions .ghost-button {
+    padding-right: 6px;
+    padding-left: 6px;
+    font-size: 0.8rem;
+}
+
 html[data-layout-mode="mobile"] .console-nav-button,
 html[data-layout-mode="tablet"]:not([data-viewport-orientation="landscape"]) .console-nav-button {
     min-width: 0;
+}
+
+html[data-layout-mode="mobile"] .settings-panel[open],
+html[data-layout-mode="tablet"]:not([data-viewport-orientation="landscape"]) .settings-panel[open] {
+    max-height: none;
+    overflow: hidden;
+    overscroll-behavior: auto;
+    scrollbar-gutter: auto;
+}
+
+html[data-layout-mode="mobile"] .model-profile-list,
+html[data-layout-mode="tablet"]:not([data-viewport-orientation="landscape"]) .model-profile-list {
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    padding-bottom: 6px;
+    scroll-snap-type: x proximity;
+}
+
+html[data-layout-mode="mobile"] .model-profile-card,
+html[data-layout-mode="tablet"]:not([data-viewport-orientation="landscape"]) .model-profile-card {
+    flex: 0 0 min(78vw, 260px);
+    scroll-snap-align: start;
 }
 
 html[data-layout-mode="tablet"][data-viewport-orientation="landscape"] body {
@@ -563,6 +823,13 @@ html[data-device-class="desktop"][data-layout-mode="desktop"] .page-shell {
 
     html[data-device-class="desktop"][data-layout-mode="desktop"] .page-resizer {
         display: none;
+    }
+
+    html[data-device-class="desktop"][data-layout-mode="desktop"] .settings-panel[open] {
+        max-height: none;
+        overflow: hidden;
+        overscroll-behavior: auto;
+        scrollbar-gutter: auto;
     }
 }
 

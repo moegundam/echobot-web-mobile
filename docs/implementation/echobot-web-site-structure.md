@@ -1,4 +1,4 @@
-# EchoBot Web Site Structure - 2026-05-05
+# EchoBot Web Site Structure
 
 ## 中文版
 
@@ -22,8 +22,21 @@
 |---|---|---|---|
 | 前台 | `/stage?session_name=<name>` | 單一 session 的角色顯示、字幕、TTS、Live2D lip sync（結果輸出） | 不做即時模型/角色控制 |
 | 通訊 | `/messenger?session_name=<name>` | 輕量聊天輸入；將最終回覆同步到 Stage | 不承擔 Console 的即時控制 |
+| 說明 | `/guide` | 依登入角色顯示可用頁面、首次成功流程、名詞與故障排除 | 不提供 Admin mutation 權限 |
 | 中台 | `/console` | 會話層即時操作台：角色卡、模型、語音、Live2D、runtime 切換 | 不放設計文件與長期設定索引 |
 | 後台 | `/admin` | 受保護入口：模型/語音/Live2D、角色、通道、文件與設置 | 不做即時對話控制 |
+
+### 存取角色
+
+| 角色 | 可用入口 | 不可用範圍 |
+|---|---|---|
+| Admin | 全部頁面與 API（含 `/guide`） | 無；仍受 secrets、proxy 與 runtime safety policy 約束 |
+| Operator | `/guide`、`/web`、`/console`、`/messenger`、`/stage`；自己的 Session 與暫時 runtime override | `/admin*`、secrets、provider endpoint、Channel/部署管理、持久素材上傳、Agent route |
+| User | `/guide`、`/messenger`、`/stage` 與自己的 Session 對話資料 | Console、Admin 與 owner-global API |
+
+`ECHOBOT_ADMIN_ALLOWLIST` 與 `ECHOBOT_OPERATOR_ALLOWLIST` 分開設定。Admin 同時具備 Operator 能力；同一使用者出現在兩個清單時，以 Admin 為準。
+非 Admin 呼叫 Web config、Session runtime context 或 health 時，回應會移除 provider endpoint、API key 狀態、本機 ASR 資源路徑、Channel/bus 狀態與全域 runtime 設定。
+`POST /api/stage/events` 刻意允許已驗證的 User 使用，因 Messenger 需把該使用者自己 Session 的字幕同步到 Stage；broker 仍以 user/session 隔離並限制事件大小與佇列容量。
 
 ### `/console` 內部
 
@@ -31,7 +44,7 @@
 |---|---|---|
 | Session panel | 連線狀態、session badge、角色/模型狀態、語言、Live2D 顯示 | 讓操作員看到會話目前狀態 |
 | Control drawers | session 清單、角色卡選擇 | 切換當前會話控制上下文 |
-| Settings groups | route mode、provider 切換、ASR、TTS、Live2D、CRON、HEARTBEAT | 控制當前 session 的執行行為 |
+| Settings groups | chat-only route、TTS、Live2D 與 Stage 暫時覆寫；全域 runtime、ASR provider、CRON、HEARTBEAT 只對 Admin 顯示 | 控制當前 session，且不寫回 Admin profile |
 | Conversation area | transcript、attachments、麥克風、發送 | 驗證 session 內訊息流程 |
 
 ### Admin 子頁面
@@ -54,8 +67,10 @@
 | Namespace | 對應頁面 | 職責 |
 |---|---|---|
 | `/api/web/*` | `/console` | Web config、runtime、Live2D、TTS、ASR、WebSocket |
+| `GET /api/access` | `/guide`、`/stage`、`/messenger` | 只回傳 role 與 Console/Admin/Agent capability；不回傳 allowlist、identity header 或 secret |
 | `/api/chat*` | `/console`、`/messenger` | 對話、stream、jobs、trace |
 | `/api/sessions*` | `/console`、`/messenger`、`/stage` | session lifecycle 與當前 session |
+| `PUT /api/sessions/{session_name}/configuration` | `/console` | Operator/Admin 更新該 Session 的暫時角色、LLM、Voice、Live2D 或 Channel runtime；不覆寫後台 profile |
 | `/api/stage/events` | `/stage`、`/messenger` | session-scoped 字幕與舞台事件推送 |
 | `/api/character-profiles*` | `/admin/characters` | 角色定義、prompt、角色綁定 |
 | `/api/llm-models` | `/admin/models` | LLM profile 管理 |
@@ -129,8 +144,21 @@ Define a session-centered operation flow: set up resources first, bind them into
 |---|---|---|---|
 | Front display | `/stage?session_name=<name>` | Single-session output: character, subtitles, TTS, and Live2D lip sync | No live model/character controls |
 | Communication | `/messenger?session_name=<name>` | Lightweight input path; publishes final assistant output to Stage | No runtime control |
+| Guidance | `/guide` | Role-aware pages, first-success flow, glossary, and troubleshooting | Grants no Admin mutation capability |
 | Operator console | `/console` | Session-centered live control: role card, model, voice, Live2D, and runtime toggles | Not a docs/config index |
 | Admin | `/admin` | Protected hub for setup pages and documentation | Not live session control |
+
+### Access Roles
+
+| Role | Available surfaces | Restricted surfaces |
+|---|---|---|
+| Admin | All pages and APIs, including `/guide` | None beyond secret, proxy, and runtime safety policies |
+| Operator | `/guide`, `/web`, `/console`, `/messenger`, `/stage`, own sessions, and temporary runtime overrides | `/admin*`, secrets, provider endpoints, channel/deployment management, persistent asset uploads, and Agent routes |
+| User | `/guide`, `/messenger`, `/stage`, and own session conversation data | Console, Admin, and owner-global APIs |
+
+Configure `ECHOBOT_ADMIN_ALLOWLIST` and `ECHOBOT_OPERATOR_ALLOWLIST` separately. Admins inherit Operator capabilities; when an identity appears in both lists, Admin wins.
+For non-Admin callers, Web config, Session runtime-context, and health responses omit provider endpoints, API-key status, local ASR resource paths, Channel/bus status, and global runtime settings.
+`POST /api/stage/events` intentionally remains available to authenticated Users because Messenger must synchronize subtitles for that User's own Session to Stage. The broker remains user/session scoped with bounded event and queue sizes.
 
 ### `/console` Internal Sections
 
@@ -138,7 +166,7 @@ Define a session-centered operation flow: set up resources first, bind them into
 |---|---|---|
 | Session panel | connection state, session badge, character/model status, language, Live2D view | View active session state |
 | Control drawers | session list and character card selection | Keep current session context |
-| Settings groups | route mode, provider switching, ASR/TTS, Live2D, CRON, HEARTBEAT | Change current session behavior |
+| Settings groups | chat-only routing, TTS, Live2D, and temporary Stage overrides; global runtime, ASR provider, CRON, and HEARTBEAT remain Admin-only | Control the current session without overwriting Admin profiles |
 | Conversation area | transcript, attachments, mic, send controls | Run and inspect session messages |
 
 ### Admin Child Pages
@@ -161,8 +189,10 @@ Define a session-centered operation flow: set up resources first, bind them into
 | Namespace | Page | Responsibility |
 |---|---|---|
 | `/api/web/*` | `/console` | Web config, runtime, Live2D, TTS, ASR, WebSocket |
+| `GET /api/access` | `/guide`, `/stage`, `/messenger` | Returns only role and Console/Admin/Agent capabilities; never allowlists, identity headers, or secrets |
 | `/api/chat*` | `/console`, `/messenger` | chat, stream, jobs, trace |
 | `/api/sessions*` | `/console`, `/messenger`, `/stage` | session lifecycle and current session |
+| `PUT /api/sessions/{session_name}/configuration` | `/console` | Operator/Admin updates temporary character, LLM, Voice, Live2D, or Channel runtime for that Session without overwriting Admin profiles |
 | `/api/stage/events` | `/stage`, `/messenger` | user/session-scoped stage subtitle and event publishing |
 | `/api/character-profiles*` | `/admin/characters` | character definition and bindings |
 | `/api/llm-models` | `/admin/models` | LLM profile management |

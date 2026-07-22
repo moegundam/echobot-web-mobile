@@ -23,6 +23,7 @@ export function createSessionsModule(deps) {
     const {
         addMessage,
         addSystemMessage,
+        announceAssistantMessage = () => {},
         clearMessages,
         formatTimestamp,
         normalizeSessionName,
@@ -46,6 +47,18 @@ export function createSessionsModule(deps) {
             return Promise.resolve();
         },
     };
+    let runtimeHooks = {
+        applyRuntimeContext() {},
+        beforeSessionSwitch() {
+            return Promise.resolve();
+        },
+        confirmDiscardChanges() {
+            return true;
+        },
+        markApplied() {},
+        markRuntimeDirty() {},
+    };
+    let sessionRequestToken = 0;
 
     function bindRoleHooks(hooks) {
         roleHooks = {
@@ -54,7 +67,15 @@ export function createSessionsModule(deps) {
         };
     }
 
+    function bindRuntimeHooks(hooks) {
+        runtimeHooks = {
+            ...runtimeHooks,
+            ...(hooks || {}),
+        };
+    }
+
     async function initializeSessionPanel(defaultSessionName) {
+        const requestToken = ++sessionRequestToken;
         sidebar.setSessionControlsBusy(true, t("console.loadingSessions"));
 
         try {
@@ -67,7 +88,12 @@ export function createSessionsModule(deps) {
                 ? await requestJson("/api/sessions/current")
                 : await api.switchCurrentSession(initialSessionName);
 
+            if (requestToken !== sessionRequestToken) {
+                return;
+            }
+
             applySessionDetail(sessionDetail);
+            await applySessionRuntimeContext(sessionDetail.name, requestToken);
             renderSessionSettings();
             sidebar.setSessionSidebarStatus("");
             startSessionSyncPolling();
@@ -152,9 +178,16 @@ export function createSessionsModule(deps) {
         const sessionName = normalizeSessionName(
             options.sessionName || sessionState.currentSessionName || DEFAULT_SESSION_NAME,
         );
+        const requestToken = sessionRequestToken;
         sessionState.sessionSyncInFlight = true;
         try {
             const sessionDetail = await api.requestSessionDetail(sessionName);
+            if (
+                requestToken !== sessionRequestToken
+                || sessionName !== sessionState.currentSessionName
+            ) {
+                return;
+            }
             if (
                 !options.force
                 && sessionDetail.updated_at === sessionState.currentSessionUpdatedAt
@@ -163,6 +196,7 @@ export function createSessionsModule(deps) {
             }
             applySessionDetail(sessionDetail, {
                 announceNewMessages: Boolean(options.announceNewMessages),
+                preserveRuntimeSelection: true,
             });
             if (Boolean(options.refreshSummaries)) {
                 sidebar.applySessionSummaries(await api.requestSessionSummaries());
@@ -200,13 +234,23 @@ export function createSessionsModule(deps) {
         ) {
             return;
         }
+        if (!runtimeHooks.confirmDiscardChanges()) {
+            sidebar.renderSessionList(sessionState.sessions);
+            return;
+        }
 
         stopSpeechPlayback();
+        await runtimeHooks.beforeSessionSwitch();
+        const requestToken = ++sessionRequestToken;
         sidebar.setSessionControlsBusy(true, t("console.switchingSession"));
 
         try {
             const sessionDetail = await api.switchCurrentSession(sessionName);
+            if (requestToken !== sessionRequestToken) {
+                return;
+            }
             applySessionDetail(sessionDetail);
+            await applySessionRuntimeContext(sessionDetail.name, requestToken);
             sidebar.setSessionSidebarStatus("");
             setRunStatus(t("console.sessionSwitched", { session: sessionDetail.name }));
         } catch (error) {
@@ -220,6 +264,7 @@ export function createSessionsModule(deps) {
 
     function applySessionDetail(sessionDetail, options = {}) {
         const sessionName = normalizeSessionName(sessionDetail.name || DEFAULT_SESSION_NAME);
+        const previousSessionName = sessionState.currentSessionName;
         const nextHistory = normalizeHistory(sessionDetail.history);
         const appendedMessages = shouldAnnounceNewMessages(
             options,
@@ -233,8 +278,14 @@ export function createSessionsModule(deps) {
         sessionState.currentSessionName = sessionName;
         sessionState.currentSessionUpdatedAt = String(sessionDetail.updated_at || "").trim();
         sessionState.currentSessionHistory = nextHistory;
-        roleState.currentRoleName = sessionDetail.role_name || "default";
-        sessionState.currentRouteMode = normalizeRouteMode(sessionDetail.route_mode);
+        if (
+            sessionName !== previousSessionName
+            || !options.preserveRuntimeSelection
+        ) {
+            roleState.currentRoleName = sessionDetail.role_name || "default";
+            sessionState.currentRouteMode = normalizeRouteMode(sessionDetail.route_mode);
+            sessionState.runtimeContext = null;
+        }
 
         DOM.sessionLabel.textContent = t("console.sessionLabel", { session: sessionName });
         window.localStorage.setItem("echobot.web.session", sessionName);
@@ -252,6 +303,33 @@ export function createSessionsModule(deps) {
         void roleHooks.syncRolePanelForCurrentSession();
         if (appendedMessages.length > 0) {
             void handleAppendedMessages(appendedMessages);
+        }
+    }
+
+    async function applySessionRuntimeContext(sessionName, requestToken) {
+        try {
+            const context = await api.requestSessionRuntimeContext(sessionName);
+            if (
+                requestToken !== sessionRequestToken
+                || sessionName !== sessionState.currentSessionName
+            ) {
+                return;
+            }
+            sessionState.runtimeContext = context;
+            roleState.currentRoleName = String(context.role_name || "default");
+            sessionState.currentRouteMode = normalizeRouteMode(context.route_mode);
+            sidebar.syncRouteModeSelect();
+            renderSessionSettings();
+            await runtimeHooks.applyRuntimeContext(context);
+            await roleHooks.syncRolePanelForCurrentSession();
+            runtimeHooks.markApplied();
+        } catch (error) {
+            if (
+                requestToken === sessionRequestToken
+                && sessionName === sessionState.currentSessionName
+            ) {
+                console.warn("Unable to load Session runtime context", error);
+            }
         }
     }
 
@@ -341,6 +419,7 @@ export function createSessionsModule(deps) {
         }
 
         setRunStatus(t("console.newSessionMessage"));
+        announceAssistantMessage(spokenText);
         if (!audioState.ttsEnabled) {
             return;
         }
@@ -370,39 +449,20 @@ export function createSessionsModule(deps) {
             return;
         }
 
-        const sessionName = normalizeSessionName(
-            sessionState.currentSessionName || DEFAULT_SESSION_NAME,
-        );
-        DOM.routeModeSelect.disabled = true;
-        setRunStatus(t("console.switchingRouteMode"));
-
-        try {
-            const sessionDetail = await api.updateSessionRouteMode(
-                sessionName,
-                nextRouteMode,
-            );
-            applySessionDetail(sessionDetail);
-            setRunStatus(t("console.routeModeSwitched", {
-                mode: routeModeLabel(nextRouteMode, t),
-            }));
-        } catch (error) {
-            console.error(error);
-            sidebar.syncRouteModeSelect();
-            addMessage("system", `${t("console.routeModeSwitchFailed")}: ${error.message || error}`, t("console.systemLabel"));
-            setRunStatus(error.message || t("console.routeModeSwitchFailed"));
-        } finally {
-            DOM.routeModeSelect.disabled = (
-                chatState.chatBusy
-                || sessionState.sessionLoading
-                || Boolean(chatState.activeChatJobId)
-            );
-        }
+        sessionState.currentRouteMode = nextRouteMode;
+        sidebar.syncRouteModeSelect();
+        renderSessionSettings();
+        runtimeHooks.markRuntimeDirty();
+        setRunStatus(t("console.routeModeSwitched", {
+            mode: routeModeLabel(nextRouteMode, t),
+        }));
     }
 
     return {
         applySessionDetail: applySessionDetail,
         applySessionSummaries: sidebar.applySessionSummaries,
         bindRoleHooks: bindRoleHooks,
+        bindRuntimeHooks: bindRuntimeHooks,
         handleRouteModeChange: handleRouteModeChange,
         handleSessionListClick: handleSessionListClick,
         initializeSessionPanel: initializeSessionPanel,

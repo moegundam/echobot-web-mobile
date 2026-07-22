@@ -6,6 +6,9 @@ from pathlib import Path
 from ..runtime.bootstrap import RuntimeOptions
 
 
+SESSION_STORE_BACKENDS = ("jsonl", "sqlite")
+
+
 def add_runtime_arguments(
     parser: argparse.ArgumentParser,
     *,
@@ -54,6 +57,21 @@ def add_runtime_arguments(
         help="Disable heartbeat checks for this run.",
     )
     parser.add_argument(
+        "--session-store-backend",
+        choices=SESSION_STORE_BACKENDS,
+        default="jsonl",
+        help="Session persistence backend. Default: jsonl",
+    )
+    parser.add_argument(
+        "--agent-session-store-backend",
+        choices=SESSION_STORE_BACKENDS,
+        default=None,
+        help=(
+            "Optional backend for agent session persistence. "
+            "Defaults to --session-store-backend."
+        ),
+    )
+    parser.add_argument(
         "--heartbeat-interval",
         type=int,
         default=None,
@@ -90,6 +108,12 @@ def runtime_options_from_args(args: argparse.Namespace) -> RuntimeOptions:
         heartbeat_interval=getattr(args, "heartbeat_interval", None),
         session=getattr(args, "session", None),
         new_session=getattr(args, "new_session", None),
+        session_store_backend=getattr(args, "session_store_backend", "jsonl"),
+        agent_session_store_backend=getattr(
+            args,
+            "agent_session_store_backend",
+            None,
+        ),
     )
 
 

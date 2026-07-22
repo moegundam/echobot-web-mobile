@@ -9,6 +9,7 @@ from typing import Any
 
 from ..models import LLMMessage, ToolCall, normalize_message_content
 from ..naming import normalize_name_token
+from ..session_contracts import MAX_SESSION_NAME_LENGTH
 
 
 @dataclass(slots=True)
@@ -36,9 +37,21 @@ class SessionStore:
 
     def load_current_session(self) -> ChatSession:
         with self._lock:
-            current_name = self.get_current_session_name()
+            current_name, current_revision = self.get_current_session_pointer()
+            if current_name and self.has_session(current_name):
+                return self.load_session(current_name)
             if current_name:
-                return self.load_or_create_session(current_name)
+                self.compare_and_set_current_session(
+                    current_name,
+                    None,
+                    expected_revision=current_revision,
+                )
+
+            remaining = self.list_sessions()
+            if remaining:
+                replacement = self.load_session(remaining[0].name)
+                self.set_current_session(replacement.name)
+                return replacement
 
             default_session = self.load_or_create_session("default")
             self.set_current_session(default_session.name)
@@ -320,10 +333,18 @@ def normalize_session_name(name: str) -> str:
     raw_name = str(name or "").strip()
     if not raw_name:
         raise ValueError("Session name cannot be empty")
+    if len(raw_name) > MAX_SESSION_NAME_LENGTH:
+        raise ValueError(
+            f"Session name must be {MAX_SESSION_NAME_LENGTH} characters or fewer",
+        )
 
     normalized = normalize_name_token(raw_name)
     if not normalized:
         raise ValueError("Session name must contain letters, digits, hyphen, or underscore")
+    if len(normalized) > MAX_SESSION_NAME_LENGTH:
+        raise ValueError(
+            f"Session name must be {MAX_SESSION_NAME_LENGTH} characters or fewer",
+        )
 
     return normalized
 

@@ -5,6 +5,7 @@ import hashlib
 import json
 import mimetypes
 import secrets
+import shutil
 import threading
 from dataclasses import asdict, dataclass
 from datetime import datetime
@@ -289,11 +290,16 @@ class AttachmentStore:
         workspace: Path,
     ) -> dict[str, Any]:
         attachment, attachment_path = self._load_file_attachment_record(attachment_id)
+        workspace_path = self._materialize_file_attachment(
+            attachment,
+            attachment_path,
+            workspace=workspace,
+        )
         return {
             "attachment_id": attachment.attachment_id,
             "name": attachment.original_filename or attachment.download_filename,
             "download_url": attachment.download_url,
-            "workspace_path": _workspace_relative_path(workspace, attachment_path),
+            "workspace_path": _workspace_relative_path(workspace, workspace_path),
             "content_type": attachment.content_type,
             "size_bytes": attachment.size_bytes,
         }
@@ -317,7 +323,12 @@ class AttachmentStore:
             return None
         return _normalize_attachment_id(cleaned_url.removeprefix(ATTACHMENT_URL_PREFIX))
 
-    def delete_attachment(self, attachment_id: str) -> None:
+    def delete_attachment(
+        self,
+        attachment_id: str,
+        *,
+        workspace: Path | None = None,
+    ) -> None:
         cleaned_attachment_id = _normalize_attachment_id(attachment_id)
         with self._lock:
             if cleaned_attachment_id.startswith("img_"):
@@ -331,8 +342,55 @@ class AttachmentStore:
             metadata_path = self._metadata_path(cleaned_attachment_id)
             if attachment_path.exists():
                 attachment_path.unlink()
+            if workspace is not None and isinstance(attachment, FileAttachment):
+                materialized_path = self._materialized_attachment_path(
+                    attachment,
+                    workspace=workspace,
+                )
+                if materialized_path.is_file() or materialized_path.is_symlink():
+                    materialized_path.unlink()
             if metadata_path.exists():
                 metadata_path.unlink()
+
+    def _materialize_file_attachment(
+        self,
+        attachment: FileAttachment,
+        attachment_path: Path,
+        *,
+        workspace: Path,
+    ) -> Path:
+        target_path = self._materialized_attachment_path(
+            attachment,
+            workspace=workspace,
+        )
+        source_path = attachment_path.resolve()
+        if target_path.resolve() == source_path:
+            return source_path
+
+        with self._lock:
+            target_path.parent.mkdir(parents=True, exist_ok=True)
+            workspace_path = Path(workspace).expanduser().resolve()
+            if not target_path.parent.resolve().is_relative_to(workspace_path):
+                raise ValueError("Attachment workspace path escapes the tool workspace")
+
+            temporary_path = target_path.with_name(
+                f".{target_path.name}.{secrets.token_hex(6)}.tmp"
+            )
+            try:
+                shutil.copyfile(source_path, temporary_path)
+                temporary_path.replace(target_path)
+            finally:
+                temporary_path.unlink(missing_ok=True)
+        return target_path
+
+    @staticmethod
+    def _materialized_attachment_path(
+        attachment: FileAttachment,
+        *,
+        workspace: Path,
+    ) -> Path:
+        workspace_path = Path(workspace).expanduser().resolve()
+        return workspace_path / ".echobot" / "attachments" / attachment.relative_path
 
     def _ensure_dirs(self) -> None:
         self.files_dir.mkdir(parents=True, exist_ok=True)
@@ -434,7 +492,12 @@ class AttachmentStore:
         if not relative_path:
             raise ValueError(f"Attachment metadata is incomplete: {attachment_id}")
 
-        attachment_path = self.base_dir / relative_path
+        base_dir = self.base_dir.resolve()
+        attachment_path = (base_dir / relative_path).resolve()
+        if not attachment_path.is_relative_to(base_dir):
+            raise ValueError(
+                f"Attachment path is outside the attachment store: {attachment_id}"
+            )
         if not attachment_path.exists():
             raise ValueError(f"Attachment file is missing: {attachment_id}")
 

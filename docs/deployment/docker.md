@@ -49,23 +49,32 @@ ghcr.io/moegundam/echobot-web-mobile:sha-<commit>
 開發/測試可直接拉取 immutable SHA tag；正式部署必須使用 registry 回報的 digest：
 
 ```shell
+docker login ghcr.io
 docker pull ghcr.io/moegundam/echobot-web-mobile:sha-<commit>
 ```
+
+私有 package 建議使用只有 `read:packages` 的 GitHub token，並以 `--password-stdin` 登入；不要把 token 寫進 shell history 或 repo。
 
 Production profile 不接受 mutable tag：
 
 ```shell
-export ECHOBOT_IMAGE_SHA256='<64-character digest value without sha256:>'
-docker compose -f compose.production.yaml up -d
+cp docker.env.example docker.env.local
+# 編輯 docker.env.local：
+# ECHOBOT_IMAGE_SHA256=<64-character digest value without sha256:>
+# ECHOBOT_ADMIN_ALLOWLIST=admin@example.com
+# ECHOBOT_OPERATOR_ALLOWLIST=operator@example.com
+docker compose --env-file docker.env.local -f compose.production.yaml config
+docker compose --env-file docker.env.local -f compose.production.yaml up -d
+curl -fsS http://127.0.0.1:8080/healthz
 ```
 
-開啟：
+Production profile 會要求可信 proxy assertion；loopback 只用於 `/healthz`。不要透過 `http://127.0.0.1:8080` 開啟受保護頁面，因為直接請求沒有 Cloudflare Access identity，正確結果是 `401`。登入 Access 後由 HTTPS hostname 開啟：
 
 ```text
-http://127.0.0.1:8080/console
-http://127.0.0.1:8080/stage?session_name=demo
-http://127.0.0.1:8080/messenger
-http://127.0.0.1:8080/admin
+https://echobot.example.com/console
+https://echobot.example.com/stage?session_name=demo
+https://echobot.example.com/messenger
+https://echobot.example.com/admin
 ```
 
 ### 設定模型
@@ -142,6 +151,15 @@ docker compose build --pull
 docker compose up -d
 ```
 
+備份 named volume 中的 runtime data：
+
+```shell
+mkdir -p backups
+docker compose cp echobot:/app/.echobot ./backups/echobot-data
+```
+
+確認備份可讀後再進行破壞性維護。`docker.env.local` 含 secrets，需另存於 Git 以外的權限受控位置。
+
 刪除 runtime volume 會移除 session/history/attachments，除非已備份，否則不要執行：
 
 ```shell
@@ -204,23 +222,32 @@ ghcr.io/moegundam/echobot-web-mobile:sha-<commit>
 Development and test environments may pull an immutable SHA tag. Production must use the registry-reported digest:
 
 ```shell
+docker login ghcr.io
 docker pull ghcr.io/moegundam/echobot-web-mobile:sha-<commit>
 ```
+
+For a private package, use a GitHub token limited to `read:packages` and pass it through `--password-stdin`. Never put the token in shell history or the repository.
 
 The production profile rejects mutable tags:
 
 ```shell
-export ECHOBOT_IMAGE_SHA256='<64-character digest value without sha256:>'
-docker compose -f compose.production.yaml up -d
+cp docker.env.example docker.env.local
+# Edit docker.env.local:
+# ECHOBOT_IMAGE_SHA256=<64-character digest value without sha256:>
+# ECHOBOT_ADMIN_ALLOWLIST=admin@example.com
+# ECHOBOT_OPERATOR_ALLOWLIST=operator@example.com
+docker compose --env-file docker.env.local -f compose.production.yaml config
+docker compose --env-file docker.env.local -f compose.production.yaml up -d
+curl -fsS http://127.0.0.1:8080/healthz
 ```
 
-Open:
+The production profile requires a trusted proxy assertion; loopback is only for `/healthz`. Do not open protected pages through `http://127.0.0.1:8080`, because direct requests have no Cloudflare Access identity and correctly return `401`. After Access login, use the HTTPS hostname:
 
 ```text
-http://127.0.0.1:8080/console
-http://127.0.0.1:8080/stage?session_name=demo
-http://127.0.0.1:8080/messenger
-http://127.0.0.1:8080/admin
+https://echobot.example.com/console
+https://echobot.example.com/stage?session_name=demo
+https://echobot.example.com/messenger
+https://echobot.example.com/admin
 ```
 
 ### Model Configuration
@@ -296,6 +323,15 @@ Rebuild while keeping runtime data:
 docker compose build --pull
 docker compose up -d
 ```
+
+Back up runtime data from the named volume:
+
+```shell
+mkdir -p backups
+docker compose cp echobot:/app/.echobot ./backups/echobot-data
+```
+
+Verify that the backup is readable before destructive maintenance. `docker.env.local` contains secrets and must be stored separately in access-controlled storage outside Git.
 
 Removing the runtime volume deletes sessions, history, and attachments. Do not run this without a backup:
 

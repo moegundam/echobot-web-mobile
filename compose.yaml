@@ -6,6 +6,7 @@ services:
       context: .
       target: runtime
     image: echobot-web-mobile:local
+    command: ["python", "-m", "echobot", "app", "--host", "0.0.0.0", "--port", "8000"]
     expose:
       - "8000"
     env_file:
@@ -15,7 +16,11 @@ services:
       ECHOBOT_SHELL_SAFETY_MODE: ${ECHOBOT_SHELL_SAFETY_MODE:-workspace-write}
       ECHOBOT_DEPLOYMENT_PROFILE: ${ECHOBOT_DEPLOYMENT_PROFILE:-local}
       ECHOBOT_TRUSTED_USER_HEADER_ENABLED: ${ECHOBOT_TRUSTED_USER_HEADER_ENABLED:-false}
+      ECHOBOT_TRUSTED_USER_REQUIRED: ${ECHOBOT_TRUSTED_USER_REQUIRED:-false}
+      ECHOBOT_TRUSTED_USER_ASSERTION_REQUIRED: ${ECHOBOT_TRUSTED_USER_ASSERTION_REQUIRED:-false}
+      ECHOBOT_ADMIN_ALLOWLIST: ${ECHOBOT_ADMIN_ALLOWLIST:-}
       ECHOBOT_ADMIN_REQUIRED: ${ECHOBOT_ADMIN_REQUIRED:-false}
+      ECHOBOT_OPERATOR_ALLOWLIST: ${ECHOBOT_OPERATOR_ALLOWLIST:-}
     volumes:
       - echobot_data:/app/.echobot
     tmpfs:

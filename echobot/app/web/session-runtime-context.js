@@ -1,11 +1,9 @@
+import { requestJson } from "./modules/api.js";
+
 export async function fetchSessionRuntimeContext(sessionName) {
-    const response = await fetch(
+    return await requestJson(
         `/api/sessions/${encodeURIComponent(sessionName)}/runtime-context`,
     );
-    if (!response.ok) {
-        throw await responseToError(response);
-    }
-    return await response.json();
 }
 
 export function runtimeContextSummaryItems(context, t) {
@@ -65,19 +63,6 @@ export function runtimeContextValue(context, key, t) {
     const item = runtimeContextSummaryItems(context, t)
         .find((summaryItem) => summaryItem.key === key);
     return item ? item.value : t("runtimeContext.notSet");
-}
-
-async function responseToError(response) {
-    let detail = `${response.status} ${response.statusText}`;
-    try {
-        const payload = await response.json();
-        if (payload && typeof payload.detail === "string") {
-            detail = payload.detail;
-        }
-    } catch (_error) {
-        return new Error(detail);
-    }
-    return new Error(detail);
 }
 
 function voiceProfileLabel(voice) {

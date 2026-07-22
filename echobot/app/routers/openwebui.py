@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from ...session_contracts import MAX_SESSION_NAME_LENGTH
+from ..mappers import session_summary_model_from_info
 from ..schemas import (
     ChatResponse,
     SessionSummaryModel,
-    session_summary_model_from_info,
 )
 from ..services.openwebui_bridge import (
     OpenWebUIBridgeSettings,
@@ -23,32 +24,34 @@ from ..services.openwebui_bridge import (
 )
 from ..services.stage_event_enrichment import apply_character_emotion_map
 from ..services.stage_events import StageEventModel, StageEventPublishRequest
-from ..state import get_app_runtime
+from ..state import get_app_runtime, require_admin_user
 
 
 router = APIRouter(tags=["openwebui"])
 
 
 class OpenWebUIStageEventRequest(BaseModel):
-    session_name: str
-    text: str
-    target_user_id: str | None = None
-    emotion: str = ""
-    expression: str = ""
-    motion: str = ""
-    speaker: str = "Open WebUI"
+    session_name: str = Field(..., max_length=MAX_SESSION_NAME_LENGTH)
+    text: str = Field(..., max_length=8192)
+    target_user_id: str | None = Field(default=None, max_length=320)
+    emotion: str = Field(default="", max_length=128)
+    expression: str = Field(default="", max_length=512)
+    motion: str = Field(default="", max_length=512)
+    speaker: str = Field(default="Open WebUI", max_length=128)
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class OpenWebUIChatRequest(BaseModel):
-    session_name: str
-    prompt: str
-    target_user_id: str | None = None
-    route_mode: str | None = None
+    session_name: str = Field(..., max_length=MAX_SESSION_NAME_LENGTH)
+    prompt: str = Field(..., max_length=64 * 1024)
+    target_user_id: str | None = Field(default=None, max_length=320)
+    route_mode: str | None = Field(default=None, max_length=32)
 
 
 @router.get("/openwebui/status")
-async def get_openwebui_status() -> dict[str, Any]:
+async def get_openwebui_status(
+    _admin_user: str = Depends(require_admin_user),
+) -> dict[str, Any]:
     return openwebui_bridge_status()
 
 
@@ -61,7 +64,7 @@ async def get_openwebui_tools_openapi(
 
 @router.get("/openwebui/sessions", response_model=list[SessionSummaryModel])
 async def list_openwebui_sessions(
-    target_user_id: str | None = Query(default=None),
+    target_user_id: str | None = Query(default=None, max_length=320),
     runtime=Depends(get_app_runtime),
     settings: OpenWebUIBridgeSettings = Depends(require_openwebui_bridge),
 ) -> list[SessionSummaryModel]:
@@ -79,27 +82,30 @@ async def publish_openwebui_stage_event(
 ) -> StageEventModel:
     user_id = resolve_bridge_target_user(request.target_user_id, settings)
     target_runtime = await runtime_for_bridge_target(runtime, user_id)
-    payload = await apply_character_emotion_map(
-        target_runtime,
-        StageEventPublishRequest(
-            kind="assistant_final",
-            session_name=normalized_session_name(request.session_name),
-            text=request.text,
-            emotion=request.emotion,
-            expression=request.expression,
-            motion=request.motion,
-            speaker=request.speaker,
-            source="openwebui",
-            metadata={
-                **dict(request.metadata or {}),
-                "target_user_id": user_id,
-            },
-        ),
-    )
-    return await runtime.stage_event_broker.publish(
-        scope_key=bridge_scope_key(user_id),
-        request=payload,
-    )
+    try:
+        payload = await apply_character_emotion_map(
+            target_runtime,
+            StageEventPublishRequest(
+                kind="assistant_final",
+                session_name=normalized_session_name(request.session_name),
+                text=request.text,
+                emotion=request.emotion,
+                expression=request.expression,
+                motion=request.motion,
+                speaker=request.speaker,
+                source="openwebui",
+                metadata={
+                    **dict(request.metadata or {}),
+                    "target_user_id": user_id,
+                },
+            ),
+        )
+        return await runtime.stage_event_broker.publish(
+            scope_key=bridge_scope_key(user_id),
+            request=payload,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/openwebui/chat", response_model=ChatResponse)

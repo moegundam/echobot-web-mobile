@@ -1,4 +1,4 @@
-import { initShellI18n } from "./shell-i18n.js?v=language-menu-1";
+import { initShellI18n } from "./shell-i18n.js?v=language-menu-1&uiux=2";
 import { initShellDisplayMode } from "./shell-display-mode.js?v=site-public-6";
 import {
     activeModelProfileFromConfig,
@@ -6,6 +6,10 @@ import {
     modelProfileScopeFromConfig,
     notifyModelProfileChanged,
 } from "./model-profile-runtime.js?v=model-profile-2";
+import { requestErrorMessage, requestJson } from "./modules/api.js";
+import { createDirtyFormGuard } from "./modules/dirty-form-guard.js";
+
+const LLM_SMOKE_ACTION = "/smoke";
 
 const state = {
     payload: null,
@@ -27,6 +31,7 @@ const DOM = {
     title: document.getElementById("model-profile-title"),
     status: document.getElementById("model-profile-status"),
     activate: document.getElementById("model-profile-activate"),
+    smoke: document.getElementById("model-profile-smoke"),
     save: document.getElementById("model-profile-save"),
     remove: document.getElementById("model-profile-delete"),
     label: document.getElementById("model-profile-label"),
@@ -40,14 +45,25 @@ const DOM = {
     chatMaxTokens: document.getElementById("model-chat-max-tokens"),
 };
 
+let committedLanguage = "";
 const i18n = initShellI18n({
-    onChange: () => {
+    onChange: (nextLanguage) => {
         displayMode.refresh();
+        if (!dirtyGuard.confirmDiscard()) {
+            restoreLanguage(committedLanguage);
+            return;
+        }
+        committedLanguage = nextLanguage;
         render();
         refreshStatus();
     },
 });
 const displayMode = initShellDisplayMode({ t: i18n.t });
+const dirtyGuard = createDirtyFormGuard({
+    form: DOM.form,
+    confirmDiscard: () => window.confirm(i18n.t("admin.unsavedChangesConfirm")),
+});
+committedLanguage = i18n.language;
 
 DOM.form.addEventListener("submit", (event) => {
     event.preventDefault();
@@ -55,6 +71,9 @@ DOM.form.addEventListener("submit", (event) => {
 });
 DOM.activate.addEventListener("click", () => {
     void activateSelectedProfile();
+});
+DOM.smoke.addEventListener("click", () => {
+    void smokeSelectedProfile();
 });
 DOM.create.addEventListener("click", () => {
     void createProfileFromSelection();
@@ -84,13 +103,13 @@ async function load(options = {}) {
             || activeProfileId()
             || "a";
         render();
-        setStatusKey("models.ready");
+        setStatusKey("models.settingsLoaded");
     } catch (error) {
         console.error(error);
         state.loaded = false;
-        state.loadError = error.message || i18n.t("models.loadFailed");
+        state.loadError = requestErrorMessage(error, i18n.t, "models.loadFailed");
         render();
-        setRawStatus(error.message || i18n.t("models.loadFailed"));
+        setRawStatus(state.loadError);
     } finally {
         setBusy(false);
     }
@@ -123,6 +142,9 @@ function renderProfileList() {
 
         button.append(code, label, status);
         button.addEventListener("click", () => {
+            if (profile.profile_id === state.selectedProfileId || !dirtyGuard.confirmDiscard()) {
+                return;
+            }
             state.selectedProfileId = profile.profile_id;
             render();
         });
@@ -144,6 +166,7 @@ function renderSelectedProfile() {
     DOM.chatMaxTokens.value = profile.chat.max_tokens ?? "";
     const disabled = formActionsDisabled();
     DOM.activate.disabled = disabled || profile.profile_id === activeProfileId();
+    DOM.smoke.disabled = disabled;
     DOM.save.disabled = disabled;
     DOM.remove.disabled = disabled || !canDeleteSelectedProfile(profile);
 }
@@ -231,6 +254,9 @@ async function createProfileFromSelection() {
         setStatusKey("models.createNameRequired");
         return;
     }
+    if (!dirtyGuard.confirmDiscard()) {
+        return;
+    }
 
     setBusy(true);
     setStatusKey("models.creating");
@@ -247,7 +273,7 @@ async function createProfileFromSelection() {
         setStatusKey("models.created");
     } catch (error) {
         console.error(error);
-        setRawStatus(error.message || i18n.t("models.createFailed"));
+        setRawStatus(requestErrorMessage(error, i18n.t, "models.createFailed"));
     } finally {
         setBusy(false);
     }
@@ -270,10 +296,13 @@ async function saveSelectedProfile() {
             await refreshRuntimeModelSnapshot({ notify: true });
         }
         await load({ selectedProfileId: updated.id });
+        if (state.loaded) {
+            dirtyGuard.clear();
+        }
         setStatusKey("models.saved");
     } catch (error) {
         console.error(error);
-        setRawStatus(error.message || i18n.t("models.saveFailed"));
+        setRawStatus(requestErrorMessage(error, i18n.t, "models.saveFailed"));
     } finally {
         setBusy(false);
     }
@@ -281,6 +310,9 @@ async function saveSelectedProfile() {
 
 async function activateSelectedProfile() {
     if (formActionsDisabled()) {
+        return;
+    }
+    if (!dirtyGuard.confirmDiscard()) {
         return;
     }
     const profile = selectedProfile();
@@ -292,10 +324,44 @@ async function activateSelectedProfile() {
         });
         await refreshRuntimeModelSnapshot({ notify: true });
         await load({ selectedProfileId: profile.profile_id });
+        if (state.loaded) {
+            dirtyGuard.clear();
+        }
         setStatusKey("models.activated");
     } catch (error) {
         console.error(error);
-        setRawStatus(error.message || i18n.t("models.activateFailed"));
+        setRawStatus(requestErrorMessage(error, i18n.t, "models.activateFailed"));
+    } finally {
+        setBusy(false);
+    }
+}
+
+async function smokeSelectedProfile() {
+    if (formActionsDisabled()) {
+        return;
+    }
+    if (dirtyGuard.isDirty()) {
+        setStatusKey("models.smokeSaveFirst");
+        return;
+    }
+    const profile = selectedProfile();
+    setBusy(true);
+    setStatusKey("models.smokeTesting");
+    try {
+        const result = await requestJson(
+            `/api/llm-models/${encodeURIComponent(profile.profile_id)}${LLM_SMOKE_ACTION}`,
+            { method: "POST" },
+        );
+        if (!result || result.ok !== true) {
+            setStatusKey("models.smokeFailed");
+            return;
+        }
+        setStatusKey("models.smokeReady", {
+            model: result.model || profile.chat.model || profile.label,
+        });
+    } catch (error) {
+        console.error(error);
+        setRawStatus(requestErrorMessage(error, i18n.t, "models.smokeFailed"));
     } finally {
         setBusy(false);
     }
@@ -313,6 +379,9 @@ async function deleteSelectedProfile() {
     if (!window.confirm(i18n.t("models.deleteConfirm", { profile: profile.label || profile.profile_id }))) {
         return;
     }
+    if (!dirtyGuard.confirmDiscard()) {
+        return;
+    }
 
     setBusy(true);
     setStatusKey("models.deleting");
@@ -321,10 +390,13 @@ async function deleteSelectedProfile() {
             method: "DELETE",
         });
         await load({ selectedProfileId: payload.active_model_id || "a" });
+        if (state.loaded) {
+            dirtyGuard.clear();
+        }
         setStatusKey("models.deleted");
     } catch (error) {
         console.error(error);
-        setRawStatus(error.message || i18n.t("models.deleteFailed"));
+        setRawStatus(requestErrorMessage(error, i18n.t, "models.deleteFailed"));
     } finally {
         setBusy(false);
     }
@@ -384,6 +456,7 @@ function setBusy(busy) {
     const profile = selectedProfile();
     DOM.create.disabled = disabled;
     DOM.activate.disabled = disabled || profile.profile_id === activeProfileId();
+    DOM.smoke.disabled = disabled;
     DOM.save.disabled = disabled;
     DOM.remove.disabled = disabled || !canDeleteSelectedProfile(profile);
 }
@@ -406,6 +479,21 @@ function refreshStatus() {
     DOM.status.textContent = state.statusKey
         ? i18n.t(state.statusKey, state.statusParams)
         : state.statusRaw;
+}
+
+function restoreLanguage(language) {
+    if (!language || i18n.language === language) {
+        return;
+    }
+    i18n.language = language;
+    try {
+        window.localStorage.setItem("echobot.shell.language", language);
+    } catch (_error) {
+        // localStorage can be unavailable in restricted browsing contexts.
+    }
+    i18n.apply();
+    displayMode.refresh();
+    refreshStatus();
 }
 
 function formActionsDisabled() {
@@ -437,25 +525,4 @@ function profileBadge(profile) {
         return words[0].slice(0, 2).toUpperCase();
     }
     return String(profile.profile_id || "?").slice(0, 2).toUpperCase();
-}
-
-async function requestJson(url, options = {}) {
-    const response = await fetch(url, {
-        ...options,
-        headers: {
-            Accept: "application/json",
-            ...(options.headers || {}),
-        },
-    });
-    if (!response.ok) {
-        let detail = response.statusText;
-        try {
-            const payload = await response.json();
-            detail = payload.detail || detail;
-        } catch (_error) {
-            // Keep statusText when the response is not JSON.
-        }
-        throw new Error(detail);
-    }
-    return response.json();
 }

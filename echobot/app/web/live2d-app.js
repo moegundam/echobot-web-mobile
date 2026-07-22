@@ -1,4 +1,4 @@
-import { initShellI18n } from "./shell-i18n.js?v=language-menu-1";
+import { initShellI18n } from "./shell-i18n.js?v=language-menu-1&uiux=2";
 import { initShellDisplayMode } from "./shell-display-mode.js?v=session-centered-2";
 import {
     activeModelProfileFromConfig,
@@ -6,6 +6,8 @@ import {
     modelProfileScopeFromConfig,
     notifyModelProfileChanged,
 } from "./model-profile-runtime.js?v=model-profile-2";
+import { requestJson } from "./modules/api.js";
+import { createDirtyFormGuard } from "./modules/dirty-form-guard.js";
 
 const state = {
     payload: null,
@@ -34,14 +36,25 @@ const DOM = {
     catalog: document.getElementById("live2d-catalog-list"),
 };
 
+let committedLanguage = "";
 const i18n = initShellI18n({
-    onChange: () => {
+    onChange: (nextLanguage) => {
         displayMode.refresh();
+        if (!dirtyGuard.confirmDiscard()) {
+            restoreLanguage(committedLanguage);
+            return;
+        }
+        committedLanguage = nextLanguage;
         render();
         refreshStatus();
     },
 });
 const displayMode = initShellDisplayMode({ t: i18n.t });
+const dirtyGuard = createDirtyFormGuard({
+    form: DOM.form,
+    confirmDiscard: () => window.confirm(i18n.t("admin.unsavedChangesConfirm")),
+});
+committedLanguage = i18n.language;
 
 DOM.form.addEventListener("submit", (event) => {
     event.preventDefault();
@@ -117,6 +130,9 @@ function renderProfileList() {
 
         button.append(code, label, status);
         button.addEventListener("click", () => {
+            if (profile.id === state.selectedProfileId || !dirtyGuard.confirmDiscard()) {
+                return;
+            }
             state.selectedProfileId = profile.id;
             render();
         });
@@ -189,6 +205,9 @@ async function saveSelectedProfile() {
             await refreshRuntimeModelSnapshot({ notify: true });
         }
         await load({ selectedProfileId: updated.id });
+        if (state.loaded) {
+            dirtyGuard.clear();
+        }
         setStatusKey("models.saved");
     } catch (error) {
         console.error(error);
@@ -213,6 +232,9 @@ async function createProfileFromSelection() {
     const cleanedLabel = String(label || "").trim();
     if (!cleanedLabel) {
         setStatusKey("models.createNameRequired");
+        return;
+    }
+    if (!dirtyGuard.confirmDiscard()) {
         return;
     }
 
@@ -241,6 +263,9 @@ async function activateSelectedProfile() {
     if (formActionsDisabled()) {
         return;
     }
+    if (!dirtyGuard.confirmDiscard()) {
+        return;
+    }
     const profile = selectedProfile();
     setBusy(true);
     setStatusKey("models.activating");
@@ -250,6 +275,9 @@ async function activateSelectedProfile() {
         });
         await refreshRuntimeModelSnapshot({ notify: true });
         await load({ selectedProfileId: profile.id });
+        if (state.loaded) {
+            dirtyGuard.clear();
+        }
         setStatusKey("models.activated");
     } catch (error) {
         console.error(error);
@@ -271,6 +299,9 @@ async function deleteSelectedProfile() {
     if (!window.confirm(i18n.t("models.deleteConfirm", { profile: profile.name || profile.id }))) {
         return;
     }
+    if (!dirtyGuard.confirmDiscard()) {
+        return;
+    }
 
     setBusy(true);
     setStatusKey("models.deleting");
@@ -282,6 +313,9 @@ async function deleteSelectedProfile() {
             || (Array.isArray(payload.models) && payload.models[0] && payload.models[0].id)
             || "a";
         await load({ selectedProfileId: payload.active_live2d_model_id || state.selectedProfileId });
+        if (state.loaded) {
+            dirtyGuard.clear();
+        }
         setStatusKey("models.deleted");
     } catch (error) {
         console.error(error);
@@ -406,27 +440,21 @@ function refreshStatus() {
     DOM.status.textContent = state.statusKey ? i18n.t(state.statusKey) : state.statusRaw;
 }
 
-function formActionsDisabled() {
-    return state.busy || !state.loaded || Boolean(state.loadError);
+function restoreLanguage(language) {
+    if (!language || i18n.language === language) {
+        return;
+    }
+    i18n.language = language;
+    try {
+        window.localStorage.setItem("echobot.shell.language", language);
+    } catch (_error) {
+        // localStorage can be unavailable in restricted browsing contexts.
+    }
+    i18n.apply();
+    displayMode.refresh();
+    refreshStatus();
 }
 
-async function requestJson(url, options = {}) {
-    const response = await fetch(url, {
-        ...options,
-        headers: {
-            Accept: "application/json",
-            ...(options.headers || {}),
-        },
-    });
-    if (!response.ok) {
-        let detail = response.statusText;
-        try {
-            const payload = await response.json();
-            detail = payload.detail || detail;
-        } catch (_error) {
-            // Keep statusText when response body is not JSON.
-        }
-        throw new Error(detail);
-    }
-    return response.json();
+function formActionsDisabled() {
+    return state.busy || !state.loaded || Boolean(state.loadError);
 }

@@ -702,7 +702,7 @@ class GatewayRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual([], list(alpha_session_store.base_dir.glob("*.jsonl")))
             self.assertEqual(2, len(parent_session_store.load_session("event-stage").history))
 
-    async def test_inbound_user_id_with_channel_default_session_uses_shared_session(self) -> None:
+    async def test_inbound_user_id_with_channel_default_session_uses_private_runtime(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             workspace = Path(temp_dir)
             parent_context, parent_session_store = build_test_runtime(workspace / "parent")
@@ -736,8 +736,77 @@ class GatewayRuntimeTests(unittest.IsolatedAsyncioTestCase):
                 await alpha_scope.context.coordinator.close()
 
             self.assertEqual("pong", outbound.text)
-            self.assertEqual([], list(alpha_session_store.base_dir.glob("*.jsonl")))
-            self.assertEqual(2, len(parent_session_store.load_session("event-stage").history))
+            self.assertEqual([], list(parent_session_store.base_dir.glob("*.jsonl")))
+            self.assertEqual(1, len(alpha_session_store.list_sessions()))
+            alpha_session = alpha_session_store.get_current_session_name()
+            assert alpha_session is not None
+            self.assertEqual(2, len(alpha_session_store.load_session(alpha_session).history))
+
+    async def test_inbound_user_ids_with_channel_default_session_do_not_share_runtime(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            parent_context, _parent_session_store = build_test_runtime(workspace / "parent")
+            alpha_scope, alpha_session_store = _gateway_scope(workspace / "alpha")
+            beta_scope, beta_session_store = _gateway_scope(workspace / "beta")
+            bus = MessageBus()
+
+            async def runtime_for_user(user_id: str):
+                return {
+                    "alpha@example.test": alpha_scope,
+                    "beta@example.test": beta_scope,
+                }[user_id]
+
+            gateway = GatewayRuntime(
+                parent_context,
+                bus,
+                runtime_for_user=runtime_for_user,
+            )
+            alpha_session_a: str | None = None
+            alpha_session_b: str | None = None
+            outbound_alpha = make_inbound(
+                "hello alpha",
+                message_id=1,
+                chat_id="shared-chat",
+                user_id="alpha@example.test",
+            )
+            outbound_alpha.metadata["channel_default_session_name"] = "event-stage"
+            outbound_beta = make_inbound(
+                "hello beta",
+                message_id=2,
+                chat_id="shared-chat",
+                user_id="beta@example.test",
+            )
+            outbound_beta.metadata["channel_default_session_name"] = "event-stage"
+
+            try:
+                await gateway.handle_inbound_message(outbound_alpha)
+                alpha_outbound = await asyncio.wait_for(
+                    bus.consume_outbound(),
+                    timeout=0.2,
+                )
+
+                await gateway.handle_inbound_message(outbound_beta)
+                beta_outbound = await asyncio.wait_for(
+                    bus.consume_outbound(),
+                    timeout=0.2,
+                )
+
+                alpha_session_a = alpha_session_store.get_current_session_name()
+                alpha_session_b = beta_session_store.get_current_session_name()
+            finally:
+                await parent_context.coordinator.close()
+                await alpha_scope.context.coordinator.close()
+                await beta_scope.context.coordinator.close()
+
+            self.assertEqual("pong", alpha_outbound.text)
+            self.assertEqual("pong", beta_outbound.text)
+            self.assertIsNotNone(alpha_session_a)
+            self.assertIsNotNone(alpha_session_b)
+            self.assertNotEqual(alpha_session_a, alpha_session_b)
+            self.assertEqual(1, len(alpha_session_store.list_sessions()))
+            self.assertEqual(1, len(beta_session_store.list_sessions()))
+            self.assertEqual(2, len(alpha_session_store.load_session(alpha_session_a).history))
+            self.assertEqual(2, len(beta_session_store.load_session(alpha_session_b).history))
 
     async def test_handle_inbound_message_routes_response_and_remembers_delivery(
         self,
@@ -865,6 +934,7 @@ class GatewayRuntimeTests(unittest.IsolatedAsyncioTestCase):
                 delivery_store=delivery_store,
             )
             captured_events: list[tuple[str, OutboundMessage]] = []
+            context_changes: list[tuple[str, str]] = []
 
             async def publish_stage_event(
                 session_name: str,
@@ -872,11 +942,18 @@ class GatewayRuntimeTests(unittest.IsolatedAsyncioTestCase):
             ) -> None:
                 captured_events.append((session_name, outbound))
 
+            async def notify_context_change(
+                session_name: str,
+                reason: str,
+            ) -> None:
+                context_changes.append((session_name, reason))
+
             gateway = GatewayRuntime(
                 context,
                 bus,
                 session_service=session_service,
                 stage_event_publisher=publish_stage_event,
+                runtime_context_change_notifier=notify_context_change,
             )
             inbound = make_inbound("ping", message_id=17, user_id="u1")
             inbound.metadata["session_name"] = "front-stage"
@@ -889,6 +966,10 @@ class GatewayRuntimeTests(unittest.IsolatedAsyncioTestCase):
             stored_session = session_store.load_session("front-stage")
             self.assertEqual("front-stage", stored_session.name)
             self.assertEqual("chat_only", stored_session.metadata["route_mode"])
+            self.assertEqual(
+                [("front-stage", "gateway_session_initialized")],
+                context_changes,
+            )
             self.assertFalse(route_session_store.path.exists())
             target = delivery_store.get_session_target("front-stage")
             self.assertIsNotNone(target)
@@ -1141,7 +1222,7 @@ class GatewayRuntimeTests(unittest.IsolatedAsyncioTestCase):
                 outbound.content[0]["file_attachment"]["name"],
             )
 
-    async def test_role_commands_return_shared_role_responses(self) -> None:
+    async def test_role_commands_are_read_only_in_gateway(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             workspace = Path(temp_dir)
             context, _session_store = build_test_runtime(workspace)
@@ -1173,7 +1254,10 @@ class GatewayRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual("Current role: default", current.text)
             self.assertIn("Available roles:", listed.text)
             self.assertIn("* default", listed.text)
-            self.assertEqual("Switched role to: default", switched.text)
+            self.assertEqual(
+                "Admin access is required; use EchoBot Admin or Console.",
+                switched.text,
+            )
 
     async def test_gateway_smoke_command_replies_exactly(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1204,7 +1288,7 @@ class GatewayRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual("DISCORD_OK", outbound.text)
             self.assertEqual("DISCORD_OK", captured_events[0][1].text)
 
-    async def test_runtime_command_can_toggle_task_start_tip(self) -> None:
+    async def test_runtime_command_is_read_only_in_gateway(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             workspace = Path(temp_dir)
             context, session_store = build_test_runtime(workspace)
@@ -1232,21 +1316,20 @@ class GatewayRuntimeTests(unittest.IsolatedAsyncioTestCase):
             )
             disabled = await bus.consume_outbound()
             self.assertEqual(
-                "Updated runtime setting: delegated_ack_enabled = off",
+                "Admin access is required; use EchoBot Admin or Console.",
                 disabled.text,
             )
-            self.assertFalse(context.coordinator.delegated_ack_enabled)
+            self.assertTrue(context.coordinator.delegated_ack_enabled)
 
             settings_path = workspace / ".echobot" / "runtime_settings.json"
-            self.assertTrue(settings_path.exists())
+            self.assertFalse(settings_path.exists())
 
             inbound = make_inbound("Please set a cron reminder", message_id=26)
             await gateway.handle_inbound_message(inbound)
 
             outbound = await asyncio.wait_for(bus.consume_outbound(), timeout=0.2)
-            self.assertEqual("done", outbound.text)
-            self.assertTrue(outbound.metadata["async_result"])
-            self.assertEqual("completed", outbound.metadata["job_status"])
+            self.assertEqual("pong", outbound.text)
+            self.assertNotIn("async_result", outbound.metadata)
 
             with self.assertRaises(asyncio.TimeoutError):
                 await asyncio.wait_for(bus.consume_outbound(), timeout=0.05)
@@ -1255,20 +1338,30 @@ class GatewayRuntimeTests(unittest.IsolatedAsyncioTestCase):
             session = session_store.load_session(current_session.session_name)
             history_contents = [message.content for message in session.history]
             self.assertNotIn("working", history_contents)
-            self.assertIn("done", history_contents)
+            self.assertNotIn("done", history_contents)
+            self.assertIn("pong", history_contents)
 
-    async def test_route_mode_command_can_switch_per_route_session(self) -> None:
+    async def test_gateway_route_mode_can_only_restrict_route_session(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             workspace = Path(temp_dir)
             context, session_store = build_test_runtime(workspace)
             bus = MessageBus()
             delivery_store = DeliveryStore(workspace / "delivery.json")
             route_session_store = RouteSessionStore(workspace / "route_sessions.json")
+            context_changes: list[tuple[str, str]] = []
+
+            async def notify_context_change(
+                session_name: str,
+                reason: str,
+            ) -> None:
+                context_changes.append((session_name, reason))
+
             gateway = GatewayRuntime(
                 context,
                 bus,
                 delivery_store=delivery_store,
                 route_session_store=route_session_store,
+                runtime_context_change_notifier=notify_context_change,
             )
             route_key = make_inbound("ping").route_key
 
@@ -1290,6 +1383,10 @@ class GatewayRuntimeTests(unittest.IsolatedAsyncioTestCase):
             current_route_session = route_session_store.get_current_session(route_key)
             session = session_store.load_session(current_route_session.session_name)
             self.assertEqual("chat_only", session.metadata["route_mode"])
+            self.assertEqual(
+                [(current_route_session.session_name, "gateway_route_mode_changed")],
+                context_changes,
+            )
 
             await gateway.handle_inbound_message(
                 make_inbound("Please set a cron reminder", message_id=29),
@@ -1306,33 +1403,92 @@ class GatewayRuntimeTests(unittest.IsolatedAsyncioTestCase):
             )
             switched_to_agent = await bus.consume_outbound()
             self.assertEqual(
-                "Switched route mode to: force_agent",
+                "Admin access is required; use EchoBot Admin or Console.",
                 switched_to_agent.text,
             )
-            self.assertTrue(context.coordinator.delegated_ack_enabled)
-
-            original_touch_route_session = gateway._session_service.touch_route_session
-
-            async def slow_touch_route_session(*args, **kwargs):
-                await asyncio.sleep(0.05)
-                return await original_touch_route_session(*args, **kwargs)
-
-            gateway._session_service.touch_route_session = slow_touch_route_session
+            session = session_store.load_session(current_route_session.session_name)
+            self.assertEqual("chat_only", session.metadata["route_mode"])
+            self.assertEqual(1, len(context_changes))
 
             await gateway.handle_inbound_message(
                 make_inbound("How are you today?", message_id=31),
             )
             first = await asyncio.wait_for(bus.consume_outbound(), timeout=0.2)
-            second = await asyncio.wait_for(bus.consume_outbound(), timeout=0.2)
+            self.assertEqual("pong", first.text)
+            with self.assertRaises(asyncio.TimeoutError):
+                await asyncio.wait_for(bus.consume_outbound(), timeout=0.05)
 
-            self.assertEqual("working", first.text)
-            self.assertEqual("done", second.text)
-            self.assertTrue(second.metadata["async_result"])
+    async def test_gateway_configuration_mutations_require_admin(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            context, session_store = build_test_runtime(workspace)
+            bus = MessageBus()
+            route_session_store = RouteSessionStore(workspace / "route_sessions.json")
+            gateway = GatewayRuntime(
+                context,
+                bus,
+                delivery_store=DeliveryStore(workspace / "delivery.json"),
+                route_session_store=route_session_store,
+            )
+
+            await gateway.handle_inbound_message(
+                make_inbound("/role set default", message_id=301),
+            )
+            role_result = await bus.consume_outbound()
+            await gateway.handle_inbound_message(
+                make_inbound(
+                    "/runtime set delegated_ack_enabled off",
+                    message_id=302,
+                ),
+            )
+            runtime_result = await bus.consume_outbound()
+            await gateway.handle_inbound_message(
+                make_inbound("/route agent", message_id=303),
+            )
+            route_result = await bus.consume_outbound()
+
+            denial = "Admin access is required; use EchoBot Admin or Console."
+            self.assertEqual(denial, role_result.text)
+            self.assertEqual(denial, runtime_result.text)
+            self.assertEqual(denial, route_result.text)
+            self.assertTrue(context.coordinator.delegated_ack_enabled)
+            self.assertFalse((workspace / ".echobot" / "runtime_settings.json").exists())
+            self.assertEqual([], list(session_store.base_dir.glob("*.jsonl")))
+
+    async def test_private_route_session_ignores_legacy_force_agent_metadata(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            context, session_store = build_test_runtime(workspace)
+            bus = MessageBus()
+            route_session_store = RouteSessionStore(workspace / "route_sessions.json")
+            gateway = GatewayRuntime(
+                context,
+                bus,
+                delivery_store=DeliveryStore(workspace / "delivery.json"),
+                route_session_store=route_session_store,
+            )
+            inbound = make_inbound("Please set a cron reminder", message_id=304)
+            route_session = route_session_store.get_current_session(
+                inbound.route_key,
+            )
+            session = session_store.load_or_create_session(route_session.session_name)
+            session.metadata["route_mode"] = "force_agent"
+            session_store.save_session(session)
+
+            await gateway.handle_inbound_message(inbound)
+            outbound = await asyncio.wait_for(bus.consume_outbound(), timeout=0.2)
+
+            self.assertEqual("pong", outbound.text)
+            self.assertNotIn("async_result", outbound.metadata)
+            with self.assertRaises(asyncio.TimeoutError):
+                await asyncio.wait_for(bus.consume_outbound(), timeout=0.05)
 
     async def test_agent_style_message_returns_immediate_and_final_reply(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             workspace = Path(temp_dir)
-            context, _session_store = build_test_runtime(workspace)
+            context, session_store = build_test_runtime(workspace)
             bus = MessageBus()
             delivery_store = DeliveryStore(workspace / "delivery.json")
             route_session_store = RouteSessionStore(workspace / "route_sessions.json")
@@ -1342,6 +1498,15 @@ class GatewayRuntimeTests(unittest.IsolatedAsyncioTestCase):
                 delivery_store=delivery_store,
                 route_session_store=route_session_store,
             )
+            bound = session_store.create_session("admin-agent")
+            bound.metadata.update(
+                {
+                    "channel_type": "telegram",
+                    "channel_integration_id": "telegram",
+                    "route_mode": "auto",
+                }
+            )
+            session_store.save_session(bound)
 
             await gateway.handle_inbound_message(
                 make_inbound("Please set a cron reminder", message_id=8),
@@ -1371,6 +1536,15 @@ class GatewayRuntimeTests(unittest.IsolatedAsyncioTestCase):
                 delivery_store=delivery_store,
                 route_session_store=route_session_store,
             )
+            bound = session_store.create_session("admin-agent")
+            bound.metadata.update(
+                {
+                    "channel_type": "telegram",
+                    "channel_integration_id": "telegram",
+                    "route_mode": "auto",
+                }
+            )
+            session_store.save_session(bound)
 
             inbound = make_inbound("Please set a cron reminder", message_id=8)
             await gateway.handle_inbound_message(inbound)
@@ -1383,8 +1557,7 @@ class GatewayRuntimeTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(asyncio.TimeoutError):
                 await asyncio.wait_for(bus.consume_outbound(), timeout=0.05)
 
-            current = route_session_store.get_current_session(inbound.route_key)
-            session = session_store.load_session(current.session_name)
+            session = session_store.load_session("admin-agent")
             history_contents = [message.content for message in session.history]
             self.assertNotIn("working", history_contents)
             self.assertIn("done", history_contents)
@@ -1404,11 +1577,16 @@ class GatewayRuntimeTests(unittest.IsolatedAsyncioTestCase):
             )
 
             inbound = make_inbound("Please set a cron reminder", message_id=8)
-            await gateway.handle_inbound_message(inbound)
-            first = await asyncio.wait_for(bus.consume_outbound(), timeout=0.2)
-            self.assertEqual("working", first.text)
-
-            current = route_session_store.get_current_session(inbound.route_key)
+            current = await gateway._session_service.current_route_session(
+                inbound.route_key,
+            )
+            execution = await context.coordinator.handle_user_turn(
+                current.session_name,
+                inbound.text,
+                route_mode="force_agent",
+            )
+            self.assertTrue(execution.delegated)
+            self.assertFalse(execution.completed)
             visible_path = session_store.base_dir / f"{current.session_name}.jsonl"
             agent_path = (
                 context.agent_session_store.base_dir / f"{current.session_name}.jsonl"

@@ -10,6 +10,12 @@ export function createSessionsApi(deps) {
         return await requestJson(`/api/sessions/${encodeURIComponent(sessionName)}`);
     }
 
+    async function requestSessionRuntimeContext(sessionName) {
+        return await requestJson(
+            `/api/sessions/${encodeURIComponent(sessionName)}/runtime-context`,
+        );
+    }
+
     async function switchCurrentSession(sessionName) {
         return await requestJson("/api/sessions/current", {
             method: "PUT",
@@ -61,6 +67,7 @@ export function createSessionsApi(deps) {
 
     return {
         requestSessionDetail: requestSessionDetail,
+        requestSessionRuntimeContext: requestSessionRuntimeContext,
         requestSessionSummaries: requestSessionSummaries,
         switchCurrentSession: switchCurrentSession,
         updateSessionRuntimeOverrides: updateSessionRuntimeOverrides,

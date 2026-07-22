@@ -9,6 +9,7 @@ export function wireAppEvents(features) {
         live2d,
         roles,
         sessions,
+        runtimeEdits,
         tts,
         status,
         t = (key) => key,
@@ -69,10 +70,22 @@ export function wireAppEvents(features) {
         bindOptionalEventHandler(element, "focusin", live2d.handleLive2DControlsFocusIn);
         bindOptionalEventHandler(element, "focusout", live2d.handleLive2DControlsFocusOut);
     });
-    DOM.voiceSelect.addEventListener("change", tts.handleVoiceSelectionChange);
-    bindOptionalAsyncChange(DOM.ttsProviderSelect, tts.handleTtsProviderChange);
-    bindOptionalAsyncChange(DOM.asrProviderSelect, asr.handleAsrProviderChange);
-    bindOptionalAsyncChange(DOM.modelSelect, () => live2d.handleLive2DModelChange(DOM.modelSelect.value));
+    DOM.voiceSelect.addEventListener("change", () => {
+        tts.handleVoiceSelectionChange();
+        runtimeEdits.markRuntimeDirty();
+    });
+    bindOptionalAsyncChange(DOM.ttsProviderSelect, async () => {
+        await tts.handleTtsProviderChange();
+        runtimeEdits.markRuntimeDirty();
+    });
+    bindOptionalAsyncChange(DOM.asrProviderSelect, async () => {
+        await asr.handleAsrProviderChange();
+        runtimeEdits.markRuntimeDirty();
+    });
+    bindOptionalAsyncChange(DOM.modelSelect, async () => {
+        await live2d.handleLive2DModelChange(DOM.modelSelect.value);
+        runtimeEdits.markRuntimeDirty();
+    });
     bindOptionalClick(DOM.live2dUploadButton, () => DOM.live2dUploadInput?.click());
     bindOptionalInputChange(DOM.live2dUploadInput, live2d.handleLive2DDirectoryUpload);
     bindOptionalToggle(DOM.live2dPanel, layout.handleLive2DPanelToggle);
@@ -85,17 +98,43 @@ export function wireAppEvents(features) {
     bindOptionalClick(DOM.live2dTabExpression, () => layout.setLive2DDrawerTab("expression"));
     bindOptionalClick(DOM.live2dTabMotion, () => layout.setLive2DDrawerTab("motion"));
     bindOptionalClick(DOM.live2dTabHotkey, () => layout.setLive2DDrawerTab("hotkey"));
+    [
+        DOM.live2dTabExpression,
+        DOM.live2dTabMotion,
+        DOM.live2dTabHotkey,
+    ].forEach((tab) => {
+        bindOptionalEventHandler(tab, "keydown", layout.handleLive2DDrawerTabKeyDown);
+    });
 
     bindOptionalAsyncChange(DOM.stageBackgroundSelect, () => {
         live2d.handleStageBackgroundChange(DOM.stageBackgroundSelect.value);
+        runtimeEdits.markRuntimeDirty();
     });
     bindOptionalClick(DOM.stageBackgroundUploadButton, () => DOM.stageBackgroundUploadInput?.click());
-    bindOptionalInputChange(DOM.stageBackgroundUploadInput, live2d.handleStageBackgroundUpload);
-    bindOptionalClick(DOM.stageBackgroundResetButton, live2d.handleStageBackgroundReset);
-    bindRangeInput(DOM.stageBackgroundPositionXInput, live2d.handleStageBackgroundTransformInput);
-    bindRangeInput(DOM.stageBackgroundPositionYInput, live2d.handleStageBackgroundTransformInput);
-    bindRangeInput(DOM.stageBackgroundScaleInput, live2d.handleStageBackgroundTransformInput);
-    bindOptionalClick(DOM.stageBackgroundTransformResetButton, live2d.handleStageBackgroundTransformReset);
+    bindOptionalInputChange(DOM.stageBackgroundUploadInput, async (event) => {
+        await live2d.handleStageBackgroundUpload(event);
+        runtimeEdits.markRuntimeDirty();
+    });
+    bindOptionalClick(DOM.stageBackgroundResetButton, () => {
+        live2d.handleStageBackgroundReset();
+        runtimeEdits.markRuntimeDirty();
+    });
+    bindRangeInput(DOM.stageBackgroundPositionXInput, (event) => {
+        live2d.handleStageBackgroundTransformInput(event);
+        runtimeEdits.markRuntimeDirty();
+    });
+    bindRangeInput(DOM.stageBackgroundPositionYInput, (event) => {
+        live2d.handleStageBackgroundTransformInput(event);
+        runtimeEdits.markRuntimeDirty();
+    });
+    bindRangeInput(DOM.stageBackgroundScaleInput, (event) => {
+        live2d.handleStageBackgroundTransformInput(event);
+        runtimeEdits.markRuntimeDirty();
+    });
+    bindOptionalClick(DOM.stageBackgroundTransformResetButton, () => {
+        live2d.handleStageBackgroundTransformReset();
+        runtimeEdits.markRuntimeDirty();
+    });
     bindOptionalToggle(DOM.stageBackgroundPanel, layout.handleStageBackgroundPanelToggle);
     bindOptionalToggle(DOM.stageEffectsPanel, layout.handleStageEffectsPanelToggle);
 
@@ -194,6 +233,7 @@ export function wireAppEvents(features) {
     }
 
     DOM.stageElement.addEventListener("wheel", live2d.handleStageWheel, { passive: false });
+    window.addEventListener("keydown", layout.handleDrawerKeyDown);
     window.addEventListener("keydown", (event) => {
         live2d.handleLive2DHotkeyKeyDown(event);
     });

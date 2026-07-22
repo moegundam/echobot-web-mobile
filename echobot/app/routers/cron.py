@@ -18,6 +18,7 @@ router = APIRouter(tags=["cron"])
 @router.get("/cron/status", response_model=CronStatusResponse)
 async def get_cron_status(
     runtime=Depends(get_app_runtime),
+    _admin_user: str = Depends(require_admin_user),
 ) -> CronStatusResponse:
     if runtime.context is None:
         raise HTTPException(status_code=503, detail="EchoBot runtime is not ready")
@@ -34,6 +35,7 @@ async def get_cron_status(
 async def list_cron_jobs(
     include_disabled: bool = Query(default=False),
     runtime=Depends(get_app_runtime),
+    _admin_user: str = Depends(require_admin_user),
 ) -> CronJobsResponse:
     if runtime.context is None:
         raise HTTPException(status_code=503, detail="EchoBot runtime is not ready")

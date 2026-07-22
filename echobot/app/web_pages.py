@@ -15,6 +15,7 @@ WEB_PAGE_ROUTES: tuple[WebPageRoute, ...] = (
     WebPageRoute("/console", "index.html", "console"),
     WebPageRoute("/stage", "stage.html", "stage_page"),
     WebPageRoute("/messenger", "messenger.html", "messenger"),
+    WebPageRoute("/guide", "guide.html", "guide"),
     WebPageRoute("/admin", "admin.html", "admin"),
     WebPageRoute("/admin/guide", "guide.html", "admin_guide"),
     WebPageRoute("/admin/structure", "structure.html", "admin_structure"),
