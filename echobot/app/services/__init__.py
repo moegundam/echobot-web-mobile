@@ -17,6 +17,11 @@ from .runtime_model_repositories import (
 from .runtime_model_services import active_runtime_profile, build_runtime_model_services
 from .runtime_profile_applier import RuntimeProfileApplier
 from .session_application import SessionApplicationService
+from .stage_event_broker_factory import (
+    StageBrokerConfigurationError,
+    StageEventBrokerConfig,
+    create_stage_event_broker,
+)
 from .stage_event_publisher import StageEventPublisher
 from .stage_events import StageEventBroker
 from .user_runtime_factory import UserRuntimeFactory
@@ -40,8 +45,11 @@ __all__ = [
     "RoleService",
     "RuntimeProfileApplier",
     "SessionApplicationService",
+    "StageBrokerConfigurationError",
+    "StageEventBrokerConfig",
     "StageEventPublisher",
     "StageEventBroker",
+    "create_stage_event_broker",
     "UserRuntimeFactory",
     "UserScopedRuntime",
     "VoiceModelRepository",

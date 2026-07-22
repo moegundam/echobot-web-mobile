@@ -2,14 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import html
-import ipaddress
 import json
 import locale
 import re
-import socket
 from typing import Any
 from urllib import error, parse, request
 
+from ..network.http import build_http_opener, is_private_http_target
 from .base import BaseTool, ToolOutput
 
 
@@ -79,11 +78,12 @@ class WebRequestTool(BaseTool):
             method="GET",
         )
         max_bytes = max_chars * 4
-        opener = request.build_opener(
-            _ValidatedRedirectHandler(
+        opener = build_http_opener(
+            allow_private=self.allow_private_network,
+            redirect_handler=_ValidatedRedirectHandler(
                 allow_private_network=self.allow_private_network,
                 max_redirects=self.max_redirects,
-            )
+            ),
         )
 
         try:
@@ -192,44 +192,8 @@ def _validate_public_hostname(hostname: str) -> None:
     normalized_host = hostname.strip().rstrip(".").lower()
     if not normalized_host:
         raise ValueError("url must include a host")
-    if normalized_host == "localhost" or normalized_host.endswith(".localhost"):
+    if is_private_http_target(normalized_host):
         raise ValueError("Private network addresses are not allowed")
-
-    ip_address = _parse_ip_address(normalized_host)
-    if ip_address is not None:
-        _validate_public_ip(ip_address)
-        return
-
-    try:
-        lookup_name = normalized_host.encode("idna").decode("ascii")
-        resolved = socket.getaddrinfo(lookup_name, None, type=socket.SOCK_STREAM)
-    except socket.gaierror as exc:
-        raise ValueError(f"Could not resolve host: {hostname}") from exc
-
-    for _, _, _, _, sockaddr in resolved:
-        resolved_ip = _parse_ip_address(sockaddr[0])
-        if resolved_ip is not None:
-            _validate_public_ip(resolved_ip)
-
-
-def _parse_ip_address(hostname: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
-    clean_host = hostname.split("%", 1)[0]
-    try:
-        return ipaddress.ip_address(clean_host)
-    except ValueError:
-        return None
-
-
-def _validate_public_ip(ip_address: ipaddress.IPv4Address | ipaddress.IPv6Address) -> None:
-    if (
-        ip_address.is_private
-        or ip_address.is_loopback
-        or ip_address.is_link_local
-        or ip_address.is_multicast
-        or ip_address.is_reserved
-        or ip_address.is_unspecified
-    ):
-        raise ValueError(f"Private network addresses are not allowed: {ip_address}")
 
 
 def _extract_web_text(

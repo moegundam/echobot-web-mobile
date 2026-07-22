@@ -1,6 +1,7 @@
-import { initShellI18n } from "./shell-i18n.js?v=language-menu-1";
+import { initShellI18n } from "./shell-i18n.js?v=language-menu-1&uiux=2";
 import { initShellDisplayMode } from "./shell-display-mode.js?v=session-centered-2";
 import { initShellSessionLinks } from "./shell-session-links.js?v=site-public-6";
+import { initShellAccessContext } from "./shell-access.js?v=rbac-nav-1";
 
 const guideContent = {
     en: {
@@ -17,6 +18,7 @@ const guideContent = {
             },
             {
                 title: "Recommended setup order",
+                audience: ["admin"],
                 body: "Complete setup before opening tests; this makes issue tracking easy and keeps session behavior stable.",
                 items: [
                     "Admin → LLM setup: open `/admin/models` and configure the LLM profile for the target provider.",
@@ -48,6 +50,7 @@ const guideContent = {
             },
             {
                 title: "Open WebUI bridge",
+                audience: ["admin"],
                 body: "Use Open WebUI for operator tooling, not as the default live test entry.",
                 items: [
                     "Open `/admin/openwebui` to configure allowed tool methods and operator-level bridge status.",
@@ -57,6 +60,7 @@ const guideContent = {
             },
             {
                 title: "Before private sharing",
+                audience: ["admin"],
                 body: "Run these checks before pushing changes or exposing the local tunnel to testers.",
                 items: [
                     "Run `python scripts/check_public_safety.py` and confirm it passes.",
@@ -73,6 +77,12 @@ const guideContent = {
                     "Character or Live2D does not change: use Console Apply to Stage for temporary runtime changes, or save the persistent binding in Admin → Characters/Sessions.",
                     "Messenger replies in the wrong language: check the UI language and the character prompt; explicit prompt language has priority.",
                     "Telegram/Discord does not mirror to Stage: open `/admin/channels`, confirm the bot is running, `mirror_to_stage` is enabled, and the stage session name is correct.",
+                    "401 Authentication required: sign in through the configured HTTPS Access hostname; do not bypass the proxy with a loopback or LAN URL.",
+                    "403 Permission denied: use a page allowed for your User, Operator, or Admin role, or ask an Admin to update the allowlist.",
+                    "Provider 4xx/5xx: verify the model name, base URL, API key, provider quota, and then run Test connection in `/admin/models`.",
+                    "Microphone unavailable: use HTTPS, grant browser microphone permission, and confirm no other app has exclusive device access.",
+                    "TTS is silent: press Enable audio once; mobile browsers can block autoplay until a user gesture.",
+                    "Live2D is blank: verify the character binding and model asset files in `/admin/live2d`, then reload the selected session.",
                 ],
             },
             {
@@ -83,6 +93,18 @@ const guideContent = {
                     "Messenger receives expected replies and Stage renders the same final output with subtitles.",
                     "Character, model, and Live2D changes take effect only for the selected session context.",
                     "Open WebUI bridge calls are treated as operator tool operations, not chat routing changes.",
+                ],
+            },
+            {
+                title: "Glossary",
+                body: "These terms describe separate responsibilities; keeping them separate prevents configuration conflicts.",
+                items: [
+                    "Session: the conversation boundary that selects one character, optional channel, messages, and temporary runtime state.",
+                    "Character: reusable prompt plus LLM, voice, and Live2D bindings.",
+                    "Console: Operator workbench; Apply to Stage changes the selected session temporarily and does not overwrite Admin profiles.",
+                    "Admin: persistent resource and binding configuration for future sessions.",
+                    "Channel: an entry point such as Telegram or Discord, not the owner of conversation state.",
+                    "Stage: the audience display for the currently selected session.",
                 ],
             },
         ],
@@ -101,6 +123,7 @@ const guideContent = {
             },
             {
                 title: "推薦設定順序",
+                audience: ["admin"],
                 body: "先完成設定可降低測試變因，讓問題回溯只跟場次有關。",
                 items: [
                     "後台流程第一步：在 `/admin/models` 設定可用的 LLM profile。",
@@ -132,6 +155,7 @@ const guideContent = {
             },
             {
                 title: "Open WebUI bridge",
+                audience: ["admin"],
                 body: "Open WebUI 只用來做操作員工具串接與驗證，與日常對話測試分開。",
                 items: [
                     "在 `/admin/openwebui` 設定工具方法白名單與 bridge 狀態。",
@@ -141,6 +165,7 @@ const guideContent = {
             },
             {
                 title: "內測分享前檢查",
+                audience: ["admin"],
                 body: "推送變更或把 local tunnel 開給測試者前，先完成這些檢查。",
                 items: [
                     "執行 `python scripts/check_public_safety.py` 並確認通過。",
@@ -157,6 +182,12 @@ const guideContent = {
                     "角色或 Live2D 沒變：中台臨時變更要按 Apply to Stage；長期綁定要到後台 Characters/Sessions 儲存。",
                     "Messenger 回覆語言不對：確認 UI 語言與角色 prompt；prompt 明確指定語言時以 prompt 優先。",
                     "Telegram/Discord 沒同步到 Stage：到 `/admin/channels` 確認 bot running、`mirror_to_stage` 已開啟，且 stage session name 正確。",
+                    "出現 401 需要登入：請由已設定的 HTTPS Access 網址登入，不要用 loopback 或 LAN 網址繞過 proxy。",
+                    "出現 403 權限不足：改用目前 User、Operator 或 Admin 角色允許的頁面，或請 Admin 更新 allowlist。",
+                    "模型 provider 回 4xx/5xx：檢查模型名稱、Base URL、API key、provider 額度，再到 `/admin/models` 按測試連線。",
+                    "麥克風不可用：確認使用 HTTPS、已授權瀏覽器麥克風，且沒有其他應用程式獨占裝置。",
+                    "TTS 沒聲音：先按一次啟用音訊；手機瀏覽器可能在使用者操作前封鎖自動播放。",
+                    "Live2D 空白：到 `/admin/live2d` 確認角色綁定與模型素材完整，再重新載入所選場次。",
                 ],
             },
             {
@@ -167,6 +198,18 @@ const guideContent = {
                     "Messenger 回覆在 Stage 上有一致字幕與輸出。",
                     "角色與模型變更只影響到該場次上下文。",
                     "Open WebUI 僅留在操作員工具路徑，不改變一般通道驗證結果。",
+                ],
+            },
+            {
+                title: "名詞說明",
+                body: "各名詞負責不同範圍；維持分工可避免設定互相覆蓋。",
+                items: [
+                    "場次 Session：對話邊界，包含一個角色、選用通道、訊息與暫時 runtime 狀態。",
+                    "角色 Character：可重用的 prompt，以及 LLM、語音與 Live2D 綁定。",
+                    "中台 Console：Operator 操作台；Apply to Stage 只暫時改所選場次，不會覆寫後台 profile。",
+                    "後台 Admin：管理供未來場次使用的持久資源與綁定。",
+                    "通道 Channel：Telegram、Discord 等訊息入口，不擁有對話狀態。",
+                    "前台 Stage：顯示目前所選場次的觀眾畫面。",
                 ],
             },
         ],
@@ -185,6 +228,7 @@ const guideContent = {
             },
             {
                 title: "推荐设置顺序",
+                audience: ["admin"],
                 body: "先完成设置可减少测试波动，故障回溯也只围绕场次。",
                 items: [
                     "第一步：在 `/admin/models` 配置可用的 LLM profile。",
@@ -216,6 +260,7 @@ const guideContent = {
             },
             {
                 title: "Open WebUI bridge",
+                audience: ["admin"],
                 body: "Open WebUI 仅用于操作员工具对接和验证，和普通对话测试路径分离。",
                 items: [
                     "在 `/admin/openwebui` 配置允许的工具方法与 bridge 状态。",
@@ -225,6 +270,7 @@ const guideContent = {
             },
             {
                 title: "内测分享前检查",
+                audience: ["admin"],
                 body: "推送变更或把 local tunnel 开给测试者前，先完成这些检查。",
                 items: [
                     "执行 `python scripts/check_public_safety.py` 并确认通过。",
@@ -241,6 +287,12 @@ const guideContent = {
                     "角色或 Live2D 没变：中台临时变更要按 Apply to Stage；长期绑定要到后台 Characters/Sessions 保存。",
                     "Messenger 回复语言不对：确认 UI 语言与角色 prompt；prompt 明确指定语言时以 prompt 优先。",
                     "Telegram/Discord 没同步到 Stage：到 `/admin/channels` 确认 bot running、`mirror_to_stage` 已开启，且 stage session name 正确。",
+                    "出现 401 需要登录：请从已配置的 HTTPS Access 地址登录，不要用 loopback 或 LAN 地址绕过 proxy。",
+                    "出现 403 权限不足：改用当前 User、Operator 或 Admin 角色允许的页面，或请 Admin 更新 allowlist。",
+                    "模型 provider 返回 4xx/5xx：检查模型名称、Base URL、API key、provider 额度，再到 `/admin/models` 测试连接。",
+                    "麦克风不可用：确认使用 HTTPS、已授予浏览器麦克风权限，且没有其他应用独占设备。",
+                    "TTS 没声音：先按一次启用音频；移动浏览器可能在用户操作前阻止自动播放。",
+                    "Live2D 空白：到 `/admin/live2d` 确认角色绑定和模型素材完整，再重新加载所选场次。",
                 ],
             },
             {
@@ -253,11 +305,24 @@ const guideContent = {
                     "Open WebUI 只留在操作员工具路径，不改变普通通道验证结论。",
                 ],
             },
+            {
+                title: "名词说明",
+                body: "这些名词负责不同范围；保持分工可避免配置互相覆盖。",
+                items: [
+                    "场次 Session：对话边界，包含一个角色、可选通道、消息和临时运行状态。",
+                    "角色 Character：可复用的 prompt，以及 LLM、语音与 Live2D 绑定。",
+                    "中台 Console：Operator 工作台；Apply to Stage 只临时修改所选场次，不覆盖后台 profile。",
+                    "后台 Admin：管理供未来场次使用的持久资源和绑定。",
+                    "通道 Channel：Telegram、Discord 等消息入口，不拥有对话状态。",
+                    "前台 Stage：显示当前所选场次的观众画面。",
+                ],
+            },
         ],
     },
 };
 
 const contentRoot = document.getElementById("guide-content");
+let activeAccessRole = "user";
 const i18n = initShellI18n({
     onChange: () => {
         renderGuide();
@@ -268,6 +333,13 @@ const displayMode = initShellDisplayMode({ t: i18n.t });
 initShellSessionLinks();
 
 renderGuide();
+void initShellAccessContext({
+    t: i18n.t,
+    onResolved: (access) => {
+        activeAccessRole = access.role;
+        renderGuide();
+    },
+});
 
 function renderGuide() {
     if (!contentRoot) {
@@ -275,9 +347,13 @@ function renderGuide() {
     }
 
     const content = guideContent[i18n.language] || guideContent.en;
-    contentRoot.replaceChildren(
-        ...content.sections.map((section, index) => buildGuideSection(section, index)),
+    const visibleSections = content.sections.filter(
+        (section) => !section.audience || section.audience.includes(activeAccessRole),
     );
+    contentRoot.replaceChildren(
+        ...visibleSections.map((section, index) => buildGuideSection(section, index)),
+    );
+    initShellSessionLinks();
 }
 
 function buildGuideSection(section, index) {
@@ -289,13 +365,13 @@ function buildGuideSection(section, index) {
 
     const body = document.createElement("p");
     body.className = "guide-section-body";
-    appendInlineCode(body, section.body);
+    appendInlineNavigation(body, section.body);
 
     const list = document.createElement("ul");
     list.className = "guide-list";
     section.items.forEach((item) => {
         const listItem = document.createElement("li");
-        appendInlineCode(listItem, item);
+        appendInlineNavigation(listItem, item);
         list.appendChild(listItem);
     });
 
@@ -303,18 +379,40 @@ function buildGuideSection(section, index) {
     return article;
 }
 
-function appendInlineCode(element, text) {
+function appendInlineNavigation(element, text) {
     const parts = String(text || "").split(/(`[^`]+`)/g);
     parts.forEach((part) => {
         if (!part) {
             return;
         }
         if (part.startsWith("`") && part.endsWith("`") && part.length > 1) {
+            const value = part.slice(1, -1);
+            if (value.startsWith("/") && canNavigateToRoute(value)) {
+                const link = document.createElement("a");
+                link.href = value.replaceAll("<name>", "default");
+                link.textContent = value;
+                if (value.startsWith("/stage") || value.startsWith("/messenger")) {
+                    link.dataset.sessionLink = "";
+                }
+                element.appendChild(link);
+                return;
+            }
             const code = document.createElement("code");
-            code.textContent = part.slice(1, -1);
+            code.textContent = value;
             element.appendChild(code);
             return;
         }
         element.appendChild(document.createTextNode(part));
     });
+}
+
+function canNavigateToRoute(value) {
+    const pathname = value.split("?", 1)[0];
+    if (pathname === "/admin" || pathname.startsWith("/admin/")) {
+        return activeAccessRole === "admin";
+    }
+    if (pathname === "/console" || pathname === "/web") {
+        return activeAccessRole === "admin" || activeAccessRole === "operator";
+    }
+    return true;
 }

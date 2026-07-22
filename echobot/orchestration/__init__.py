@@ -18,9 +18,11 @@ from .roles import (
     role_name_from_metadata,
     set_role_name,
 )
+from .turn_runtime import ConversationTurnRuntime, TurnRuntimeResolver
 
 __all__ = [
     "ConversationCoordinator",
+    "ConversationTurnRuntime",
     "ConversationJob",
     "ConversationJobStore",
     "DEFAULT_ROUTE_MODE",
@@ -39,4 +41,5 @@ __all__ = [
     "route_mode_from_metadata",
     "set_route_mode",
     "set_role_name",
+    "TurnRuntimeResolver",
 ]

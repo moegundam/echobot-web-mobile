@@ -45,7 +45,7 @@ class ChannelImageNormalizationTests(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             attachment_store = AttachmentStore(Path(temp_dir) / "attachments")
             with patch(
-                "echobot.channels.platforms.qq.request.urlopen",
+                "echobot.channels.platforms.qq.open_http_url",
                 return_value=_FakeUrlResponse(make_png_bytes()),
             ):
                 image_payload = _download_image_as_attachment(
@@ -90,7 +90,7 @@ class ChannelImageNormalizationTests(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             attachment_store = AttachmentStore(Path(temp_dir) / "attachments")
             with patch(
-                "echobot.channels.platforms.qq.request.urlopen",
+                "echobot.channels.platforms.qq.open_http_url",
                 return_value=_FakeUrlResponse(b"hello from qq file"),
             ):
                 file_payload = _download_file_as_attachment(

@@ -9,19 +9,22 @@ import {
     uploadChatFile,
     uploadChatImage,
 } from "./modules/api.js";
-import { wireAppEvents } from "./bootstrap/wire-events.js?v=background-apply-1";
+import { wireAppEvents } from "./bootstrap/wire-events.js?v=session-runtime-p1-4";
 import { createUiStatusController } from "./bootstrap/ui-status.js?v=site-public-6";
 import { DOM } from "./core/dom.js";
-import { appState, audioState, sessionState } from "./core/store.js";
-import { createAsrModule } from "./features/asr.js?v=site-public-6";
-import { createChatModule } from "./features/chat/index.js?v=response-language-1";
-import { createLayoutModule } from "./features/layout/index.js?v=console-layout-1";
-import { createLive2DModule } from "./features/live2d/index.js?v=background-i18n-1";
-import { createRolesModule } from "./features/roles.js?v=site-public-6";
-import { createSessionsModule } from "./features/sessions.js?v=console-save-1";
-import { createTtsModule } from "./features/tts.js?v=site-public-6";
+import { appState, audioState, roleState, sessionState } from "./core/store.js";
+import { applyAccessContext } from "./features/access.js";
+import { createAsrModule } from "./features/asr.js?v=session-runtime-p1-2";
+import { createChatModule } from "./features/chat/index.js?v=response-language-2";
+import { createLayoutModule } from "./features/layout/index.js?v=console-layout-7";
+import { initMobileConsoleWorkspace } from "./features/layout/mobile-workspace.js?v=mobile-workspace-3";
+import { createLive2DModule } from "./features/live2d/index.js?v=session-runtime-p1-2";
+import { createRolesModule } from "./features/roles.js?v=session-runtime-p1-2";
+import { createRuntimeEditsController } from "./features/runtime-edits.js?v=session-runtime-p1-3";
+import { createSessionsModule } from "./features/sessions.js?v=session-runtime-p1-3";
+import { createTtsModule } from "./features/tts.js?v=session-runtime-p1-3";
 import { initShellDisplayMode } from "./shell-display-mode.js?v=display-menu-1";
-import { initShellI18n } from "./shell-i18n.js?v=language-menu-1";
+import { initShellI18n } from "./shell-i18n.js?v=session-runtime-p1-3&uiux=3";
 import {
     MODEL_PROFILE_UPDATE_STORAGE_KEY,
     activeModelProfileFromConfig,
@@ -31,13 +34,14 @@ import {
 import {
     addMessage,
     addSystemMessage,
+    announceAssistantMessage,
     clearMessages,
     configureMessageI18n,
     initializeMessageInteractions,
     refreshMessagesLocalizedText,
     removeMessage,
     updateMessage,
-} from "./modules/messages.js?v=site-public-6";
+} from "./modules/messages.js?v=site-public-7";
 import { createTraceModule } from "./modules/traces.js?v=site-public-6";
 import {
     clamp,
@@ -50,6 +54,9 @@ import {
 
 const status = createUiStatusController();
 let currentActiveModelProfile = null;
+let currentConsoleModelProfiles = [];
+let modelProfileSearchQuery = "";
+let runtimeEdits = null;
 const shellMode = window.location.pathname === "/console" ? "console" : "web";
 const i18n = initShellI18n({
     onChange: () => {
@@ -65,11 +72,14 @@ const i18n = initShellI18n({
         chat?.refreshLocalizedText?.();
         refreshMessagesLocalizedText();
         status.refreshLocalizedText?.(i18n.t);
+        runtimeEdits?.refreshLocalizedText();
+        applyAccessContext(appState.config, i18n.t);
         renderActiveModelProfile(currentActiveModelProfile);
     },
 });
 configureMessageI18n({ t: i18n.t });
 const displayMode = initShellDisplayMode({ t: i18n.t });
+runtimeEdits = createRuntimeEditsController({ t: i18n.t });
 let currentModelProfileScope = "";
 window.addEventListener("storage", (event) => {
     if (event.key === MODEL_PROFILE_UPDATE_STORAGE_KEY) {
@@ -130,6 +140,7 @@ tts.bindHooks({
 const sessions = createSessionsModule({
     addMessage,
     addSystemMessage,
+    announceAssistantMessage,
     clearMessages,
     formatTimestamp,
     normalizeSessionName,
@@ -145,12 +156,13 @@ const roles = createRolesModule({
     normalizeSessionName,
     requestJson,
     setRunStatus: status.setRunStatus,
-    syncModelProfileFromServer,
+    selectRuntimeProfile: selectConsoleModelProfile,
     t: i18n.t,
 });
 const traces = createTraceModule({ t: i18n.t });
 const chat = createChatModule({
     addMessage,
+    announceAssistantMessage,
     applySessionSummaries: sessions.applySessionSummaries,
     cancelChatJob,
     createSpeechSession: tts.createSpeechSession,
@@ -190,8 +202,16 @@ status.bindFeatures({
 sessions.bindRoleHooks({
     syncRolePanelForCurrentSession: roles.syncRolePanelForCurrentSession,
 });
+sessions.bindRuntimeHooks({
+    applyRuntimeContext: applyConsoleRuntimeContext,
+    beforeSessionSwitch: asr.stopVoiceInputForSessionSwitch,
+    confirmDiscardChanges: runtimeEdits.confirmDiscardChanges,
+    markApplied: runtimeEdits.markApplied,
+    markRuntimeDirty: runtimeEdits.markRuntimeDirty,
+});
 roles.bindSessionHooks({
-    applySessionDetail: sessions.applySessionDetail,
+    markRuntimeDirty: runtimeEdits.markRuntimeDirty,
+    refreshSessionSettings: sessions.refreshSessionSettings,
 });
 
 document.addEventListener("DOMContentLoaded", initializePage);
@@ -204,6 +224,7 @@ async function initializePage() {
     layout.initializePageSplit();
     initializeModelProfileControls();
     initializeConsoleSaveControls();
+    runtimeEdits.initialize();
     initializeMessageInteractions();
     wireAppEvents({
         asr,
@@ -211,6 +232,7 @@ async function initializePage() {
         layout,
         live2d,
         roles,
+        runtimeEdits,
         sessions,
         status,
         t: i18n.t,
@@ -225,6 +247,9 @@ async function initializePage() {
     layout.restoreStageBackgroundPanelState();
     layout.restoreStageEffectsPanelState();
     layout.handleSettingsPanelToggle();
+    initMobileConsoleWorkspace({
+        onViewChange: handleMobileWorkspaceViewChange,
+    });
     live2d.setStageMessage(i18n.t("console.live2dLoading"));
     addSystemMessage(i18n.t("console.status.connecting"));
 
@@ -234,6 +259,7 @@ async function initializePage() {
         const activeModelProfile = activeModelProfileFromConfig(config);
         currentActiveModelProfile = activeModelProfile;
         appState.config = config;
+        applyAccessContext(config, i18n.t);
         applyModelProfileToLocalPreferences(activeModelProfile);
         renderActiveModelProfile(activeModelProfile);
         layout.applyRuntimeConfig(config.runtime);
@@ -247,6 +273,7 @@ async function initializePage() {
         layout.restoreSessionSidebarState();
         layout.restoreRoleSidebarState();
         await sessions.initializeSessionPanel(config.session_name);
+        applyAccessContext(config, i18n.t);
         await roles.initializeRolePanel();
         await tts.loadTtsOptions(config.tts);
         asr.applyAsrStatus(config.asr);
@@ -265,6 +292,16 @@ async function initializePage() {
     }
 }
 
+function handleMobileWorkspaceViewChange(view) {
+    if (view !== "stage") {
+        layout.setLive2DDrawerOpen(false, { restoreFocus: false });
+    }
+    if (view !== "operations") {
+        layout.setSessionSidebarOpen(false, { restoreFocus: false });
+        layout.setRoleSidebarOpen(false, { restoreFocus: false });
+    }
+}
+
 async function syncModelProfileFromServer() {
     const config = await requestJson("/api/web/config");
     currentModelProfileScope = modelProfileScopeFromConfig(config);
@@ -274,11 +311,12 @@ async function syncModelProfileFromServer() {
         ...(appState.config || {}),
         ...config,
     };
-        applyModelProfileToLocalPreferences(activeModelProfile);
-        renderActiveModelProfile(activeModelProfile);
-        sessions.refreshSessionSettings?.();
-        await refreshConsoleControlsFromConfig(config);
-        return activeModelProfile;
+    applyAccessContext(appState.config, i18n.t);
+    applyModelProfileToLocalPreferences(activeModelProfile);
+    renderActiveModelProfile(activeModelProfile);
+    sessions.refreshSessionSettings?.();
+    await refreshConsoleControlsFromConfig(config);
+    return activeModelProfile;
 }
 
 async function refreshConsoleControlsFromConfig(config) {
@@ -300,13 +338,28 @@ async function refreshConsoleControlsFromConfig(config) {
 
 function initializeModelProfileControls() {
     const select = document.getElementById("model-profile-select");
+    const search = document.getElementById("model-profile-search");
     if (!select || select.dataset.bound === "true") {
         return;
     }
     select.dataset.bound = "true";
     select.addEventListener("change", () => {
-        void selectConsoleModelProfile(select.value);
+        void selectConsoleModelProfile(select.value).then(() => {
+            runtimeEdits.markRuntimeDirty();
+        });
     });
+    if (search && search.dataset.bound !== "true") {
+        search.dataset.bound = "true";
+        search.addEventListener("input", () => {
+            modelProfileSearchQuery = String(search.value || "").trim();
+            renderModelProfileSelectOptions(
+                select,
+                currentConsoleModelProfiles,
+                currentConsoleModelProfileId(),
+                modelProfileSearchQuery,
+            );
+        });
+    }
 }
 
 function initializeConsoleSaveControls() {
@@ -354,18 +407,16 @@ async function applyConsoleRuntimeForCurrentSession(options = {}) {
 
     try {
         await sessions.updateSessionRuntimeOverrides(sessionName, {
+            role_name: roleState.currentRoleName,
+            route_mode: appState.config?.access?.can_use_agent
+                ? sessionState.currentRouteMode
+                : "chat_only",
             model_profile_id: profileId,
             llm_model_id: profileId,
-            voice_profile_id: profileId,
-            live2d_model_id: profileId,
             ...buildConsoleRuntimeOverride(),
         });
-        await sessions.syncCurrentSessionFromServer({
-            force: true,
-            refreshSummaries: true,
-            sessionName: sessionName,
-        });
         await publishStageRuntimeRefresh(sessionName);
+        runtimeEdits.markApplied();
         status.setRunStatus(
             i18n.t(successKey, { session: sessionName }),
             successKey,
@@ -376,6 +427,53 @@ async function applyConsoleRuntimeForCurrentSession(options = {}) {
         status.setRunStatus(error.message || i18n.t(failureKey));
     } finally {
         setConsoleSaveBusy(false);
+    }
+}
+
+async function applyConsoleRuntimeContext(context) {
+    const character = context && context.character && typeof context.character === "object"
+        ? context.character
+        : {};
+    const llmModel = context && context.llm_model && typeof context.llm_model === "object"
+        ? context.llm_model
+        : {};
+    const profileId = String(
+        character.effective_model_profile_id
+        || character.model_profile_id
+        || llmModel.id
+        || "",
+    ).trim();
+    const profile = findConsoleModelProfile(profileId);
+    if (profile) {
+        currentActiveModelProfile = profile;
+        if (appState.config && appState.config.model_profiles) {
+            appState.config.model_profiles.active_profile_id = profileId;
+        }
+        applyModelProfileToLocalPreferences(profile);
+        renderActiveModelProfile(profile);
+    }
+
+    await tts.applyRuntimeVoiceProfile(context && context.voice_profile);
+    asr.applyRuntimeVoiceProfile(context && context.voice_profile);
+
+    const live2dModel = context && context.live2d_model && typeof context.live2d_model === "object"
+        ? context.live2d_model
+        : {};
+    const selectionKey = String(live2dModel.selection_key || "").trim();
+    if (selectionKey && selectionKey !== String(DOM.modelSelect?.value || "").trim()) {
+        await live2d.handleLive2DModelChange(selectionKey);
+    }
+
+    const stage = context && context.stage && typeof context.stage === "object"
+        ? context.stage
+        : {};
+    if (stage.background) {
+        live2d.applyStageBackgroundRuntimeOverride(stage.background);
+    } else if (appState.config && appState.config.stage) {
+        live2d.applyStageBackgroundByKey(
+            appState.config.stage,
+            appState.config.stage.default_background_key,
+        );
     }
 }
 
@@ -484,7 +582,7 @@ async function selectConsoleModelProfile(profileId) {
     try {
         const nextProfile = findConsoleModelProfile(nextProfileId);
         if (!nextProfile) {
-            throw new Error(i18n.t("console.modelProfileMissing", { profile: nextProfileId }));
+            throw new Error(i18n.t("console.roleModelProfileMissing", { profile: nextProfileId }));
         }
         const payload = {
             ...((appState.config && appState.config.model_profiles) || {}),
@@ -540,6 +638,8 @@ function parseModelProfileUpdateScope(value) {
 function renderActiveModelProfile(profile) {
     const badge = document.getElementById("model-profile-badge");
     const select = document.getElementById("model-profile-select");
+    const search = document.getElementById("model-profile-search");
+    const searchLabel = document.getElementById("model-profile-search-label");
     const link = document.getElementById("model-profile-link");
     if (!badge) {
         return;
@@ -556,13 +656,26 @@ function renderActiveModelProfile(profile) {
     if (profile && !profiles.some((item) => item && item.profile_id === profile.profile_id)) {
         profiles.push(profile);
     }
+    currentConsoleModelProfiles = profiles;
 
     if (!profile && profiles.length === 0) {
         badge.hidden = true;
         return;
     }
 
-    renderModelProfileSelectOptions(select, profiles, activeProfileId);
+    if (searchLabel) {
+        searchLabel.hidden = profiles.length < 6;
+    }
+    if (search && profiles.length < 6) {
+        search.value = "";
+        modelProfileSearchQuery = "";
+    }
+    renderModelProfileSelectOptions(
+        select,
+        profiles,
+        activeProfileId,
+        modelProfileSearchQuery,
+    );
     if (link) {
         link.textContent = i18n.t("console.modelProfileManage");
     }
@@ -570,14 +683,27 @@ function renderActiveModelProfile(profile) {
     sessions.refreshSessionSettings?.();
 }
 
-function renderModelProfileSelectOptions(select, profiles, activeProfileId) {
+function renderModelProfileSelectOptions(select, profiles, activeProfileId, searchQuery = "") {
     if (!select) {
         return;
     }
     const selectedProfileId = String(activeProfileId || "").trim();
     const currentValue = selectedProfileId || select.value;
+    const normalizedQuery = normalizeSearchText(searchQuery);
+    const filteredProfiles = normalizedQuery
+        ? profiles.filter((profile) => modelProfileSearchText(profile).includes(normalizedQuery))
+        : profiles;
+    const activeProfile = profiles.find((profile) => (
+        profile && String(profile.profile_id || "").trim() === currentValue
+    ));
+    if (
+        activeProfile
+        && !filteredProfiles.some((profile) => profile === activeProfile)
+    ) {
+        filteredProfiles.unshift(activeProfile);
+    }
     select.replaceChildren();
-    for (const profile of profiles) {
+    for (const profile of filteredProfiles) {
         if (!profile || !profile.profile_id) {
             continue;
         }
@@ -586,9 +712,31 @@ function renderModelProfileSelectOptions(select, profiles, activeProfileId) {
         option.textContent = modelProfileOptionLabel(profile);
         select.appendChild(option);
     }
+    if (select.options.length === 0) {
+        const option = document.createElement("option");
+        option.value = "";
+        option.disabled = true;
+        option.textContent = i18n.t("console.modelProfileNoMatches");
+        select.appendChild(option);
+    }
     if (currentValue && [...select.options].some((option) => option.value === currentValue)) {
         select.value = currentValue;
     }
+}
+
+function modelProfileSearchText(profile) {
+    const chat = profile && typeof profile.chat === "object" ? profile.chat : {};
+    return normalizeSearchText([
+        profile && profile.profile_id,
+        profile && profile.label,
+        chat.provider,
+        chat.model,
+        chat.base_url,
+    ].filter(Boolean).join(" "));
+}
+
+function normalizeSearchText(value) {
+    return String(value || "").trim().toLocaleLowerCase();
 }
 
 function modelProfileOptionLabel(profile) {

@@ -4,7 +4,7 @@ import asyncio
 from copy import deepcopy
 from dataclasses import dataclass
 
-from ...orchestration import role_name_from_metadata, set_role_name
+from ...orchestration import role_name_from_metadata, set_role_name, set_route_mode
 from ..session_metadata import (
     ChannelBindingConflictError,
     channel_bindings_overlap,
@@ -16,6 +16,7 @@ from .runtime_profile_composer import (
     apply_runtime_profile_for_role,
     runtime_bindings_for_role,
 )
+from .runtime_context_events import notify_session_runtime_context_changed
 
 
 @dataclass(frozen=True)
@@ -173,7 +174,23 @@ class SessionApplicationService:
         return await self._runtime.session_service.load_session(session_name)
 
     async def rename_session(self, session_name: str, next_name: str):
-        return await self._runtime.session_service.rename_session(session_name, next_name)
+        session = await self._runtime.session_service.rename_session(
+            session_name,
+            next_name,
+        )
+        await notify_session_runtime_context_changed(
+            self._runtime,
+            session_name,
+            reason="session_renamed",
+            metadata={"new_session_name": session.name},
+        )
+        if session.name != session_name:
+            await notify_session_runtime_context_changed(
+                self._runtime,
+                session.name,
+                reason="session_renamed",
+            )
+        return session
 
     async def set_role(self, session_name: str, role_name: str):
         # Role switching historically creates the named Session on first use.
@@ -183,10 +200,16 @@ class SessionApplicationService:
         async with self._runtime.session_binding_lock:
             session_lock = await self._runtime.session_service.session_lock(session_name)
             async with session_lock:
-                return await self._set_role_transaction(
+                session = await self._set_role_transaction(
                     session_name,
                     normalized_role_name,
                 )
+        await notify_session_runtime_context_changed(
+            self._runtime,
+            session.name,
+            reason="session_role_updated",
+        )
+        return session
 
     async def _set_role_transaction(
         self,
@@ -339,7 +362,16 @@ class SessionApplicationService:
         )
 
     async def set_route_mode(self, session_name: str, route_mode):
-        return await self._runtime.chat_service.set_route_mode(session_name, route_mode)
+        session = await self._runtime.chat_service.set_route_mode(
+            session_name,
+            route_mode,
+        )
+        await notify_session_runtime_context_changed(
+            self._runtime,
+            session.name,
+            reason="session_route_mode_updated",
+        )
+        return session
 
     async def set_channel_binding(
         self,
@@ -354,11 +386,71 @@ class SessionApplicationService:
                 channel_integration_id=channel_integration_id,
                 excluding_session_name=session_name,
             )
-            return await self._set_channel_binding_unlocked(
+            session = await self._set_channel_binding_unlocked(
                 session_name,
                 channel_type=channel_type,
                 channel_integration_id=channel_integration_id,
             )
+        await notify_session_runtime_context_changed(
+            self._runtime,
+            session.name,
+            reason="session_channel_binding_updated",
+        )
+        return session
+
+    async def update_configuration(
+        self,
+        session_name: str,
+        *,
+        role_name: str,
+        route_mode,
+        channel_type: str,
+        channel_integration_id: str,
+    ):
+        """Validate and persist one complete Session configuration in one write."""
+        normalized_role_name = self._require_role(role_name)
+        next_channel_type = str(channel_type or "").strip()
+        next_channel_integration_id = str(channel_integration_id or "").strip()
+        async with self._runtime.session_binding_lock:
+            await self._runtime.session_service.load_session(session_name)
+            await self._assert_channel_binding_available(
+                channel_type=next_channel_type,
+                channel_integration_id=next_channel_integration_id,
+                excluding_session_name=session_name,
+            )
+            session = await self._runtime.session_service.update_session_metadata(
+                session_name,
+                lambda metadata: self._configured_session_metadata(
+                    metadata,
+                    role_name=normalized_role_name,
+                    route_mode=route_mode,
+                    channel_type=next_channel_type,
+                    channel_integration_id=next_channel_integration_id,
+                ),
+            )
+        await notify_session_runtime_context_changed(
+            self._runtime,
+            session.name,
+            reason="session_configuration_updated",
+        )
+        return session
+
+    @staticmethod
+    def _configured_session_metadata(
+        metadata,
+        *,
+        role_name: str,
+        route_mode,
+        channel_type: str,
+        channel_integration_id: str,
+    ):
+        next_metadata = set_role_name(metadata, role_name)
+        next_metadata = set_route_mode(next_metadata, route_mode)
+        return set_channel_binding(
+            next_metadata,
+            channel_type=channel_type,
+            channel_integration_id=channel_integration_id,
+        )
 
     async def _set_channel_binding_unlocked(
         self,
@@ -377,7 +469,14 @@ class SessionApplicationService:
         )
 
     async def delete_session(self, session_name: str) -> bool:
-        return await self._runtime.session_service.delete_session(session_name)
+        deleted = await self._runtime.session_service.delete_session(session_name)
+        if deleted:
+            await notify_session_runtime_context_changed(
+                self._runtime,
+                session_name,
+                reason="session_deleted",
+            )
+        return deleted
 
     async def _apply_bound_model_profile_for_role(self, role_name: str) -> None:
         await apply_runtime_profile_for_role(

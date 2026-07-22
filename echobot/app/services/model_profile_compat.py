@@ -5,15 +5,13 @@ from typing import Any
 
 
 async def model_profiles_payload(runtime) -> dict[str, Any]:
-    """Return the legacy model-profile payload with domain-owned bindings merged in."""
+    """Project canonical domain catalogs into the retired combined API shape."""
 
-    payload = await asyncio.to_thread(runtime.model_profile_service.list_profiles)
-    domain_profile_ids: set[str] = set()
-    for domain_payload, sections, use_active in (
+    domain_projections = (
         (
             await _legacy_payload_from_service(getattr(runtime, "llm_model_service", None)),
             ("chat",),
-            False,
+            True,
         ),
         (
             await _legacy_payload_from_service(getattr(runtime, "voice_model_service", None)),
@@ -25,22 +23,30 @@ async def model_profiles_payload(runtime) -> dict[str, Any]:
             ("live2d",),
             False,
         ),
-    ):
+    )
+    if not any(domain_payload is not None for domain_payload, _, _ in domain_projections):
+        legacy_service = getattr(runtime, "model_profile_service", None)
+        if legacy_service is None:
+            return {"active_profile_id": "", "role_bindings": {}, "profiles": []}
+        payload = await asyncio.to_thread(legacy_service.list_profiles)
+        payload["role_bindings"] = await model_profile_role_bindings(runtime, payload)
+        return payload
+
+    payload: dict[str, Any] = {
+        "active_profile_id": "",
+        "role_bindings": {},
+        "profiles": [],
+    }
+    for domain_payload, sections, use_active in domain_projections:
         if domain_payload is not None:
-            domain_profile_ids.update(_payload_profile_ids(domain_payload))
             _merge_domain_projection(
                 payload,
                 domain_payload,
                 sections=sections,
                 use_active=use_active,
             )
-    if domain_profile_ids:
-        payload["profiles"] = [
-            profile
-            for profile in payload.get("profiles", [])
-            if isinstance(profile, dict)
-            and str(profile.get("profile_id") or "") in domain_profile_ids
-        ]
+    if not payload["active_profile_id"] and payload["profiles"]:
+        payload["active_profile_id"] = str(payload["profiles"][0]["profile_id"])
     payload["role_bindings"] = await model_profile_role_bindings(runtime, payload)
     return payload
 
@@ -49,15 +55,17 @@ async def model_profile_role_bindings(
     runtime,
     payload: dict[str, Any] | None = None,
 ) -> dict[str, str]:
-    if payload is None:
-        payload = await asyncio.to_thread(runtime.model_profile_service.list_profiles)
-    bindings = dict(payload.get("role_bindings", {}))
     character_settings = getattr(runtime, "character_profile_settings_service", None)
     if character_settings is not None:
-        bindings.update(
-            await asyncio.to_thread(character_settings.model_profile_bindings),
+        return await asyncio.to_thread(
+            character_settings.model_profile_bindings,
         )
-    return bindings
+    if payload is None:
+        legacy_service = getattr(runtime, "model_profile_service", None)
+        if legacy_service is None:
+            return {}
+        payload = await asyncio.to_thread(legacy_service.list_profiles)
+    return dict(payload.get("role_bindings", {}))
 
 
 async def live2d_catalog(runtime) -> list[dict[str, object]]:
@@ -117,18 +125,6 @@ def _merge_domain_projection(
             section = domain_profile.get(section_name)
             if isinstance(section, dict):
                 target[section_name] = _compat_section(section_name, section)
-
-
-def _payload_profile_ids(payload: dict[str, Any]) -> set[str]:
-    return {
-        profile_id
-        for profile_id in (
-            str(profile.get("profile_id") or "").strip()
-            for profile in payload.get("profiles", [])
-            if isinstance(profile, dict)
-        )
-        if profile_id
-    }
 
 
 def _blank_compat_profile(profile_id: str) -> dict[str, Any]:

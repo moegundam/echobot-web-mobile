@@ -186,6 +186,15 @@ def _doctor(config: dict[str, object]) -> int:
     checks.append(("ssh", "ok" if shutil.which(str(config["ssh"])) or Path(str(config["ssh"])).exists() else "fail", str(config["ssh"])))
     checks.append(("cloudflared", "ok" if shutil.which("cloudflared") else "warn", shutil.which("cloudflared") or "not found"))
 
+    source_identity = _source_identity_snapshot(repo_root)
+    checks.append(
+        (
+            "source_identity",
+            "warn" if _identity_is_unknown(source_identity) else "ok",
+            json.dumps(source_identity, ensure_ascii=False),
+        ),
+    )
+
     local_url = _local_base_url(config)
     checks.append(("local_health", "ok" if _http_ok(f"{local_url}/api/health") else "warn", local_url))
     remote_url = _remote_base_url(config)
@@ -295,7 +304,69 @@ def _launchd_env(config: dict[str, object]) -> dict[str, str]:
     token_file = str(config.get("token_file") or "")
     if token_file:
         env["ECHOBOT_OPENWEBUI_BRIDGE_TOKEN_FILE"] = token_file
+
+    repo_root = Path(config["repo_root"])
+    source_identity = _source_identity_snapshot(repo_root)
+    env["ECHOBOT_SOURCE_IDENTITY"] = json.dumps(
+        source_identity,
+        ensure_ascii=False,
+        sort_keys=True,
+    )
     return env
+
+
+def _source_identity_snapshot(repo_root: Path) -> dict[str, object]:
+    version = _git_output(["rev-parse", "--short", "HEAD"], repo_root)
+    branch = _git_output(["rev-parse", "--abbrev-ref", "HEAD"], repo_root)
+    status = _git_output(
+        ["status", "--porcelain", "--untracked-files=normal"],
+        repo_root,
+    )
+
+    dirty: object = "unknown"
+    worktree_status = "unknown"
+    if status is not None:
+        dirty = bool(status)
+        worktree_status = "dirty" if dirty else "clean"
+
+    checkout_status = "unknown"
+    if branch is not None:
+        checkout_status = "detached" if branch == "HEAD" else "attached"
+
+    return {
+        "version": version or "unknown",
+        "branch": branch or "unknown",
+        "dirty": dirty,
+        "checkout_status": checkout_status,
+        "worktree_status": worktree_status,
+    }
+
+
+def _identity_is_unknown(identity: dict[str, object]) -> bool:
+    return (
+        identity.get("version") == "unknown"
+        or identity.get("branch") == "unknown"
+        or identity.get("checkout_status") == "unknown"
+        or identity.get("worktree_status") == "unknown"
+        or identity.get("dirty") == "unknown"
+    )
+
+
+def _git_output(command: list[str], repo_root: Path) -> str | None:
+    try:
+        completed = subprocess.run(
+            ["git", *command],
+            cwd=repo_root,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+    except OSError:
+        return None
+    if completed.returncode != 0:
+        return None
+    return completed.stdout.strip()
 
 
 def _start(config: dict[str, object], component: str, *, restart: bool) -> int:

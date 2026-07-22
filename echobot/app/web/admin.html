@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title data-i18n-key="admin.pageTitle">EchoBot</title>
-    <link rel="stylesheet" href="/web/assets/styles/shell-pages.css?v=ux-ia-1">
+    <link rel="stylesheet" href="/web/assets/styles/shell-pages.css?v=ux-ia-1&uiux=2">
 </head>
 <body class="admin-page" data-page-title-key="admin.pageTitle">
     <main id="admin-root" class="admin-root">
@@ -62,11 +62,41 @@
                 </div>
             </section>
         </section>
-        <section class="admin-health">
-            <h2 data-i18n-key="admin.healthSnapshot">Safe Health Summary</h2>
-            <pre id="admin-health-output" data-i18n-key="admin.loading">loading...</pre>
+        <section class="admin-health" aria-labelledby="admin-health-heading">
+            <div class="admin-health-header">
+                <div>
+                    <h2 id="admin-health-heading" data-i18n-key="admin.healthSnapshot">Safe Health Summary</h2>
+                    <p>
+                        <time id="admin-health-updated" data-i18n-key="admin.healthNotUpdated">Not updated yet</time>
+                    </p>
+                </div>
+                <button id="admin-health-refresh" class="admin-health-refresh" type="button" data-i18n-key="admin.healthRefresh">Refresh</button>
+            </div>
+            <p id="admin-health-output" data-i18n-key="admin.loading" class="admin-health-feedback" role="status" aria-live="polite">loading...</p>
+            <dl class="admin-health-grid">
+                <div>
+                    <dt data-i18n-key="admin.healthStatus">Service</dt>
+                    <dd id="admin-health-status">-</dd>
+                </div>
+                <div>
+                    <dt data-i18n-key="admin.healthSession">Current session</dt>
+                    <dd id="admin-health-session">-</dd>
+                </div>
+                <div>
+                    <dt data-i18n-key="admin.healthRole">Current character</dt>
+                    <dd id="admin-health-role">-</dd>
+                </div>
+                <div>
+                    <dt data-i18n-key="admin.healthChannels">Channels</dt>
+                    <dd id="admin-health-channels">-</dd>
+                </div>
+                <div>
+                    <dt data-i18n-key="admin.healthJobs">Agent jobs</dt>
+                    <dd id="admin-health-jobs">-</dd>
+                </div>
+            </dl>
         </section>
     </main>
-    <script type="module" src="/web/assets/admin-app.js?v=ux-public-1"></script>
+    <script type="module" src="/web/assets/admin-app.js?v=ux-public-1&uiux=2"></script>
 </body>
 </html>

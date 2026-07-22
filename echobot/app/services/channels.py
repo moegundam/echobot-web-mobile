@@ -15,7 +15,7 @@ from ...channels import (
 from ...channels.platforms.discord import DISCORD_AVAILABLE
 from ...channels.platforms.telegram import TELEGRAM_AVAILABLE
 from ...runtime.sessions import normalize_session_name
-from ..schemas import CHANNEL_SECRET_FIELD_NAMES
+from .channel_config import CHANNEL_SECRET_FIELD_NAMES
 
 
 ChannelReloadCallback = Callable[[ChannelsConfig], Awaitable[None]]

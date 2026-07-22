@@ -8,12 +8,57 @@ from pathlib import Path
 WEB_ROOT = Path(__file__).resolve().parents[1] / "echobot" / "app" / "web"
 
 
+def _read_i18n_sources() -> str:
+    paths = [
+        WEB_ROOT / "shell-i18n.js",
+        WEB_ROOT / "i18n" / "catalog-en.js",
+        WEB_ROOT / "i18n" / "catalog-zh-Hant.js",
+        WEB_ROOT / "i18n" / "catalog-zh-Hans.js",
+    ]
+    return "\n".join(path.read_text(encoding="utf-8") for path in paths)
+
+
+def _read_stage_sources() -> str:
+    paths = sorted((WEB_ROOT / "features" / "stage").glob("*.js"))
+    paths.append(WEB_ROOT / "stage-app.js")
+    return "\n".join(path.read_text(encoding="utf-8") for path in paths)
+
+
 class WebStaticAssetTests(unittest.TestCase):
+    def test_dynamic_empty_session_message_refreshes_with_language(self) -> None:
+        messages_js = (WEB_ROOT / "modules" / "messages.js").read_text(encoding="utf-8")
+        history_js = (
+            WEB_ROOT / "features" / "sessions" / "history.js"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn('.message-text[data-content-key]', messages_js)
+        self.assertIn("syncLocalizedMessageBody(body, options)", messages_js)
+        self.assertIn('contentKey: "console.emptySessionStart"', history_js)
+
+    def test_console_applies_operator_capabilities_without_exposing_admin_controls(self) -> None:
+        html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+        app_js = (WEB_ROOT / "app.js").read_text(encoding="utf-8")
+        access_js = (WEB_ROOT / "features" / "access.js").read_text(encoding="utf-8")
+        chat_runner_js = (
+            WEB_ROOT / "features" / "chat" / "job-runner.js"
+        ).read_text(encoding="utf-8")
+        i18n_js = _read_i18n_sources()
+
+        self.assertIn('id="access-role-badge"', html)
+        self.assertIn("data-admin-only", html)
+        self.assertIn('"console.accessRoleOperator"', i18n_js)
+        self.assertIn('"console.accessRoleAdmin"', i18n_js)
+        self.assertIn('from "./features/access.js"', app_js)
+        self.assertIn("applyAccessContext(config", app_js)
+        self.assertIn('querySelectorAll("[data-admin-only]")', access_js)
+        self.assertIn("can_use_agent", access_js)
+        self.assertIn("can_use_agent", chat_runner_js)
+
     def test_display_mode_uses_layout_mode_contract(self) -> None:
         display_mode_js = (WEB_ROOT / "shell-display-mode.js").read_text(encoding="utf-8")
         responsive_css = (WEB_ROOT / "styles" / "responsive.css").read_text(encoding="utf-8")
         shell_pages_css = (WEB_ROOT / "styles" / "shell-pages.css").read_text(encoding="utf-8")
-        i18n_js = (WEB_ROOT / "shell-i18n.js").read_text(encoding="utf-8")
+        i18n_js = _read_i18n_sources()
 
         self.assertIn("dataset.layoutMode", display_mode_js)
         self.assertIn("dataset.requestedDisplayMode", display_mode_js)
@@ -64,10 +109,12 @@ class WebStaticAssetTests(unittest.TestCase):
         route_mode_js = (WEB_ROOT / "features" / "sessions" / "route-mode.js").read_text(encoding="utf-8")
         chat_runner_js = (WEB_ROOT / "features" / "chat" / "job-runner.js").read_text(encoding="utf-8")
         roles_js = (WEB_ROOT / "features" / "roles.js").read_text(encoding="utf-8")
+        runtime_edits_js = (WEB_ROOT / "features" / "runtime-edits.js").read_text(encoding="utf-8")
+        asr_js = (WEB_ROOT / "features" / "asr.js").read_text(encoding="utf-8")
         base_css = (WEB_ROOT / "styles" / "base.css").read_text(encoding="utf-8")
         panels_css = (WEB_ROOT / "styles" / "panels.css").read_text(encoding="utf-8")
         responsive_css = (WEB_ROOT / "styles" / "responsive.css").read_text(encoding="utf-8")
-        i18n_js = (WEB_ROOT / "shell-i18n.js").read_text(encoding="utf-8")
+        i18n_js = _read_i18n_sources()
         live2d_render_js = (
             WEB_ROOT / "features" / "live2d" / "controls" / "render.js"
         ).read_text(encoding="utf-8")
@@ -88,10 +135,11 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn('id="console-nav-messenger-link"', html)
         self.assertIn('<h1 class="sr-only" data-i18n-key="console.pageTitle">', html)
         self.assertIn('id="console-nav-stage-link" class="console-nav-button" href="/stage?session_name=default" data-session-link', html)
-        self.assertIn('<a class="console-control-link" href="/admin/sessions" data-i18n-key="admin.sessions">', html)
+        self.assertIn('href="/admin/sessions"', html)
+        self.assertIn('data-admin-only hidden data-i18n-key="admin.sessions"', html)
         self.assertIn('href="/admin"', html)
         self.assertIn('data-i18n-key="console.openAdmin"', html)
-        self.assertIn('data-i18n-key="console.openSessions"', html)
+        self.assertNotIn('data-i18n-key="console.openSessions"', html)
         self.assertIn('data-i18n-key="console.shellSafetyFullAccess"', html)
         self.assertIn('data-i18n-key="console.shellSafetyWorkspaceWrite"', html)
         self.assertIn('data-i18n-key="console.shellSafetyReadOnly"', html)
@@ -114,14 +162,27 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn('id="model-profile-select"', html)
         self.assertIn('id="model-profile-link"', html)
         self.assertIn('id="session-settings-save-button"', html)
+        self.assertIn('id="session-runtime-change-status"', html)
         self.assertIn('id="stage-background-apply-button"', html)
+        self.assertIn(
+            'context.character && typeof context.character === "object"',
+            app_js,
+        )
+        self.assertIn(
+            'context.llm_model && typeof context.llm_model === "object"',
+            app_js,
+        )
+        self.assertIn(
+            'context.live2d_model && typeof context.live2d_model === "object"',
+            app_js,
+        )
         self.assertIn('data-i18n-key="console.applyToStage"', html)
         self.assertIn('data-i18n-key="console.applyBackgroundToStage"', html)
         self.assertIn('data-i18n-key="console.backgroundApplyHelp"', html)
         self.assertIn('data-language-switcher', html)
-        self.assertIn('app.js?v=background-i18n-1', html)
+        self.assertIn('app.js?v=session-runtime-p1-4', html)
         self.assertIn(
-            'features/live2d/index.js?v=background-i18n-1',
+            'features/live2d/index.js?v=session-runtime-p1-2',
             app_js,
         )
         self.assertIn(
@@ -130,7 +191,8 @@ class WebStaticAssetTests(unittest.TestCase):
                 encoding="utf-8",
             ),
         )
-        self.assertIn('shell-i18n.js?v=language-menu-1', app_js)
+        self.assertIn('shell-i18n.js?v=session-runtime-p1-3', app_js)
+
         self.assertIn('shell-display-mode.js?v=display-menu-1', app_js)
         self.assertIn('id="console-advanced-overrides-panel"', html)
         self.assertIn('data-i18n-key="console.advancedOverrides"', html)
@@ -160,18 +222,45 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn("selectConsoleModelProfile", app_js)
         self.assertIn("updateSessionRuntimeOverrides", app_js)
         self.assertIn("buildConsoleRuntimeOverride", app_js)
+        self.assertIn("role_name: roleState.currentRoleName", app_js)
+        self.assertIn("appState.config?.access?.can_use_agent", app_js)
+        self.assertIn("? sessionState.currentRouteMode", app_js)
+        self.assertIn(': "chat_only"', app_js)
+        self.assertNotIn("voice_profile_id: profileId", app_js)
+        self.assertNotIn("live2d_model_id: profileId", app_js)
         self.assertIn("currentStageBackgroundOverride", app_js)
+        self.assertIn("tts.applyRuntimeVoiceProfile", app_js)
+        self.assertIn("asr.applyRuntimeVoiceProfile", app_js)
+        self.assertIn("applyStageBackgroundRuntimeOverride", app_js)
+        self.assertIn("context && context.stage && typeof context.stage", app_js)
         self.assertIn("DOM.stageBackgroundApplyButton", app_js)
         self.assertIn('source: "console"', app_js)
         self.assertIn('"/api/stage/events"', app_js)
         self.assertNotIn("/api/model-profiles/${encodeURIComponent(nextProfileId)}/activate", app_js)
         self.assertNotIn("notifyModelProfileChanged", app_js)
+        self.assertNotIn(
+            '`/api/sessions/${encodeURIComponent(sessionName)}/role`',
+            roles_js,
+        )
+        self.assertNotIn("api.updateSessionRouteMode(", sessions_js)
         self.assertIn("runtime-overrides", (WEB_ROOT / "features" / "sessions" / "api.js").read_text(encoding="utf-8"))
+        self.assertIn("createRuntimeEditsController", app_js)
+        self.assertIn("markRuntimeDirty", roles_js)
+        self.assertIn("markRuntimeDirty", sessions_js)
+        self.assertIn("confirmDiscardChanges", sessions_js)
+        self.assertIn("beforeunload", runtime_edits_js)
+        self.assertIn("window.confirm", runtime_edits_js)
+        self.assertIn("markApplied", app_js)
+        self.assertNotIn('requestJson("/api/web/asr/provider"', asr_js)
         self.assertIn('"console.applyToStage": "Apply to Stage"', i18n_js)
         self.assertIn('"console.applyToStage": "套用到前台"', i18n_js)
         self.assertIn('"console.applyToStage": "应用到前台"', i18n_js)
         self.assertIn('"console.applyBackgroundToStage"', i18n_js)
         self.assertIn('"console.backgroundApplyHelp"', i18n_js)
+        self.assertIn('"console.runtimeChangesPending": "Not applied to Stage"', i18n_js)
+        self.assertIn('"console.runtimeChangesPending": "尚未套用到前台"', i18n_js)
+        self.assertIn('"console.runtimeChangesPending": "尚未应用到前台"', i18n_js)
+        self.assertIn('"console.runtimeChangesDiscardConfirm"', i18n_js)
         self.assertIn("getUiLanguage: () => i18n.language", app_js)
         self.assertIn("function stageBackgroundOptionLabel(background)", live2d_backgrounds_js)
         self.assertIn(
@@ -211,6 +300,8 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertNotIn('t("console.rename")', session_sidebar_js)
         self.assertNotIn('t("console.delete")', session_sidebar_js)
         self.assertIn(".session-settings-summary-block", panels_css)
+        self.assertIn("calc(100dvh - 480px)", panels_css)
+        self.assertIn("min-height: 64px", panels_css)
         self.assertIn(".session-settings-header {\n    display: grid;", panels_css)
         self.assertIn(".console-admin-handoff", panels_css)
         self.assertIn("min-height: 40px", panels_css)
@@ -230,7 +321,7 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn("grid-template-columns: minmax(0, 1fr) minmax(320px, min(44vw, 420px));", responsive_css)
         self.assertIn("html[data-layout-mode=\"tablet\"] .page-resizer", responsive_css)
         self.assertIn(
-            "max-height: min(52vh, calc(100dvh - 320px), 560px)",
+            "max-height: min(48vh, clamp(220px, calc(100dvh - 480px), 480px))",
             panels_css,
         )
         self.assertIn("min-height: 250px", panels_css)
@@ -241,6 +332,22 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn('window.location.pathname === "/console"', app_js)
         self.assertIn("document.body.dataset.shellMode = shellMode", app_js)
 
+    def test_messenger_uses_localized_file_picker(self) -> None:
+        html = (WEB_ROOT / "messenger.html").read_text(encoding="utf-8")
+        app_js = (WEB_ROOT / "messenger-app.js").read_text(encoding="utf-8")
+        i18n_js = _read_i18n_sources()
+
+        self.assertIn('id="messenger-file-button"', html)
+        self.assertIn('data-i18n-key="messenger.chooseFiles"', html)
+        self.assertIn('id="messenger-file-summary"', html)
+        self.assertIn("updateFileSelectionSummary", app_js)
+        for key in (
+            "messenger.chooseFiles",
+            "messenger.noFilesSelected",
+            "messenger.filesSelected",
+        ):
+            self.assertGreaterEqual(i18n_js.count(f'"{key}"'), 3)
+
     def test_shell_pages_keep_accessible_headings_and_responsive_text(self) -> None:
         stage_html = (WEB_ROOT / "stage.html").read_text(encoding="utf-8")
         admin_html = (WEB_ROOT / "admin.html").read_text(encoding="utf-8")
@@ -249,7 +356,7 @@ class WebStaticAssetTests(unittest.TestCase):
         live2d_html = (WEB_ROOT / "live2d.html").read_text(encoding="utf-8")
         characters_html = (WEB_ROOT / "characters.html").read_text(encoding="utf-8")
         shell_pages_css = (WEB_ROOT / "styles" / "shell-pages.css").read_text(encoding="utf-8")
-        i18n_js = (WEB_ROOT / "shell-i18n.js").read_text(encoding="utf-8")
+        i18n_js = _read_i18n_sources()
 
         self.assertIn('<h1 class="sr-only" data-i18n-key="stage.pageTitle">', stage_html)
         self.assertIn('class="admin-link-sections"', admin_html)
@@ -268,7 +375,7 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn(".character-package-summary", shell_pages_css)
         self.assertIn(".channels-root .structure-card-grid", shell_pages_css)
         self.assertIn(".channels-field-row input:not([type=\"checkbox\"])", shell_pages_css)
-        self.assertIn(".messenger-file-control input", shell_pages_css)
+        self.assertIn(".messenger-file-input", shell_pages_css)
         self.assertIn("@media (max-width: 767px)", shell_pages_css)
         self.assertIn(".channels-local-test input", shell_pages_css)
         self.assertIn("overflow-wrap: anywhere", shell_pages_css)
@@ -329,7 +436,7 @@ class WebStaticAssetTests(unittest.TestCase):
         sessions_html = (WEB_ROOT / "sessions.html").read_text(encoding="utf-8")
         sessions_js = (WEB_ROOT / "sessions-app.js").read_text(encoding="utf-8")
         structure_js = (WEB_ROOT / "structure-app.js").read_text(encoding="utf-8")
-        i18n_js = (WEB_ROOT / "shell-i18n.js").read_text(encoding="utf-8")
+        i18n_js = _read_i18n_sources()
 
         self.assertIn('WebPageRoute("/admin/sessions"', app_routes)
         self.assertIn('href="/admin/sessions"', admin_html)
@@ -361,9 +468,10 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn('"/api/character-profiles"', sessions_js)
         self.assertIn('"/api/channel-integrations"', sessions_js)
         self.assertIn('"/api/sessions/current"', sessions_js)
-        self.assertIn('/role`', sessions_js)
-        self.assertIn('/route-mode`', sessions_js)
-        self.assertIn('/channel-binding`', sessions_js)
+        self.assertIn('/configuration`', sessions_js)
+        self.assertNotIn('/role`', sessions_js)
+        self.assertNotIn('/route-mode`', sessions_js)
+        self.assertNotIn('/channel-binding`', sessions_js)
         self.assertIn("editSession", sessions_js)
         self.assertIn("saveSessionBinding", sessions_js)
         self.assertIn("renameSession", sessions_js)
@@ -406,9 +514,26 @@ class WebStaticAssetTests(unittest.TestCase):
         messenger_html = (WEB_ROOT / "messenger.html").read_text(encoding="utf-8")
         stage_html = (WEB_ROOT / "stage.html").read_text(encoding="utf-8")
         messenger_js = (WEB_ROOT / "messenger-app.js").read_text(encoding="utf-8")
-        stage_js = (WEB_ROOT / "stage-app.js").read_text(encoding="utf-8")
+        messenger_session_js = (
+            WEB_ROOT / "features" / "messenger" / "session-runtime.js"
+        ).read_text(encoding="utf-8")
+        messenger_stream_js = (
+            WEB_ROOT / "features" / "messenger" / "message-stream.js"
+        ).read_text(encoding="utf-8")
+        stage_js = _read_stage_sources()
+        stage_api_js = (WEB_ROOT / "features" / "stage" / "api.js").read_text(
+            encoding="utf-8",
+        )
         runtime_context_js = (WEB_ROOT / "session-runtime-context.js").read_text(encoding="utf-8")
-        i18n_js = (WEB_ROOT / "shell-i18n.js").read_text(encoding="utf-8")
+
+        self.assertIn("contextRequestToken", stage_js)
+        self.assertIn("source !== stageEventSource", stage_js)
+        self.assertIn("live2dReloadToken", stage_js)
+        self.assertIn("messengerRuntimeContextRequestToken", messenger_js)
+        self.assertIn("messengerBusy", messenger_js)
+        self.assertIn("messengerSendToken", messenger_js)
+        self.assertIn("new AbortController()", messenger_js)
+        i18n_js = _read_i18n_sources()
 
         self.assertIn('id="messenger-session-select"', messenger_html)
         self.assertIn('class="messenger-quick-nav"', messenger_html)
@@ -440,18 +565,18 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn('id="stage-channel-label"', stage_html)
         self.assertIn('"/api/sessions"', messenger_js)
         self.assertIn('"/api/channels/stage-targets"', messenger_js)
-        self.assertIn('"/api/channels/stage-targets"', stage_js)
+        self.assertIn('"/api/channels/stage-targets"', stage_api_js)
         self.assertIn("/runtime-context", runtime_context_js)
         self.assertIn("fetchSessionRuntimeContext", messenger_js)
         self.assertIn("activeRouteMode(sessionName)", messenger_js)
-        self.assertIn("const contextRouteMode = String(messengerRuntimeContext?.route_mode", messenger_js)
+        self.assertIn("const contextRouteMode = String(runtimeContext?.route_mode", messenger_session_js)
         self.assertNotIn("route_mode: DEFAULT_ROUTE_MODE", messenger_js)
         self.assertIn("fetchSessionRuntimeContext", stage_js)
-        self.assertIn("runtimeContextSummaryItems", messenger_js)
+        self.assertIn("runtimeContextSummaryItems", messenger_session_js)
         self.assertIn("runtimeContextValue", stage_js)
         self.assertIn("STAGE_CONTEXT_REFRESH_INTERVAL_MS", stage_js)
-        self.assertIn("stageContextLive2DConfig", stage_js)
-        self.assertIn("reloadLive2DFromContext", stage_js)
+        self.assertIn("getContext: () => runtimeController?.getContext()", stage_js)
+        self.assertIn("reloadFromContext", stage_js)
         self.assertIn("applyStageBackgroundFromContext", stage_js)
         self.assertIn("context.stage", stage_js)
         self.assertIn("handleStageWheelZoom", stage_js)
@@ -468,12 +593,16 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn("dataset.live2dOffsetX", stage_js)
         self.assertIn("dataset.live2dOffsetY", stage_js)
         self.assertIn("STAGE_LIVE2D_VIEW_STORAGE_PREFIX", stage_js)
+        self.assertIn("currentPlaybackToken !== playbackToken", stage_js)
+        self.assertIn("audioSourceNode !== sourceNode", stage_js)
         self.assertIn("canvasHost.dataset.live2dSelectionKey", stage_js)
         self.assertNotIn("normalizeLive2DConfig(config && config.live2d)", stage_js)
         self.assertIn("loadSessions", messenger_js)
         self.assertIn("uploadSelectedFiles", messenger_js)
         self.assertIn("uploadMessengerAttachment", messenger_js)
         self.assertIn("pendingAttachments", messenger_js)
+        self.assertIn("selectedSessionName", messenger_js)
+        self.assertIn("AbortController", messenger_js)
         self.assertIn("promptWithUrl", messenger_js)
         self.assertIn("createSpeechRecognition", messenger_js)
         self.assertIn("loadStageTargets", stage_js)
@@ -484,7 +613,8 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn("loadStageContext", stage_js)
         self.assertIn("renderStageContext", stage_js)
         self.assertIn('const FALLBACK_ROUTE_MODE = "chat_only";', messenger_js)
-        self.assertIn("response_language: i18n.language", messenger_js)
+        self.assertIn("...getResponseLanguagePayload()", messenger_stream_js)
+        self.assertIn("return { response_language: i18n.language };", messenger_js)
         self.assertNotIn('const DEFAULT_ROUTE_MODE = "chat_only";', messenger_js)
         self.assertIn("extractStageDirectives", messenger_js)
         self.assertIn("stageDirectivePattern", messenger_js)
@@ -505,7 +635,7 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn("stageTtsRequestBody(spokenText)", stage_js)
         self.assertIn("body.provider = provider", stage_js)
         self.assertIn("body.voice = voice", stage_js)
-        self.assertIn("applyStageVisualState(payload)", stage_js)
+        self.assertIn("applyVisualState(payload)", stage_js)
         self.assertIn("applyStageExpression", stage_js)
         self.assertIn("playStageMotion", stage_js)
         self.assertIn("subtitleElement.textContent", stage_js)
@@ -530,7 +660,7 @@ class WebStaticAssetTests(unittest.TestCase):
         )
         final_handler = re.search(
             r'source\.addEventListener\("assistant_final".*?'
-            r'await playTts\(payload\.text\);.*?\n    \}\);',
+            r'await playTts\(payload\.text\);.*?\n\s*\}\);',
             stage_js,
             flags=re.S,
         )
@@ -538,7 +668,8 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIsNotNone(final_handler)
         self.assertNotIn("playTts", delta_handler.group(0))
         self.assertIn("playTts(payload.text)", final_handler.group(0))
-        self.assertIn("refreshStageContext", final_handler.group(0))
+        self.assertNotIn("refreshStageContext", final_handler.group(0))
+        self.assertIn('source.addEventListener("runtime_context_changed"', stage_js)
 
         for key in (
             "stage.sessionTarget",
@@ -596,8 +727,8 @@ class WebStaticAssetTests(unittest.TestCase):
             self.assertGreaterEqual(i18n_js.count(f'"{key}"'), 3)
 
     def test_stage_live2d_falls_back_before_noisy_webgl_initialization(self) -> None:
-        stage_js = (WEB_ROOT / "stage-app.js").read_text(encoding="utf-8")
-        i18n_js = (WEB_ROOT / "shell-i18n.js").read_text(encoding="utf-8")
+        stage_js = _read_stage_sources()
+        i18n_js = _read_i18n_sources()
 
         self.assertIn("canUsePixiLive2D()", stage_js)
         self.assertIn("canCreateWebGLShaderProgram()", stage_js)
@@ -612,7 +743,7 @@ class WebStaticAssetTests(unittest.TestCase):
         admin_html = (WEB_ROOT / "admin.html").read_text(encoding="utf-8")
         characters_html = (WEB_ROOT / "characters.html").read_text(encoding="utf-8")
         characters_js = (WEB_ROOT / "characters-app.js").read_text(encoding="utf-8")
-        i18n_js = (WEB_ROOT / "shell-i18n.js").read_text(encoding="utf-8")
+        i18n_js = _read_i18n_sources()
 
         self.assertIn('WebPageRoute("/admin/characters"', app_routes)
         self.assertIn('href="/admin/characters"', admin_html)
@@ -677,7 +808,7 @@ class WebStaticAssetTests(unittest.TestCase):
         deployment_js = (WEB_ROOT / "deployment-app.js").read_text(encoding="utf-8")
         admin_js = (WEB_ROOT / "admin-app.js").read_text(encoding="utf-8")
         openwebui_js = (WEB_ROOT / "openwebui-app.js").read_text(encoding="utf-8")
-        i18n_js = (WEB_ROOT / "shell-i18n.js").read_text(encoding="utf-8")
+        i18n_js = _read_i18n_sources()
 
         self.assertIn('WebPageRoute("/admin/voice-models"', app_routes)
         self.assertIn('WebPageRoute("/admin/live2d"', app_routes)
@@ -789,7 +920,7 @@ class WebStaticAssetTests(unittest.TestCase):
 
     def test_channels_page_has_edit_and_smoke_controls(self) -> None:
         channels_js = (WEB_ROOT / "channels-app.js").read_text(encoding="utf-8")
-        i18n_js = (WEB_ROOT / "shell-i18n.js").read_text(encoding="utf-8")
+        i18n_js = _read_i18n_sources()
 
         self.assertIn('buildEditableChannelCard', channels_js)
         self.assertIn('document.createElement("details")', channels_js)
@@ -824,7 +955,7 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn('"channels.smokeTest"', i18n_js)
 
     def test_channels_i18n_keys_cover_multiple_languages(self) -> None:
-        i18n_js = (WEB_ROOT / "shell-i18n.js").read_text(encoding="utf-8")
+        i18n_js = _read_i18n_sources()
         required_keys = [
             "channels.fieldEnabled",
             "channels.fieldAllowFrom",

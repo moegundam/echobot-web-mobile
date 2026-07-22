@@ -4,6 +4,7 @@ import {
     FILE_ATTACHMENT_CONTENT_BLOCK_TYPE,
     IMAGE_URL_CONTENT_BLOCK_TYPE,
     TEXT_CONTENT_BLOCK_TYPE,
+    messageContentToText,
     normalizeMessageContent,
 } from "./content.js";
 import {
@@ -15,7 +16,11 @@ import {
     configureMarkdownI18n,
 } from "./markdown.js?v=site-public-6";
 
+const MESSAGE_BOTTOM_THRESHOLD_PX = 48;
+const MESSAGES_FOLLOW_BOTTOM_KEY = Symbol.for("echobot.messages.followBottom");
+
 let pendingScrollFrameId = 0;
+let pendingScrollMode = "none";
 let messageT = (key) => key;
 
 export function configureMessageI18n(options = {}) {
@@ -40,6 +45,15 @@ export function refreshMessagesLocalizedText() {
         meta.textContent = messageT(
             meta.dataset.labelKey,
             parseJsonDataset(meta.dataset.labelParams),
+        );
+    });
+    DOM.messages.querySelectorAll(".message-text[data-content-key]").forEach((body) => {
+        renderPlainTextBody(
+            body,
+            messageT(
+                body.dataset.contentKey,
+                parseJsonDataset(body.dataset.contentParams),
+            ),
         );
     });
     DOM.messages.querySelectorAll("[data-image-preview='true']").forEach((button) => {
@@ -78,20 +92,40 @@ export function addMessage(kind, content, label, options = {}) {
     const body = document.createElement("div");
     body.className = "message-text";
     renderMessageBody(body, kind, content, options);
+    syncLocalizedMessageBody(body, options);
 
     container.appendChild(body);
     syncMessageMeta(container, label, options);
     DOM.messages.appendChild(container);
     scheduleMathTypesetting(body);
-    scheduleMessagesScrollToBottom();
+    scheduleMessagesScrollToBottom({ force: true });
     return messageId;
 }
 
-export function addSystemMessage(text) {
+export function addSystemMessage(text, options = {}) {
     addMessage("system", text, messageT("console.systemLabel"), {
         labelKey: "console.systemLabel",
         ariaLabelKey: "console.systemLabel",
+        ...options,
     });
+}
+
+export function announceAssistantMessage(content) {
+    if (!DOM.assistantAnnouncement) {
+        return;
+    }
+
+    const text = messageContentToText(content, { includeImageMarker: false }).trim();
+    if (!text) {
+        return;
+    }
+
+    DOM.assistantAnnouncement.textContent = "";
+    window.setTimeout(() => {
+        if (DOM.assistantAnnouncement) {
+            DOM.assistantAnnouncement.textContent = text;
+        }
+    }, 0);
 }
 
 export function updateMessage(messageId, content, label, options = {}) {
@@ -100,6 +134,8 @@ export function updateMessage(messageId, content, label, options = {}) {
         return;
     }
 
+    const shouldFollowBottom = shouldFollowMessagesBottom();
+    setMessagesFollowBottom(shouldFollowBottom);
     const body = container.querySelector(".message-text");
     const kind = container.dataset.messageKind || "assistant";
     const ariaLabelKey = options.ariaLabelKey || defaultMessageAriaLabelKey(kind);
@@ -110,9 +146,10 @@ export function updateMessage(messageId, content, label, options = {}) {
     syncMessageMeta(container, label, options);
     if (body) {
         renderMessageBody(body, kind, content, options);
+        syncLocalizedMessageBody(body, options);
         scheduleMathTypesetting(body);
     }
-    scheduleMessagesScrollToBottom();
+    scheduleMessagesScrollToBottom({ onlyIfFollowing: shouldFollowBottom });
 }
 
 export function clearMessages() {
@@ -121,13 +158,31 @@ export function clearMessages() {
     messageState.counter = 0;
 }
 
-export function scheduleMessagesScrollToBottom() {
-    if (!DOM.messages || pendingScrollFrameId) {
+export function scheduleMessagesScrollToBottom(options = {}) {
+    if (!DOM.messages) {
+        return;
+    }
+
+    const forceScroll = options.force === true;
+    const shouldFollowBottom = options.onlyIfFollowing ?? getMessagesFollowBottom();
+    const requestedMode = forceScroll ? "force" : "follow";
+    if (!forceScroll && !shouldFollowBottom) {
+        return;
+    }
+    if (requestedMode === "force" || pendingScrollMode === "none") {
+        pendingScrollMode = requestedMode;
+    }
+    if (pendingScrollFrameId) {
         return;
     }
 
     pendingScrollFrameId = window.requestAnimationFrame(() => {
+        const scrollMode = pendingScrollMode;
         pendingScrollFrameId = 0;
+        pendingScrollMode = "none";
+        if (scrollMode === "follow" && !getMessagesFollowBottom()) {
+            return;
+        }
         scrollMessagesToBottom();
     });
 }
@@ -144,6 +199,8 @@ export function removeMessage(messageId) {
 export function initializeMessageInteractions() {
     if (DOM.messages) {
         DOM.messages.addEventListener("click", handleMessageAreaClick);
+        setMessagesFollowBottom(isMessagesNearBottom());
+        DOM.messages.addEventListener("scroll", updateMessagesFollowState);
     }
     if (DOM.messageImageDialogClose) {
         DOM.messageImageDialogClose.addEventListener("click", closeMessageImagePreview);
@@ -195,6 +252,45 @@ function scrollMessagesToBottom() {
     }
 
     DOM.messages.scrollTop = DOM.messages.scrollHeight;
+    setMessagesFollowBottom(true);
+}
+
+function getMessagesFollowBottom() {
+    if (!DOM.messages) {
+        return false;
+    }
+    const storedValue = DOM.messages[MESSAGES_FOLLOW_BOTTOM_KEY];
+    return typeof storedValue === "boolean" ? storedValue : isMessagesNearBottom();
+}
+
+function setMessagesFollowBottom(shouldFollow) {
+    if (DOM.messages) {
+        DOM.messages[MESSAGES_FOLLOW_BOTTOM_KEY] = Boolean(shouldFollow);
+    }
+}
+
+function isMessagesNearBottom() {
+    if (!DOM.messages) {
+        return false;
+    }
+
+    const distanceFromBottom = (
+        DOM.messages.scrollHeight
+        - DOM.messages.scrollTop
+        - DOM.messages.clientHeight
+    );
+    return distanceFromBottom <= MESSAGE_BOTTOM_THRESHOLD_PX;
+}
+
+function shouldFollowMessagesBottom() {
+    if (pendingScrollMode === "follow") {
+        return getMessagesFollowBottom();
+    }
+    return isMessagesNearBottom();
+}
+
+function updateMessagesFollowState() {
+    setMessagesFollowBottom(isMessagesNearBottom());
 }
 
 function resolveMessageAriaLabel(kind, label, options = {}) {
@@ -229,6 +325,19 @@ function parseJsonDataset(value) {
     } catch (_error) {
         return {};
     }
+}
+
+function syncLocalizedMessageBody(body, options = {}) {
+    const contentKey = String(options.contentKey || "").trim();
+    if (!contentKey) {
+        delete body.dataset.contentKey;
+        delete body.dataset.contentParams;
+        return;
+    }
+
+    body.dataset.contentKey = contentKey;
+    body.dataset.contentParams = JSON.stringify(options.contentParams || {});
+    renderPlainTextBody(body, messageT(contentKey, options.contentParams || {}));
 }
 
 function renderMessageBody(element, kind, content, options = {}) {

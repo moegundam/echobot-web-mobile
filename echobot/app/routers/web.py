@@ -6,6 +6,7 @@ from dataclasses import asdict
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, Response
 
+from ..auth import AccessRole
 from ..schemas import (
     ASRTranscriptionResponse,
     TTSRequest,
@@ -16,6 +17,7 @@ from ..schemas import (
     UpdateWebLive2DHotkeyRequest,
     UpdateWebRuntimeConfigRequest,
     WebASRConfigModel,
+    WebAccessContextModel,
     WebLive2DAnnotationResponse,
     WebConfigResponse,
     WebLive2DConfigModel,
@@ -24,17 +26,40 @@ from ..schemas import (
     WebStageConfigModel,
 )
 from ..services.web_console import Live2DUploadFile
+from ..services.runtime_context_events import notify_all_runtime_contexts_changed
+from ..services.web_console.live2d.constants import (
+    MAX_LIVE2D_UPLOAD_FILES,
+    MAX_LIVE2D_UPLOAD_TOTAL_BYTES,
+)
+from ..services.web_console.stage import MAX_STAGE_BACKGROUND_BYTES
+from ..services.access_projection import project_web_config_payload
 from ..services.model_profile_compat import model_profiles_payload
-from ..state import get_app_runtime, get_app_runtime_for_websocket, require_admin_user
+from ..state import (
+    get_app_runtime,
+    get_app_runtime_for_websocket,
+    get_request_access_role,
+    require_admin_user,
+)
 from ...runtime.settings import RuntimeSettingsManager
 
 
 router = APIRouter(tags=["web"])
+MAX_ASR_REQUEST_BYTES = 16 * 1024 * 1024
+MAX_ASR_WEBSOCKET_FRAME_BYTES = 1024 * 1024
+UPLOAD_READ_CHUNK_BYTES = 64 * 1024
+
+
+@router.get("/access", response_model=WebAccessContextModel)
+async def get_access_context(
+    access_role: AccessRole = Depends(get_request_access_role),
+) -> WebAccessContextModel:
+    return _web_access_context(access_role)
 
 
 @router.get("/web/config", response_model=WebConfigResponse)
 async def get_web_config(
     runtime=Depends(get_app_runtime),
+    access_role: AccessRole = Depends(get_request_access_role),
 ) -> WebConfigResponse:
     if runtime.session_service is None or runtime.context is None:
         raise HTTPException(status_code=503, detail="EchoBot runtime is not ready")
@@ -56,9 +81,19 @@ async def get_web_config(
         runtime_config=runtime_snapshot,
     )
     payload["model_profile_scope"] = _model_profile_scope(runtime)
+    payload["access"] = _web_access_context(access_role).model_dump()
     if runtime.model_profile_service is not None:
         payload["model_profiles"] = await model_profiles_payload(runtime)
-    return WebConfigResponse(**payload)
+    return WebConfigResponse(**project_web_config_payload(payload, access_role))
+
+
+def _web_access_context(access_role: AccessRole) -> WebAccessContextModel:
+    return WebAccessContextModel(
+        role=access_role.value,
+        can_access_console=access_role in {AccessRole.ADMIN, AccessRole.OPERATOR},
+        can_manage_admin=access_role is AccessRole.ADMIN,
+        can_use_agent=access_role is AccessRole.ADMIN,
+    )
 
 
 @router.patch("/web/runtime", response_model=WebRuntimeConfigModel)
@@ -141,9 +176,14 @@ async def get_stage_background_asset(
 async def upload_stage_background(
     image: UploadFile = File(...),
     runtime=Depends(get_app_runtime),
+    _admin_user: str = Depends(require_admin_user),
 ) -> WebStageConfigModel:
     try:
-        file_bytes = await image.read()
+        file_bytes = await _read_upload_file_limited(
+            image,
+            max_bytes=MAX_STAGE_BACKGROUND_BYTES,
+            label="Background file",
+        )
         payload = await runtime.web_console_service.save_stage_background(
             filename=image.filename or "",
             content_type=image.content_type,
@@ -160,17 +200,30 @@ async def upload_live2d_directory(
     files: list[UploadFile] = File(...),
     relative_paths: list[str] = Form(...),
     runtime=Depends(get_app_runtime),
+    _admin_user: str = Depends(require_admin_user),
 ) -> WebLive2DConfigModel:
     try:
         if len(files) != len(relative_paths):
             raise ValueError("Uploaded Live2D files and paths do not match")
+        if len(files) > MAX_LIVE2D_UPLOAD_FILES:
+            raise HTTPException(
+                status_code=413,
+                detail="Too many files in Live2D folder",
+            )
 
         uploaded_files: list[Live2DUploadFile] = []
+        total_bytes = 0
         for upload, relative_path in zip(files, relative_paths, strict=True):
+            file_bytes = await _read_upload_file_limited(
+                upload,
+                max_bytes=MAX_LIVE2D_UPLOAD_TOTAL_BYTES - total_bytes,
+                label="Live2D folder",
+            )
+            total_bytes += len(file_bytes)
             uploaded_files.append(
                 Live2DUploadFile(
                     relative_path=relative_path,
-                    file_bytes=await upload.read(),
+                    file_bytes=file_bytes,
                 )
             )
 
@@ -180,6 +233,10 @@ async def upload_live2d_directory(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    await notify_all_runtime_contexts_changed(
+        runtime,
+        reason="live2d_asset_catalog_updated",
+    )
     return WebLive2DConfigModel(**payload)
 
 
@@ -187,6 +244,7 @@ async def upload_live2d_directory(
 async def update_live2d_annotation(
     request: UpdateWebLive2DAnnotationRequest,
     runtime=Depends(get_app_runtime),
+    _admin_user: str = Depends(require_admin_user),
 ) -> WebLive2DAnnotationResponse:
     try:
         payload = await runtime.web_console_service.save_live2d_annotation(
@@ -198,6 +256,10 @@ async def update_live2d_annotation(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    await notify_all_runtime_contexts_changed(
+        runtime,
+        reason="live2d_asset_catalog_updated",
+    )
     return WebLive2DAnnotationResponse(**payload)
 
 
@@ -205,6 +267,7 @@ async def update_live2d_annotation(
 async def update_live2d_hotkey(
     request: UpdateWebLive2DHotkeyRequest,
     runtime=Depends(get_app_runtime),
+    _admin_user: str = Depends(require_admin_user),
 ) -> WebLive2DHotkeyResponse:
     try:
         payload = await runtime.web_console_service.save_live2d_hotkey(
@@ -216,6 +279,10 @@ async def update_live2d_hotkey(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    await notify_all_runtime_contexts_changed(
+        runtime,
+        reason="live2d_asset_catalog_updated",
+    )
     return WebLive2DHotkeyResponse(**payload)
 
 
@@ -290,6 +357,7 @@ async def get_asr_status(runtime=Depends(get_app_runtime)) -> WebASRConfigModel:
 async def update_asr_provider(
     request: UpdateWebASRProviderRequest,
     runtime=Depends(get_app_runtime),
+    _admin_user: str = Depends(require_admin_user),
 ) -> WebASRConfigModel:
     try:
         payload = await runtime.web_console_service.set_selected_asr_provider(
@@ -308,7 +376,11 @@ async def transcribe_audio(
     request: Request,
     runtime=Depends(get_app_runtime),
 ) -> ASRTranscriptionResponse:
-    audio_bytes = await request.body()
+    audio_bytes = await _read_request_body_limited(
+        request,
+        max_bytes=MAX_ASR_REQUEST_BYTES,
+        label="ASR audio body",
+    )
     if not audio_bytes:
         raise HTTPException(status_code=400, detail="ASR audio body must not be empty")
 
@@ -360,6 +432,12 @@ async def asr_websocket(websocket: WebSocket) -> None:
 
             payload_bytes = message.get("bytes")
             if payload_bytes is not None:
+                if len(payload_bytes) > MAX_ASR_WEBSOCKET_FRAME_BYTES:
+                    await websocket.close(
+                        code=1009,
+                        reason="ASR audio frame is too large",
+                    )
+                    return
                 events = await session.accept_audio_bytes(payload_bytes)
                 for event in events:
                     await websocket.send_json(event)
@@ -407,3 +485,45 @@ def _model_profile_scope(runtime) -> str:
         root = runtime.context.storage_root or runtime.context.workspace / ".echobot"
         return root.name or "default"
     return "default"
+
+
+async def _read_upload_file_limited(
+    upload: UploadFile,
+    *,
+    max_bytes: int,
+    label: str,
+) -> bytes:
+    if max_bytes < 1:
+        raise HTTPException(status_code=413, detail=f"{label} is too large")
+
+    payload = bytearray()
+    while True:
+        chunk = await upload.read(min(UPLOAD_READ_CHUNK_BYTES, max_bytes + 1))
+        if not chunk:
+            break
+        if len(payload) + len(chunk) > max_bytes:
+            raise HTTPException(status_code=413, detail=f"{label} is too large")
+        payload.extend(chunk)
+    return bytes(payload)
+
+
+async def _read_request_body_limited(
+    request: Request,
+    *,
+    max_bytes: int,
+    label: str,
+) -> bytes:
+    content_length = request.headers.get("content-length", "").strip()
+    if content_length:
+        try:
+            if int(content_length) > max_bytes:
+                raise HTTPException(status_code=413, detail=f"{label} is too large")
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Content-Length is invalid") from None
+
+    payload = bytearray()
+    async for chunk in request.stream():
+        if len(payload) + len(chunk) > max_bytes:
+            raise HTTPException(status_code=413, detail=f"{label} is too large")
+        payload.extend(chunk)
+    return bytes(payload)

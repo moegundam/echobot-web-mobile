@@ -145,7 +145,28 @@ class RedisStreamsStageEventBroker:
         self._client = client
         self._client_factory = client_factory
         self._redis_url = str(redis_url or "").strip()
+        self._owns_client = bool(self._redis_url or self._client_factory is not None)
+        self._closed = False
         self._client_lock = asyncio.Lock()
+
+    async def close(self) -> None:
+        """Close a URL-created Redis client; injected clients remain caller-owned."""
+        async with self._client_lock:
+            if self._closed:
+                return
+            self._closed = True
+            client = self._client
+            if self._owns_client:
+                self._client = None
+
+        if not self._owns_client or client is None:
+            return
+        close = getattr(client, "aclose", None) or getattr(client, "close", None)
+        if not callable(close):
+            return
+        result = close()
+        if inspect.isawaitable(result):
+            await result
 
     async def publish(
         self,
@@ -197,10 +218,14 @@ class RedisStreamsStageEventBroker:
         )
 
     async def _get_client(self) -> Any:
+        if self._closed:
+            raise RuntimeError("Redis Stage event broker is closed")
         if self._client is not None:
             return self._client
 
         async with self._client_lock:
+            if self._closed:
+                raise RuntimeError("Redis Stage event broker is closed")
             if self._client is not None:
                 return self._client
 

@@ -1449,6 +1449,10 @@ qq-botpy==1.2.1 \
     --hash=sha256:18b215690dfed88f711322136ec54b6760040b9b1608eb5db7a44e00f59e4f01 \
     --hash=sha256:442172a0557a9b43d2777d1c5e072090a9d1a54d588d1c5da8d3efc014f4887f
     # via -r requirements.in
+redis==8.0.1 \
+    --hash=sha256:47daa35a058c23468d6437f17a8c76882cb316b838ef763036af99b96cedd743 \
+    --hash=sha256:afc5a7a2f5a084f5b1880dec548dd45be17db7e43c82a30d84f952aefb05cfb0
+    # via -r requirements.in
 requests==2.34.2 \
     --hash=sha256:2a0d60c172f83ac6ab31e4554906c0f3b3588d37b5cb939b1c061f4907e278e0 \
     --hash=sha256:f288924cae4e29463698d6d60bc6a4da69c89185ad1e0bcc4104f584e960b9ed

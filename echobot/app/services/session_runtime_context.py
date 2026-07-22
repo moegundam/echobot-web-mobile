@@ -3,8 +3,12 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from ...orchestration import role_name_from_metadata, route_mode_from_metadata
-from ..schemas import CharacterProfileModel, SessionRuntimeContextResponse
+from ...orchestration import (
+    normalize_route_mode,
+    role_name_from_metadata,
+    route_mode_from_metadata,
+)
+from ..schemas import SessionCharacterRuntimeModel, SessionRuntimeContextResponse
 from ..session_metadata import channel_integration_id_from_metadata
 from .channel_owner_scope import channel_owner_scope
 from .model_profile_compat import (
@@ -18,9 +22,9 @@ from .runtime_profile_composer import (
     runtime_profile_with_overrides,
     voice_runtime_profile,
 )
+from .runtime_context_cache import get_runtime_context_cache
 from .session_catalog import (
     channel_integration_by_id,
-    channel_integration_for_session,
     effective_profile_id,
     live2d_model_from_profile,
     llm_model_from_profile,
@@ -47,17 +51,34 @@ async def build_session_runtime_context(
     runtime,
     session_name: str,
 ) -> SessionRuntimeContextResponse:
+    cache = get_runtime_context_cache(runtime)
+    return await cache.get_or_build(
+        session_name,
+        lambda: _build_uncached_session_runtime_context(runtime, session_name),
+    )
+
+
+async def _build_uncached_session_runtime_context(
+    runtime,
+    session_name: str,
+) -> SessionRuntimeContextResponse:
     ensure_runtime_services_ready(runtime)
     try:
         session = await runtime.session_service.load_session(session_name)
     except ValueError as exc:
         raise SessionRuntimeContextError(404, str(exc)) from exc
 
-    role_name = role_name_from_metadata(session.metadata)
-    route_mode = route_mode_from_metadata(session.metadata)
     profile_payload = await runtime_profile_payload(runtime)
     profiles = profile_lookup(profile_payload)
     live_override = await session_runtime_override(runtime, session.name)
+    role_name = str(
+        live_override.get("role_name")
+        or role_name_from_metadata(session.metadata),
+    )
+    route_mode = normalize_route_mode(
+        live_override.get("route_mode")
+        or route_mode_from_metadata(session.metadata),
+    )
     bound_profile_id = await model_profile_id_for_role(runtime, role_name)
     base_profile_id = str(
         live_override.get("model_profile_id")
@@ -111,7 +132,7 @@ async def build_session_runtime_context(
     channel = channel_integration_by_id(
         integrations,
         channel_integration_id_from_metadata(session.metadata),
-    ) or channel_integration_for_session(integrations, session.name)
+    )
 
     voice_model = voice_profile_from_profile(voice_profile) if voice_profile else None
     live2d_model = (
@@ -193,7 +214,10 @@ async def apply_runtime_override_if_current_session(
         return
 
     profile_payload = await runtime_profile_payload(runtime)
-    role_name = role_name_from_metadata(current_session.metadata)
+    role_name = str(
+        live_override.get("role_name")
+        or role_name_from_metadata(current_session.metadata),
+    )
     base_profile_id = str(
         live_override.get("model_profile_id")
         or effective_profile_id(profile_payload, role_name),
@@ -220,7 +244,7 @@ async def _character_for_role(
     profile_payload: dict[str, Any],
     *,
     live_override: dict[str, Any] | None = None,
-) -> CharacterProfileModel | None:
+) -> SessionCharacterRuntimeModel | None:
     if (
         runtime.role_service is None
         or runtime.character_profile_settings_service is None
@@ -271,12 +295,8 @@ async def _character_for_role(
         runtime.character_profile_settings_service.emotion_maps_for_role,
         role.name,
     )
-    return CharacterProfileModel(
+    return SessionCharacterRuntimeModel(
         name=role.name,
-        editable=role.name != "default",
-        deletable=role.name != "default",
-        source_path=str(role.source_path) if role.source_path is not None else None,
-        prompt=role.prompt,
         model_profile_id=bound_profile_id,
         llm_model_id=llm_model_id,
         voice_profile_id=voice_profile_id,
@@ -306,6 +326,8 @@ async def _runtime_llm_profile(
     try:
         return await llm_runtime_profile(runtime, normalized_id)
     except ValueError:
+        if getattr(runtime, "llm_model_service", None) is not None:
+            return {}
         return fallback_profile
 
 
@@ -320,6 +342,8 @@ async def _runtime_voice_profile(
     try:
         return await voice_runtime_profile(runtime, normalized_id)
     except ValueError:
+        if getattr(runtime, "voice_model_service", None) is not None:
+            return {}
         return fallback_profile
 
 
@@ -334,29 +358,38 @@ async def _runtime_live2d_profile(
     try:
         return await live2d_runtime_profile(runtime, normalized_id)
     except ValueError:
+        if getattr(runtime, "live2d_model_service", None) is not None:
+            return {}
         return fallback_profile
 
 
-def _apply_voice_override(voice_model, live_override: dict[str, Any]):
+def _apply_voice_override(
+    voice_model: dict[str, Any] | None,
+    live_override: dict[str, Any],
+) -> dict[str, Any] | None:
     if voice_model is None:
         return voice_model
-    updates: dict[str, Any] = {}
+    result = dict(voice_model)
     tts_override = _section(live_override, "tts")
     if tts_override:
-        updates["tts"] = voice_model.tts.model_copy(update=tts_override)
+        result["tts"] = {
+            **_section(voice_model, "tts"),
+            **tts_override,
+        }
     asr_override = _section(live_override, "asr")
     if asr_override:
-        updates["stt"] = voice_model.stt.model_copy(update=asr_override)
-    if not updates:
-        return voice_model
-    return voice_model.model_copy(update=updates)
+        result["stt"] = {
+            **_section(voice_model, "stt"),
+            **asr_override,
+        }
+    return result
 
 
 def _apply_live2d_override(
-    live2d_model,
+    live2d_model: dict[str, Any] | None,
     live_override: dict[str, Any],
     catalog_by_key: dict[str, dict[str, Any]],
-):
+) -> dict[str, Any] | None:
     if live2d_model is None:
         return live2d_model
     live2d_override = _section(live_override, "live2d")
@@ -364,14 +397,13 @@ def _apply_live2d_override(
     if not selection_key:
         return live2d_model
     catalog_item = catalog_by_key.get(selection_key, {})
-    return live2d_model.model_copy(
-        update={
-            "selection_key": selection_key,
-            "available": bool(catalog_item),
-            "model_name": str(catalog_item.get("model_name") or ""),
-            "model_url": str(catalog_item.get("model_url") or ""),
-        },
-    )
+    return {
+        **live2d_model,
+        "selection_key": selection_key,
+        "available": bool(catalog_item),
+        "model_name": str(catalog_item.get("model_name") or ""),
+        "model_url": str(catalog_item.get("model_url") or ""),
+    }
 
 
 def _stage_context_from_override(live_override: dict[str, Any]) -> dict[str, Any] | None:

@@ -7,7 +7,7 @@ from typing import Any
 from urllib import error, request
 from urllib.parse import urlparse
 
-from ...speech_assets import validate_http_url
+from ...network.http import validate_http_url
 
 try:
     import openai

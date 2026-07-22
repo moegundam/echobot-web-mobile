@@ -9,14 +9,21 @@ from ..schemas import (
     RoleSummaryModel,
     UpdateRoleRequest,
 )
-from ..state import get_app_runtime, require_admin_user
+from ..services.runtime_context_events import (
+    notify_all_runtime_contexts_changed,
+    notify_roles_runtime_context_changed,
+)
+from ..state import get_app_runtime, require_admin_user, require_operator_user
 
 
 router = APIRouter(tags=["roles"])
 
 
 @router.get("/roles", response_model=list[RoleSummaryModel])
-async def list_roles(runtime=Depends(get_app_runtime)) -> list[RoleSummaryModel]:
+async def list_roles(
+    runtime=Depends(get_app_runtime),
+    _operator_user: str = Depends(require_operator_user),
+) -> list[RoleSummaryModel]:
     return [
         _summary_model_from_role_card(card)
         for card in await runtime.role_service.list_roles()
@@ -27,6 +34,7 @@ async def list_roles(runtime=Depends(get_app_runtime)) -> list[RoleSummaryModel]
 async def get_role(
     role_name: str,
     runtime=Depends(get_app_runtime),
+    _operator_user: str = Depends(require_operator_user),
 ) -> RoleDetailModel:
     try:
         card = await runtime.role_service.get_role(role_name)
@@ -65,6 +73,11 @@ async def update_role(
         )
     except ValueError as exc:
         raise _role_http_exception(exc) from exc
+    await notify_roles_runtime_context_changed(
+        runtime,
+        {card.name},
+        reason="character_prompt_updated",
+    )
     return _detail_model_from_role_card(card)
 
 
@@ -78,6 +91,10 @@ async def delete_role(
         deleted_name = await runtime.role_service.delete_role(role_name)
     except ValueError as exc:
         raise _role_http_exception(exc) from exc
+    await notify_all_runtime_contexts_changed(
+        runtime,
+        reason="character_deleted",
+    )
     return {
         "deleted": True,
         "name": deleted_name,

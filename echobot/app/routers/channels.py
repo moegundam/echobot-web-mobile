@@ -9,9 +9,10 @@ from pydantic import BaseModel, Field, field_validator
 from ...channels import InboundMessage, get_channel_definition
 from ...channels.types import ChannelAddress
 from ...runtime.sessions import normalize_session_name
-from ..schemas import channel_config_payload
+from ..services.channel_config import channel_config_payload
 from ..services.channel_owner_scope import channel_owner_scope
 from ..services.channels import ChannelActivationError
+from ..services.runtime_context_events import notify_runtime_tree_contexts_changed
 from ..state import get_app_runtime, require_admin_user
 
 
@@ -45,13 +46,19 @@ class LocalChannelTestMessageRequest(BaseModel):
 
 
 @router.get("/channels/definitions")
-async def get_channel_definitions(runtime=Depends(get_app_runtime)) -> list[dict[str, Any]]:
+async def get_channel_definitions(
+    runtime=Depends(get_app_runtime),
+    _admin_user: str = Depends(require_admin_user),
+) -> list[dict[str, Any]]:
     scope = _channel_owner_scope_or_503(runtime)
     return scope.service.get_definitions()
 
 
 @router.get("/channels/config")
-async def get_channel_config(runtime=Depends(get_app_runtime)) -> dict[str, Any]:
+async def get_channel_config(
+    runtime=Depends(get_app_runtime),
+    _admin_user: str = Depends(require_admin_user),
+) -> dict[str, Any]:
     scope = _channel_owner_scope_or_503(runtime)
     config = await scope.service.get_config()
     return channel_config_payload(config)
@@ -70,11 +77,18 @@ async def update_channel_config(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except ChannelActivationError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from None
+    await notify_runtime_tree_contexts_changed(
+        runtime,
+        reason="channel_config_updated",
+    )
     return channel_config_payload(updated)
 
 
 @router.get("/channels/status")
-async def get_channel_status(runtime=Depends(get_app_runtime)) -> dict[str, dict[str, bool]]:
+async def get_channel_status(
+    runtime=Depends(get_app_runtime),
+    _admin_user: str = Depends(require_admin_user),
+) -> dict[str, dict[str, bool]]:
     scope = _channel_owner_scope_or_503(runtime)
     return await scope.service.get_status()
 

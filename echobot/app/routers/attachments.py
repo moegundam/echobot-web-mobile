@@ -89,6 +89,7 @@ async def delete_attachment(
         await asyncio.to_thread(
             runtime.context.attachment_store.delete_attachment,
             attachment_id,
+            workspace=runtime.context.tool_workspace or runtime.context.workspace,
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

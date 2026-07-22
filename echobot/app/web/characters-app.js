@@ -1,5 +1,7 @@
-import { initShellI18n } from "./shell-i18n.js?v=language-menu-1";
+import { initShellI18n } from "./shell-i18n.js?v=language-menu-1&uiux=2";
 import { initShellDisplayMode } from "./shell-display-mode.js?v=session-centered-2";
+import { requestJson } from "./modules/api.js";
+import { createDirtyFormGuard } from "./modules/dirty-form-guard.js";
 
 const state = {
     payload: null,
@@ -41,20 +43,35 @@ const DOM = {
     packageOverwrite: document.getElementById("character-package-overwrite"),
 };
 
+let committedLanguage = "";
 const i18n = initShellI18n({
-    onChange: () => {
+    onChange: (nextLanguage) => {
         displayMode.refresh();
+        if (!dirtyGuard.confirmDiscard()) {
+            restoreLanguage(committedLanguage);
+            return;
+        }
+        committedLanguage = nextLanguage;
         render();
         refreshStatus();
     },
 });
 const displayMode = initShellDisplayMode({ t: i18n.t });
+const dirtyGuard = createDirtyFormGuard({
+    form: DOM.form,
+    elements: [DOM.packageJson, DOM.packageImportName, DOM.packageOverwrite],
+    confirmDiscard: () => window.confirm(i18n.t("admin.unsavedChangesConfirm")),
+});
+committedLanguage = i18n.language;
 
 DOM.form.addEventListener("submit", (event) => {
     event.preventDefault();
     void saveSelectedCharacter();
 });
 DOM.create.addEventListener("click", () => {
+    if (!dirtyGuard.confirmDiscard()) {
+        return;
+    }
     state.isCreating = true;
     state.selectedName = "";
     setStatusKey("characters.newReady");
@@ -136,6 +153,9 @@ function renderCharacterList() {
 
         button.append(badge, label, profile);
         button.addEventListener("click", () => {
+            if (!dirtyGuard.confirmDiscard()) {
+                return;
+            }
             state.isCreating = false;
             state.selectedName = character.name;
             render();
@@ -306,6 +326,7 @@ async function saveSelectedCharacter() {
             state.selectedName = updated.name || selected.name;
         }
         await load();
+        dirtyGuard.clear();
         setStatusKey("characters.saved");
     } catch (error) {
         console.error(error);
@@ -359,6 +380,9 @@ async function importCharacterPackage() {
         packagePayload.import_name = importName;
     }
     packagePayload.overwrite = DOM.packageOverwrite.checked;
+    if (!dirtyGuard.confirmDiscard()) {
+        return;
+    }
 
     setBusy(true);
     setStatusKey("characters.importing");
@@ -372,6 +396,7 @@ async function importCharacterPackage() {
         DOM.packageImportName.value = "";
         DOM.packageOverwrite.checked = false;
         await load();
+        dirtyGuard.clear();
         setStatusKey("characters.imported");
     } catch (error) {
         console.error(error);
@@ -516,6 +541,7 @@ function appendEmotionMapRow(item = {}) {
     remove.type = "button";
     remove.textContent = i18n.t("characters.emotionMapRemove");
     remove.addEventListener("click", () => {
+        dirtyGuard.markDirty();
         row.remove();
         if (!DOM.emotionMap.querySelector("[data-emotion-map-row]")) {
             renderEmotionMapEditor({ emotion_maps: [] });
@@ -524,6 +550,9 @@ function appendEmotionMapRow(item = {}) {
     actions.appendChild(remove);
     row.append(emotionLabel, expressionLabel, motionLabel, actions);
     DOM.emotionMap.appendChild(row);
+    if (!item.emotion && !item.expression && !item.motion) {
+        dirtyGuard.markDirty();
+    }
 }
 
 function emotionInputField(labelKey, placeholderKey, fieldName, value = "", listId = "") {
@@ -588,6 +617,9 @@ async function deleteSelectedCharacter() {
     if (!window.confirm(i18n.t("characters.deleteConfirm", { character: character.name }))) {
         return;
     }
+    if (!dirtyGuard.confirmDiscard()) {
+        return;
+    }
 
     setBusy(true);
     setStatusKey("characters.deleting");
@@ -597,6 +629,7 @@ async function deleteSelectedCharacter() {
         });
         state.selectedName = "";
         await load();
+        dirtyGuard.clear();
         setStatusKey("characters.deleted");
     } catch (error) {
         console.error(error);
@@ -606,33 +639,6 @@ async function deleteSelectedCharacter() {
     }
 }
 
-async function requestJson(url, options = {}) {
-    const response = await fetch(url, {
-        headers: {
-            "Accept": "application/json",
-            "Content-Type": "application/json",
-            ...(options.headers || {}),
-        },
-        ...options,
-    });
-    if (!response.ok) {
-        throw await responseToError(response);
-    }
-    return await response.json();
-}
-
-async function responseToError(response) {
-    let detail = `${response.status} ${response.statusText}`;
-    try {
-        const payload = await response.json();
-        if (payload && typeof payload.detail === "string") {
-            detail = payload.detail;
-        }
-    } catch (_error) {
-        return new Error(detail);
-    }
-    return new Error(detail);
-}
 
 function characterList() {
     return state.payload && Array.isArray(state.payload.characters)
@@ -714,7 +720,35 @@ function profileSummary(character) {
 
 function setBusy(value) {
     state.busy = Boolean(value);
+    if (dirtyGuard.isDirty()) {
+        updateCharacterControlState();
+        return;
+    }
     renderSelectedCharacter();
+}
+
+function updateCharacterControlState() {
+    const character = selectedCharacter();
+    const creating = state.isCreating;
+    const editable = creating || Boolean(character && character.editable);
+    const deletable = Boolean(character && character.deletable);
+
+    DOM.name.disabled = state.busy || (!creating && !editable);
+    DOM.prompt.disabled = state.busy || !editable;
+    DOM.modelProfile.disabled = state.busy || (!creating && !character);
+    DOM.llmModel.disabled = state.busy || (!creating && !character);
+    DOM.voiceProfile.disabled = state.busy || (!creating && !character);
+    DOM.live2dProfile.disabled = state.busy || (!creating && !character);
+    DOM.defaultChannelType.disabled = state.busy || (!creating && !character);
+    DOM.defaultChannelIntegration.disabled = state.busy || (!creating && !character);
+    DOM.save.disabled = state.busy || (!creating && !character);
+    DOM.exportPackage.disabled = state.busy || creating || !character;
+    DOM.remove.disabled = state.busy || !deletable || creating;
+    DOM.emotionMapAdd.disabled = state.busy || (!creating && !character);
+    DOM.importPackage.disabled = state.busy;
+    DOM.packageJson.disabled = state.busy;
+    DOM.packageImportName.disabled = state.busy;
+    DOM.packageOverwrite.disabled = state.busy;
 }
 
 function setStatusKey(key, params = {}) {
@@ -731,4 +765,19 @@ function setRawStatus(message) {
 
 function refreshStatus() {
     DOM.status.textContent = state.statusRaw || i18n.t(state.statusKey, state.statusParams);
+}
+
+function restoreLanguage(language) {
+    if (!language || i18n.language === language) {
+        return;
+    }
+    i18n.language = language;
+    try {
+        window.localStorage.setItem("echobot.shell.language", language);
+    } catch (_error) {
+        // localStorage can be unavailable in restricted browsing contexts.
+    }
+    i18n.apply();
+    displayMode.refresh();
+    refreshStatus();
 }

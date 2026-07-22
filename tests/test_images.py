@@ -53,6 +53,81 @@ class ImageNormalizationTests(unittest.TestCase):
 
 
 class AttachmentStoreTests(unittest.TestCase):
+    def test_file_attachment_is_materialized_inside_tool_workspace(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            attachment_store = AttachmentStore(root / "private-store" / "attachments")
+            tool_workspace = root / "tenant-workspace"
+            attachment = attachment_store.create_file_attachment(
+                b"original attachment",
+                content_type="text/plain",
+                filename="notes.txt",
+            )
+
+            content = attachment_store.file_attachment_message_content(
+                attachment.attachment_id,
+                workspace=tool_workspace,
+            )
+
+            materialized_path = tool_workspace / content["workspace_path"]
+            self.assertTrue(materialized_path.is_file())
+            self.assertEqual(b"original attachment", materialized_path.read_bytes())
+
+            materialized_path.write_bytes(b"tool-local mutation")
+            self.assertEqual(
+                b"original attachment",
+                attachment_store.file_attachment_path(
+                    attachment.attachment_id
+                ).read_bytes(),
+            )
+
+    def test_file_attachment_metadata_cannot_escape_store(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            attachment_store = AttachmentStore(root / "attachments")
+            attachment = attachment_store.create_file_attachment(
+                b"inside",
+                filename="notes.txt",
+            )
+            outside_path = root / "outside.txt"
+            outside_path.write_text("outside", encoding="utf-8")
+            metadata_path = (
+                attachment_store.meta_dir / f"{attachment.attachment_id}.json"
+            )
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+            metadata["relative_path"] = "../../outside.txt"
+            metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "outside the attachment store"):
+                attachment_store.get_file_attachment(attachment.attachment_id)
+
+    def test_delete_file_attachment_removes_materialized_workspace_copy(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            attachment_store = AttachmentStore(root / "private-store" / "attachments")
+            tool_workspace = root / "tenant-workspace"
+            attachment = attachment_store.create_file_attachment(
+                b"delete me",
+                filename="notes.txt",
+            )
+            content = attachment_store.file_attachment_message_content(
+                attachment.attachment_id,
+                workspace=tool_workspace,
+            )
+            materialized_path = tool_workspace / content["workspace_path"]
+
+            attachment_store.delete_attachment(
+                attachment.attachment_id,
+                workspace=tool_workspace,
+            )
+
+            self.assertFalse(materialized_path.exists())
+            self.assertFalse(
+                attachment_store.meta_dir.joinpath(
+                    f"{attachment.attachment_id}.json"
+                ).exists()
+            )
+
     def test_create_file_attachment_from_stream_does_not_require_full_buffer(self) -> None:
         class ChunkedStream(BytesIO):
             def read(self, size: int = -1) -> bytes:

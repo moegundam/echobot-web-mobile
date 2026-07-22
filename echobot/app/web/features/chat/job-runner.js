@@ -1,5 +1,5 @@
 import { DOM } from "../../core/dom.js";
-import { audioState, chatState, roleState, sessionState } from "../../core/store.js";
+import { appState, audioState, chatState, roleState, sessionState } from "../../core/store.js";
 import {
     buildUserMessageContent,
     hasMessageContent,
@@ -9,6 +9,7 @@ import {
 export function createChatRunner(deps) {
     const {
         addMessage,
+        announceAssistantMessage = () => {},
         applySessionSummaries,
         cancelChatJob,
         clearComposerAttachments,
@@ -101,7 +102,9 @@ export function createChatRunner(deps) {
                     prompt,
                     session_name: sessionName,
                     role_name: roleState.currentRoleName || "default",
-                    route_mode: sessionState.currentRouteMode || "auto",
+                    route_mode: appState.config?.access?.can_use_agent
+                        ? sessionState.currentRouteMode || "auto"
+                        : "chat_only",
                     response_language: getUiLanguage(),
                     images: composerImages.map((image) => ({
                         attachment_id: image.attachmentId,
@@ -201,6 +204,8 @@ export function createChatRunner(deps) {
                 speakFinalText = false;
                 setRunStatus(t("console.replyCompleted"));
             }
+
+            announceAssistantMessage(finalContent || finalText);
 
             if (audioState.ttsEnabled && speakFinalText && finalText.trim()) {
                 await speakText(finalText);

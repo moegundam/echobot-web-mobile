@@ -21,7 +21,7 @@ from ..schemas import (
     ChatRequest,
     ChatResponse,
 )
-from ..state import get_app_runtime
+from ..state import get_app_runtime, get_request_is_admin, require_admin_user
 
 
 router = APIRouter(tags=["chat"])
@@ -31,6 +31,7 @@ router = APIRouter(tags=["chat"])
 async def run_chat(
     request: ChatRequest,
     runtime=Depends(get_app_runtime),
+    request_is_admin: bool = Depends(get_request_is_admin),
 ) -> ChatResponse:
     try:
         image_urls = await _resolve_chat_images(
@@ -41,7 +42,7 @@ async def run_chat(
         file_attachments = await _resolve_chat_files(
             request,
             runtime.context.attachment_store,
-            runtime.context.workspace,
+            runtime.context.tool_workspace or runtime.context.workspace,
         )
         result = await runtime.chat_service.run_prompt(
             request.session_name,
@@ -53,6 +54,7 @@ async def run_chat(
                 request,
                 runtime,
                 has_file_attachments=bool(file_attachments),
+                request_is_admin=request_is_admin,
             ),
             response_language=request.response_language,
         )
@@ -80,6 +82,7 @@ async def run_chat(
 async def run_chat_stream(
     request: ChatRequest,
     runtime=Depends(get_app_runtime),
+    request_is_admin: bool = Depends(get_request_is_admin),
 ) -> StreamingResponse:
     queue: asyncio.Queue[bytes | None] = asyncio.Queue()
 
@@ -103,7 +106,7 @@ async def run_chat_stream(
             file_attachments = await _resolve_chat_files(
                 request,
                 runtime.context.attachment_store,
-                runtime.context.workspace,
+                runtime.context.tool_workspace or runtime.context.workspace,
             )
             result = await runtime.chat_service.run_prompt_stream(
                 request.session_name,
@@ -115,9 +118,20 @@ async def run_chat_stream(
                     request,
                     runtime,
                     has_file_attachments=bool(file_attachments),
+                    request_is_admin=request_is_admin,
                 ),
                 on_chunk=on_chunk,
                 response_language=request.response_language,
+            )
+        except HTTPException as exc:
+            await queue.put(
+                _stream_payload_bytes(
+                    {
+                        "type": "error",
+                        "message": str(exc.detail),
+                        "status_code": exc.status_code,
+                    }
+                )
             )
         except ValueError as exc:
             await queue.put(
@@ -244,6 +258,7 @@ async def cancel_chat_job(
 async def retry_chat_job(
     job_id: str,
     runtime=Depends(get_app_runtime),
+    _admin_user: str = Depends(require_admin_user),
 ) -> ChatResponse:
     try:
         result = await runtime.chat_service.retry_job(job_id)
@@ -347,7 +362,16 @@ async def _resolve_effective_route_mode(
     runtime,
     *,
     has_file_attachments: bool,
+    request_is_admin: bool,
 ):
+    if not request_is_admin:
+        if request.route_mode in {"auto", "force_agent"}:
+            raise HTTPException(
+                status_code=403,
+                detail="Agent route mode requires admin access",
+            )
+        return "chat_only"
+
     can_process_files = False
     current_route_mode = None
     if has_file_attachments:

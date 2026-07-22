@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
+from .model_profile_compat import model_profiles_payload
+
 
 SPLIT_RUNTIME_PROFILE_FIELDS = (
     "llm_model_id",
@@ -38,7 +40,7 @@ async def _apply_runtime_profile_for_role_unlocked(
     *,
     preferred_profile_id: str = "",
 ) -> dict[str, Any] | None:
-    if runtime.model_profile_service is None:
+    if not _has_runtime_model_services(runtime):
         return None
 
     normalized_role_name = str(role_name or "").strip()
@@ -52,24 +54,13 @@ async def _apply_runtime_profile_for_role_unlocked(
         return None
 
     if not has_split_bindings:
-        activated = await asyncio.to_thread(
-            runtime.model_profile_service.activate_profile,
-            profile_id,
-        )
-        active_profile = await composed_runtime_profile(
-            runtime,
-            role_name=normalized_role_name,
-            base_profile_id=str(activated.get("active_profile_id") or profile_id),
-            runtime_bindings={
-                "llm_model_id": profile_id,
-                "voice_profile_id": profile_id,
-                "live2d_model_id": profile_id,
-            },
-        )
-        await runtime.apply_model_profile(active_profile)
-        return activated
+        runtime_bindings = {
+            "llm_model_id": profile_id,
+            "voice_profile_id": profile_id,
+            "live2d_model_id": profile_id,
+        }
 
-    state = await asyncio.to_thread(runtime.model_profile_service.list_profiles)
+    state = await model_profiles_payload(runtime)
     base_profile_id = profile_id or str(state.get("active_profile_id") or "a")
     composed_profile = await composed_runtime_profile(
         runtime,
@@ -77,12 +68,8 @@ async def _apply_runtime_profile_for_role_unlocked(
         base_profile_id=base_profile_id,
         runtime_bindings=runtime_bindings,
     )
-    await asyncio.to_thread(
-        runtime.model_profile_service.activate_profile,
-        composed_profile["profile_id"],
-    )
     await runtime.apply_model_profile(composed_profile)
-    return await asyncio.to_thread(runtime.model_profile_service.list_profiles)
+    return await model_profiles_payload(runtime)
 
 
 async def composed_runtime_profile(
@@ -96,7 +83,7 @@ async def composed_runtime_profile(
     llm_profile_id = str(runtime_bindings.get("llm_model_id") or base_profile_id)
     voice_profile_id = str(runtime_bindings.get("voice_profile_id") or base_profile_id)
     live2d_profile_id = str(runtime_bindings.get("live2d_model_id") or base_profile_id)
-    base_profile = await _legacy_runtime_profile(runtime, base_profile_id)
+    base_profile = await _compatibility_runtime_profile(runtime, base_profile_id)
     llm_profile = await llm_runtime_profile(runtime, llm_profile_id)
     voice_profile = await voice_runtime_profile(runtime, voice_profile_id)
     live2d_profile = await live2d_runtime_profile(runtime, live2d_profile_id)
@@ -118,7 +105,7 @@ async def runtime_profile_with_overrides(
     runtime_bindings: dict[str, str] | None = None,
     live_override: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
-    if runtime.model_profile_service is None:
+    if not _has_runtime_model_services(runtime):
         return None
 
     live_override = live_override or {}
@@ -128,7 +115,7 @@ async def runtime_profile_with_overrides(
         or "",
     ).strip()
     if not base_profile_id:
-        state = await asyncio.to_thread(runtime.model_profile_service.list_profiles)
+        state = await model_profiles_payload(runtime)
         base_profile_id = str(state.get("active_profile_id") or "a")
 
     bindings = dict(runtime_bindings or {})
@@ -175,10 +162,26 @@ async def live2d_runtime_profile(runtime, profile_id: str) -> dict[str, Any]:
 
 
 async def _legacy_runtime_profile(runtime, profile_id: str) -> dict[str, Any]:
+    if getattr(runtime, "model_profile_service", None) is None:
+        raise ValueError(f"Unknown model profile: {profile_id}")
     return await asyncio.to_thread(
         runtime.model_profile_service.get_profile_for_runtime,
         profile_id,
     )
+
+
+async def _compatibility_runtime_profile(
+    runtime,
+    profile_id: str,
+) -> dict[str, Any]:
+    payload = await model_profiles_payload(runtime)
+    for profile in payload.get("profiles", []):
+        if (
+            isinstance(profile, dict)
+            and str(profile.get("profile_id") or "") == profile_id
+        ):
+            return dict(profile)
+    return await _legacy_runtime_profile(runtime, profile_id)
 
 
 async def runtime_bindings_for_role(runtime, role_name: str) -> dict[str, str]:
@@ -214,6 +217,17 @@ def has_split_runtime_bindings(runtime_bindings: dict[str, str]) -> bool:
         runtime_bindings.get(field_name)
         for field_name in SPLIT_RUNTIME_PROFILE_FIELDS
     )
+
+
+def _has_runtime_model_services(runtime: object) -> bool:
+    return all(
+        getattr(runtime, service_name, None) is not None
+        for service_name in (
+            "llm_model_service",
+            "voice_model_service",
+            "live2d_model_service",
+        )
+    ) or getattr(runtime, "model_profile_service", None) is not None
 
 
 def _section(profile: dict[str, Any], section_name: str) -> dict[str, Any]:

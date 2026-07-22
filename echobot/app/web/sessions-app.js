@@ -1,5 +1,6 @@
-import { initShellI18n } from "./shell-i18n.js?v=language-menu-1";
+import { initShellI18n } from "./shell-i18n.js?v=language-menu-1&uiux=2";
 import { initShellDisplayMode } from "./shell-display-mode.js?v=session-centered-2";
+import { requestJson } from "./modules/api.js";
 import {
     initShellSessionLinks,
     rememberShellSessionName,
@@ -540,24 +541,12 @@ async function saveSessionBinding() {
     setBusy(true);
     setStatusKey("sessions.savingBinding", { session: sessionName });
     try {
-        if (roleName) {
-            await requestJson(`/api/sessions/${encodeURIComponent(sessionName)}/role`, {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ role_name: roleName }),
-            });
-        }
-        if (routeMode) {
-            await requestJson(`/api/sessions/${encodeURIComponent(sessionName)}/route-mode`, {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ route_mode: routeMode }),
-            });
-        }
-        await requestJson(`/api/sessions/${encodeURIComponent(sessionName)}/channel-binding`, {
+        await requestJson(`/api/sessions/${encodeURIComponent(sessionName)}/configuration`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
+                role_name: roleName || "default",
+                route_mode: routeMode || "chat_only",
                 channel_type: channelType,
                 channel_integration_id: channelIntegrationId,
             }),
@@ -652,33 +641,6 @@ function refreshStatus() {
         return;
     }
     DOM.status.textContent = state.statusRaw || i18n.t(state.statusKey, state.statusParams);
-}
-
-async function requestJson(url, options = {}) {
-    const response = await fetch(url, {
-        headers: { Accept: "application/json", ...(options.headers || {}) },
-        ...options,
-    });
-    if (!response.ok) {
-        throw await responseToError(response);
-    }
-    if (response.status === 204) {
-        return null;
-    }
-    return response.json();
-}
-
-async function responseToError(response) {
-    let detail = `${response.status} ${response.statusText}`;
-    try {
-        const payload = await response.json();
-        if (payload && typeof payload.detail === "string") {
-            detail = payload.detail;
-        }
-    } catch (_error) {
-        return new Error(detail);
-    }
-    return new Error(detail);
 }
 
 function formatTimestamp(value) {

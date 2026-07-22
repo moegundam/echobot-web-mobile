@@ -1,6 +1,8 @@
 import { DOM } from "../../core/dom.js";
 import { appState, audioState } from "../../core/store.js";
 
+const VOICE_SEARCH_INPUT_ID = "voice-search";
+
 export function createTtsOptionsController(deps) {
     const { requestJson } = deps;
     const t = typeof deps.t === "function" ? deps.t : (key, params = {}) => {
@@ -8,6 +10,28 @@ export function createTtsOptionsController(deps) {
             return Object.prototype.hasOwnProperty.call(params, name) ? String(params[name]) : "";
         });
     };
+    let availableVoices = [];
+    let availableVoicesProvider = "";
+    const voiceSearchInput = DOM.voiceSearch
+        || document.getElementById(VOICE_SEARCH_INPUT_ID);
+
+    bindVoiceSearch();
+
+    function bindVoiceSearch() {
+        if (!voiceSearchInput || voiceSearchInput.dataset.bound === "true") {
+            return;
+        }
+        voiceSearchInput.dataset.bound = "true";
+        voiceSearchInput.addEventListener("input", () => {
+            renderVoiceOptions(
+                availableVoices,
+                audioState.selectedVoice,
+                availableVoicesProvider || audioState.selectedTtsProvider,
+                false,
+                voiceSearchInput.value,
+            );
+        });
+    }
 
     function loadSavedTtsProvider() {
         return String(window.localStorage.getItem("echobot.web.tts.provider") || "").trim();
@@ -112,15 +136,41 @@ export function createTtsOptionsController(deps) {
     }
 
     function handleVoiceSelectionChange() {
+        if (!DOM.voiceSelect.value) {
+            return;
+        }
         audioState.selectedVoice = DOM.voiceSelect.value;
         persistTtsVoice(audioState.selectedTtsProvider, audioState.selectedVoice);
     }
 
-    async function loadVoiceOptions(ttsConfig, provider) {
+    async function applyRuntimeVoiceProfile(voiceProfile) {
+        if (!appState.config || !appState.config.tts) {
+            return;
+        }
+        const ttsProfile = voiceProfile && typeof voiceProfile.tts === "object"
+            ? voiceProfile.tts
+            : {};
+        const provider = String(ttsProfile.provider || "").trim();
+        if (!provider || !findTtsProviderStatus(appState.config.tts, provider)) {
+            return;
+        }
+        audioState.selectedTtsProvider = provider;
+        renderTtsProviderOptions(appState.config.tts, provider);
+        await loadVoiceOptions(appState.config.tts, provider, {
+            persistSelection: false,
+            preferredVoice: String(ttsProfile.voice || "").trim(),
+        });
+    }
+
+    async function loadVoiceOptions(ttsConfig, provider, options = {}) {
         const providerName = provider || audioState.selectedTtsProvider || ttsConfig.default_provider || "edge";
+        if (availableVoicesProvider && availableVoicesProvider !== providerName && voiceSearchInput) {
+            voiceSearchInput.value = "";
+        }
         const defaultVoices = ttsConfig.default_voices || {};
         const selectedVoiceFromStorage = loadSavedTtsVoice(providerName);
-        const defaultVoice = selectedVoiceFromStorage
+        const defaultVoice = String(options.preferredVoice || "").trim()
+            || selectedVoiceFromStorage
             || defaultVoices[providerName]
             || "";
         audioState.selectedVoice = defaultVoice;
@@ -138,7 +188,12 @@ export function createTtsOptionsController(deps) {
             const payload = await requestJson(
                 `/api/web/tts/voices?provider=${encodeURIComponent(providerName)}`,
             );
-            renderVoiceOptions(payload.voices, defaultVoice, providerName);
+            renderVoiceOptions(
+                payload.voices,
+                defaultVoice,
+                providerName,
+                options.persistSelection !== false,
+            );
         } catch (error) {
             console.error(error);
             DOM.voiceSelect.innerHTML = "";
@@ -147,16 +202,26 @@ export function createTtsOptionsController(deps) {
         }
     }
 
-    function renderVoiceOptions(voices, selectedVoice, provider) {
+    function renderVoiceOptions(
+        voices,
+        selectedVoice,
+        provider,
+        persistSelection = true,
+        searchQuery = voiceSearchInput?.value,
+    ) {
+        availableVoices = Array.isArray(voices) ? [...voices] : [];
+        availableVoicesProvider = String(provider || "").trim();
+        const normalizedQuery = normalizeVoiceSearchText(searchQuery);
         DOM.voiceSelect.innerHTML = "";
 
-        if (!voices || voices.length === 0) {
+        if (availableVoices.length === 0) {
             DOM.voiceSelect.disabled = true;
             DOM.ttsDetail.textContent = t("console.noVoices");
+            renderVoiceSearchStatus(0, false);
             return;
         }
 
-        const preferredVoices = voices
+        const preferredVoices = availableVoices
             .slice()
             .sort((left, right) => {
                 const leftScore = scoreVoiceOption(left);
@@ -166,22 +231,49 @@ export function createTtsOptionsController(deps) {
                 }
                 return `${left.locale}-${left.short_name}`.localeCompare(`${right.locale}-${right.short_name}`);
             });
+        const visibleVoices = normalizedQuery
+            ? preferredVoices.filter((voice) => voiceSearchText(voice).includes(normalizedQuery))
+            : preferredVoices;
 
-        preferredVoices.forEach((voice) => {
+        if (visibleVoices.length === 0) {
+            const option = document.createElement("option");
+            option.value = "";
+            option.textContent = t("console.voiceSearchNoMatches");
+            DOM.voiceSelect.appendChild(option);
+            DOM.voiceSelect.disabled = true;
+            renderVoiceSearchStatus(0, true);
+            return;
+        }
+
+        visibleVoices.forEach((voice) => {
             const option = document.createElement("option");
             option.value = voice.short_name;
             option.textContent = buildVoiceLabel(voice);
             DOM.voiceSelect.appendChild(option);
         });
 
-        const finalVoice = preferredVoices.some((item) => item.short_name === selectedVoice)
+        const finalVoice = visibleVoices.some((item) => item.short_name === selectedVoice)
             ? selectedVoice
-            : preferredVoices[0].short_name;
+            : (normalizedQuery ? "" : visibleVoices[0].short_name);
 
-        DOM.voiceSelect.value = finalVoice;
+        if (finalVoice) {
+            DOM.voiceSelect.value = finalVoice;
+        } else {
+            const placeholder = document.createElement("option");
+            placeholder.value = "";
+            placeholder.disabled = true;
+            placeholder.textContent = t("console.voiceSearchCount", { count: visibleVoices.length });
+            DOM.voiceSelect.prepend(placeholder);
+            DOM.voiceSelect.value = "";
+        }
         DOM.voiceSelect.disabled = false;
-        audioState.selectedVoice = finalVoice;
-        persistTtsVoice(provider, finalVoice);
+        if (finalVoice) {
+            audioState.selectedVoice = finalVoice;
+        }
+        if (persistSelection && finalVoice) {
+            persistTtsVoice(provider, finalVoice);
+        }
+        renderVoiceSearchStatus(visibleVoices.length, Boolean(normalizedQuery));
     }
 
     function refreshLocalizedText() {
@@ -198,6 +290,15 @@ export function createTtsOptionsController(deps) {
         if (DOM.ttsDetail) {
             DOM.ttsDetail.textContent = buildTtsDetail(
                 findTtsProviderStatus(ttsConfig, providerName),
+            );
+        }
+        if (availableVoices.length > 0) {
+            renderVoiceOptions(
+                availableVoices,
+                audioState.selectedVoice,
+                availableVoicesProvider || providerName,
+                false,
+                voiceSearchInput?.value,
             );
         }
     }
@@ -233,7 +334,31 @@ export function createTtsOptionsController(deps) {
         return score;
     }
 
+    function voiceSearchText(voice) {
+        return normalizeVoiceSearchText([
+            voice && voice.display_name,
+            voice && voice.short_name,
+            voice && voice.name,
+            voice && voice.locale,
+            voice && voice.gender,
+        ].filter(Boolean).join(" "));
+    }
+
+    function normalizeVoiceSearchText(value) {
+        return String(value || "").trim().toLocaleLowerCase();
+    }
+
+    function renderVoiceSearchStatus(count, filtered) {
+        if (!DOM.voiceSearchStatus) {
+            return;
+        }
+        DOM.voiceSearchStatus.textContent = filtered && count === 0
+            ? t("console.voiceSearchNoMatches")
+            : t("console.voiceSearchCount", { count });
+    }
+
     return {
+        applyRuntimeVoiceProfile: applyRuntimeVoiceProfile,
         handleTtsProviderChange: handleTtsProviderChange,
         handleVoiceSelectionChange: handleVoiceSelectionChange,
         loadTtsOptions: loadTtsOptions,

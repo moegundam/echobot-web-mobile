@@ -7,6 +7,9 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
+
+from scripts import generate_owner_inventory as inventory
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -79,7 +82,8 @@ class OwnerInventoryGeneratorTests(unittest.TestCase):
         ).strip()
         self.assertIn(f"Source SHA: **`{source_sha}`**", manifest)
         self.assertIn("Source tree state: **", manifest)
-        self.assertIn("Generated at: **", manifest)
+        self.assertIn("Source commit time: **", manifest)
+        self.assertNotIn("Generated at: **", manifest)
         self.assertIn("Generator version: **", manifest)
         self.assertIn(
             "`python scripts/generate_owner_inventory.py --output-dir <owner-docs>/generated`",
@@ -93,7 +97,11 @@ class OwnerInventoryGeneratorTests(unittest.TestCase):
         api = first["API_OPERATION_INDEX.md"]
         self.assertIn("`GET` | `/api/web/live2d/{asset_path:path}`", api)
         self.assertIn("`WS` | `/api/web/asr/ws`", api)
-        self.assertIn("echobot/app/routers/web.py:107", api)
+        self.assertRegex(
+            api,
+            r"\| `GET` \| `/api/web/live2d/\{asset_path:path\}` \| "
+            r"`get_live2d_asset` \| `echobot/app/routers/web\.py:\d+` \|",
+        )
         self.assertGreaterEqual(api.count("| `GET` |") + api.count("| `POST` |"), 80)
 
         schema = first["API_SCHEMA_INDEX.md"]
@@ -156,6 +164,61 @@ class OwnerInventoryGeneratorTests(unittest.TestCase):
             self.assertNotIn(value, environment)
         self.assertIn("secret-looking", environment)
         self.assertIn("non-secret-looking", environment)
+
+    def test_check_mode_detects_generated_inventory_drift(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output_dir = Path(directory)
+            self._generate(output_dir)
+            current = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "--output-dir",
+                    str(output_dir),
+                    "--check",
+                ],
+                cwd=ROOT,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(0, current.returncode, current.stderr)
+
+            (output_dir / "API_OPERATION_INDEX.md").write_text(
+                "stale\n",
+                encoding="utf-8",
+            )
+            stale = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "--output-dir",
+                    str(output_dir),
+                    "--check",
+                ],
+                cwd=ROOT,
+                capture_output=True,
+                text=True,
+            )
+
+        self.assertEqual(1, stale.returncode)
+        self.assertIn("API_OPERATION_INDEX.md", stale.stderr)
+
+    def test_manifest_counts_untracked_files_as_dirty(self) -> None:
+        values = {
+            ("rev-parse", "HEAD"): "abc123",
+            ("show", "-s", "--format=%cI", "HEAD"): "2026-07-22T00:00:00+08:00",
+            ("status", "--porcelain", "--untracked-files=normal"): "?? new-doc.md",
+        }
+        with patch.object(
+            inventory,
+            "_git_output",
+            side_effect=lambda *args: values[args],
+        ):
+            manifest = inventory._manifest({})
+
+        self.assertIn("Source tree state: **dirty**", manifest)
+        self.assertIn("Source commit time: **2026-07-22T00:00:00+08:00**", manifest)
+        self.assertNotIn("Generated at:", manifest)
 
 
 if __name__ == "__main__":

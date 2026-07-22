@@ -38,6 +38,14 @@ def configure_parser(parser: argparse.ArgumentParser) -> argparse.ArgumentParser
         action="store_true",
         help="Build and validate the seed without writing a file.",
     )
+    export.add_argument(
+        "--sqlite-source",
+        default=None,
+        help=(
+            "Explicit SQLite session storage root or sessions.sqlite3 path. "
+            "Selecting this source never falls back to JSONL."
+        ),
+    )
     export.set_defaults(handler=run_export)
     parser.set_defaults(handler=run)
     return parser
@@ -65,8 +73,12 @@ def run_schema(args: argparse.Namespace) -> int:
 def run_export(args: argparse.Namespace) -> int:
     options = runtime_options_from_args(args)
     workspace = options.workspace or Path.cwd()
+    export_kwargs = {
+        "session_store_backend": options.session_store_backend,
+        "sqlite_source": getattr(args, "sqlite_source", None),
+    }
     if bool(getattr(args, "dry_run", False)):
-        payload = build_postgres_seed_export(workspace)
+        payload = build_postgres_seed_export(workspace, **export_kwargs)
         errors = validate_postgres_seed_export(payload)
         print(
             json.dumps(
@@ -86,6 +98,6 @@ def run_export(args: argparse.Namespace) -> int:
     output = str(getattr(args, "output", "") or "").strip()
     if not output:
         raise SystemExit("db export requires --output unless --dry-run is used")
-    write_postgres_seed_export(workspace, output)
+    write_postgres_seed_export(workspace, output, **export_kwargs)
     print(f"Wrote PostgreSQL migration seed: {output}")
     return 0

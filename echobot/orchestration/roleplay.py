@@ -137,6 +137,38 @@ class RoleplayEngine:
         self._default_temperature = temperature
         self._default_max_tokens = max_tokens
 
+    def for_turn(
+        self,
+        *,
+        provider=None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+    ) -> "RoleplayEngine":
+        resolved_provider = provider or self._role_agent.provider
+        resolved_temperature = (
+            self._default_temperature if temperature is None else temperature
+        )
+        resolved_max_tokens = (
+            self._default_max_tokens if max_tokens is None else max_tokens
+        )
+        if (
+            resolved_provider is self._role_agent.provider
+            and resolved_temperature == self._default_temperature
+            and resolved_max_tokens == self._default_max_tokens
+        ):
+            return self
+        return RoleplayEngine(
+            AgentCore(
+                resolved_provider,
+                system_prompt=self._role_agent.system_prompt,
+                memory_support=self._role_agent.memory_support,
+            ),
+            self._role_registry,
+            default_temperature=resolved_temperature,
+            default_max_tokens=resolved_max_tokens,
+            lightweight_max_tokens=self._lightweight_max_tokens,
+        )
+
     async def chat_reply(
         self,
         *,
@@ -500,7 +532,7 @@ class RoleplayEngine:
                     continue
                 chunks.append(chunk)
                 await on_chunk(chunk)
-        except RuntimeError:
+        except RuntimeError as exc:
             logger.exception(
                 "Roleplay streaming failed for session '%s' with role '%s'",
                 session.name,
@@ -508,7 +540,10 @@ class RoleplayEngine:
             )
             partial_text = "".join(chunks).strip()
             if partial_text:
-                return partial_text
+                raise RuntimeError(
+                    "Roleplay stream failed after a partial response; "
+                    "incomplete output was not persisted"
+                ) from exc
             return await self._generate(
                 session=session,
                 user_input=user_input,

@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import yaml
 
@@ -148,6 +149,23 @@ class RepositoryQualityTests(unittest.TestCase):
             encoding="utf-8",
         )
         self.assertIsNone(re.search(r"ghp_[A-Za-z0-9]{36}", source))
+
+    @patch("scripts.check_public_safety.subprocess.check_output")
+    def test_public_safety_scan_includes_untracked_commit_candidates(
+        self,
+        check_output,
+    ) -> None:
+        check_output.return_value = "tracked.py\nuntracked.py\n"
+
+        self.assertEqual(
+            ["tracked.py", "untracked.py"],
+            check_public_safety._git_candidate_files(),
+        )
+        check_output.assert_called_once_with(
+            ["git", "ls-files", "-co", "--exclude-standard"],
+            cwd=check_public_safety.ROOT,
+            text=True,
+        )
 
 
 if __name__ == "__main__":

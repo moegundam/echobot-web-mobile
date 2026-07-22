@@ -7,7 +7,7 @@ import mimetypes
 from typing import TYPE_CHECKING, Any
 from urllib import error, request
 
-from ...speech_assets import open_http_url, validate_http_url
+from ...network.http import open_http_url, validate_http_url
 from ..base import BaseChannel
 from ..types import OutboundMessage
 from ...models import message_content_to_text

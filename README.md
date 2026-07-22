@@ -27,7 +27,7 @@
 | 4 | Admin 後台 | `/admin` 拆出 guide、structure、deployment、models、voice、Live2D、characters、channels 等頁面 |
 | 5 | Session-centered runtime | 以 Session 為核心，把角色、模型、語音、Live2D、通訊入口與 conversation state 串起來 |
 | 6 | 三語 i18n | 英文、繁體中文、簡體中文切換，涵蓋主要靜態與動態 UI |
-| 7 | 裝置/顯示模式 | 加入自動、手機、直向、橫向、桌面/密集等模式，修正手機和平板顯示 |
+| 7 | 裝置/顯示模式 | 加入自動、手機、平板、桌面/密集等模式，修正不同螢幕尺寸的操作版面 |
 | 8 | Trusted-user namespace | Cloudflare Access / reverse proxy trusted header 模式與 `.echobot/users/<user_id>` 隔離 |
 | 9 | Stage Event Broker | user/session scoped SSE event broker，支援字幕、emotion、expression、motion 與 Stage replay |
 | 10 | Runtime profiles | LLM、Voice、Live2D 分頁管理，角色可綁定完整互動配置並匯入/匯出 package |
@@ -81,7 +81,8 @@
 | 中台 Console | `/console` | 操作員工作台，承接原 `/web` 的完整控制能力 |
 | 相容 Web | `/web` | 保留原入口，對應 Console |
 | 後台 Admin | `/admin` | 後台索引、health、API docs、jobs 與管理頁入口 |
-| 操作說明 | `/admin/guide` | 操作、設定、預期成果、故障判斷與排除流程 |
+| 操作說明 | `/guide` | 依登入角色顯示可用操作、預期成果與故障排除流程 |
+| 後台操作說明 | `/admin/guide` | Admin 專用完整設定與部署說明；內容與 `/guide` 共用並依角色過濾 |
 | 網站結構 | `/admin/structure` | Route map、Console 分區、API namespace 邊界 |
 | Sessions | `/admin/sessions` | 建立、檢視與維護 Session；Session 是角色、模型、通訊入口與對話狀態的核心 |
 | 角色設定 | `/admin/characters` | 管理角色 prompt、LLM / Voice / Live2D 綁定、emotion map 與角色 package 匯入/匯出 |
@@ -97,9 +98,11 @@
 本版本加入語言與顯示模式控制：
 
 - 語言：英文、繁體中文、簡體中文。
-- 顯示模式：自動、手機、直向、橫向、桌面 / 密集。
+- 顯示模式：自動、手機、平板、桌面 / 密集。
 - Console、Stage、Messenger、Admin 系列頁面都有一致的切換入口。
 - `/console` 會依裝置與顯示模式調整手機/桌面操作版面。
+- Stage 全螢幕與控制列自動隱藏適合正式展示；滑鼠滾輪、觸控縮放與重設按鈕使用同一套角色視圖狀態。
+- Console 提供模型與語音搜尋；按下 `Apply to Stage` 後會顯示 `Applied to Stage`，表示變更只套用到目前 Session，不會覆寫後台 profile。
 
 ### 3. 全站語言切換
 
@@ -138,10 +141,14 @@ python -m echobot app --host 127.0.0.1 --port 8001
 本版本新增 trusted header 模式，讓內測者資料可以依登入身份隔離：
 
 - 預設 trusted user header：`Cf-Access-Authenticated-User-Email`
+- Tunnel/production profile 另要求 `Cf-Access-Jwt-Assertion`；`cloudflared` 驗證 JWT 後，EchoBot 會比對 assertion email 與 trusted user header。
 - 啟用後，受保護頁面、API docs、`/api/*` 與 ASR WebSocket 都需要可信 user id。
 - session、history、jobs、attachments、settings 會寫入 `.echobot/users/<user_id>/...`。
 - 不同 user 不應互看 session、history、job、attachment 或 Stage event。
-- 可用 `ECHOBOT_ADMIN_ALLOWLIST` 限制 runtime、channel、role、LLM/voice/Live2D profile 等高風險 mutation API。
+- `ECHOBOT_ADMIN_ALLOWLIST` 指定管理員：可進 `/admin*`，管理 secrets、provider、Channel、部署與持久設定。
+- `ECHOBOT_OPERATOR_ALLOWLIST` 可另外指定操作員：可進 `/web`、`/console`，操作自己的 Session 並套用不寫回 Admin profile 的暫時 Stage/runtime 設定。
+- Operator 不能進 `/admin*`、讀取 owner-global 狀態、上傳持久素材、修改 provider endpoint 或使用 `auto` / `force_agent` Agent route；一般內測者仍只使用 `/messenger` 與 `/stage`。
+- 非 Admin 的 Web config、Session runtime context 與 health 回應會隱藏 provider endpoint、API key 狀態、本機資源路徑、Channel/bus 狀態與全域 runtime 設定。
 
 ### 6. Stage Event Broker
 
@@ -212,10 +219,17 @@ python -m echobot app --host 127.0.0.1 --port 8001
 
 新增專案規劃、網站結構與參考文件：
 
+- [`docs/README.md`](./docs/README.md)：依「目前可操作、參考/規劃、歷史紀錄」分類的完整文件入口。
 - [`docs/implementation/echobot-web-mobile-integration-plan.md`](./docs/implementation/echobot-web-mobile-integration-plan.md)
 - [`docs/implementation/echobot-web-page-links.md`](./docs/implementation/echobot-web-page-links.md)
 - [`docs/implementation/echobot-web-site-structure.md`](./docs/implementation/echobot-web-site-structure.md)
 - [`docs/implementation/open-llm-vtuber-reference-gap.md`](./docs/implementation/open-llm-vtuber-reference-gap.md)
+- [`docs/architecture/modular-runtime-foundation-2026-07-20.md`](./docs/architecture/modular-runtime-foundation-2026-07-20.md)
+- [`docs/architecture/modular-api-review-2026-07-20.md`](./docs/architecture/modular-api-review-2026-07-20.md)
+- [`docs/architecture/stage-event-broker.md`](./docs/architecture/stage-event-broker.md)
+- [`docs/database/session-store-backends.md`](./docs/database/session-store-backends.md)
+
+Runtime foundation 目前提供 bounded user-runtime/cache、revisioned runtime context、`ETag`/`304`、JSONL/SQLite Session repository 與 migration/export。Stage 使用 memory broker 時只允許單 worker；多 worker 必須明確選 Redis，設定錯誤不會靜默退回 memory。
 
 ## 目前狀態與公開注意事項
 
@@ -268,6 +282,15 @@ LLM_MODEL=your-model-name
 LLM_BASE_URL=https://your-provider.example/v1
 ```
 
+第一次只驗證文字對話時，可先關閉語音模型自動下載，避免第一次啟動額外下載資源：
+
+```text
+ECHOBOT_ASR_SHERPA_AUTO_DOWNLOAD=false
+ECHOBOT_VAD_SILERO_AUTO_DOWNLOAD=false
+```
+
+需要本機 ASR/VAD 時再明確開啟並預留下載時間與磁碟空間。這兩個設定不會停用外部 OpenAI-compatible 語音 provider。
+
 本地模型、遠端私有模型服務與 API key 請在自己的 `.env` 或 secret manager 中設定，不要把實際主機、tailnet IP、模型清單或 key 放進公開 repo。
 
 ### 模型與 CUDA 部署策略
@@ -315,6 +338,16 @@ http://127.0.0.1:8000/stage?session_name=demo
 http://127.0.0.1:8000/messenger
 http://127.0.0.1:8000/admin
 ```
+
+### 5. 10–15 分鐘首次成功流程
+
+1. 用 Admin 開啟 `/admin/models`，新增或選擇 LLM profile，儲存後按「測試連線」。畫面只有在實際 smoke 成功後才顯示連線正常。
+2. 開啟 `/admin/characters`，建立角色並綁定剛才的 LLM；Voice 與 Live2D 可先留空，之後再補。
+3. 開啟 `/admin/sessions`，建立名稱為 `demo` 的 Session 並選擇該角色。
+4. 用 Operator 或 Admin 開啟 `/console`，選擇 `demo` 後傳送一則訊息。中台修改是目前 Session 的暫時設定，不會寫回後台 profile。
+5. 另開 `/stage?session_name=demo`，確認同一則最終回覆出現在字幕。若沒有同步，先確認 Console 與 Stage 選到同一 Session，再查 `/guide` 的故障排除。
+
+成功標準是：模型測試連線通過、Console 收到回覆、Stage 顯示同一 Session 的最終字幕。語音與 Live2D 不需要阻塞第一次文字流程。
 
 ## 測試
 

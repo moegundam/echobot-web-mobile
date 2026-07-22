@@ -5,47 +5,146 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title data-i18n-key="console.pageTitle">EchoBot</title>
     <link rel="icon" href="/favicon.ico" type="image/svg+xml">
-    <link rel="stylesheet" href="/web/assets/styles/index.css?v=console-layout-2">
+    <link rel="stylesheet" href="/web/assets/styles/index.css?v=session-runtime-p1-2&uiux=6">
+    <script type="importmap">
+        {
+            "imports": {
+                "/web/assets/core/dom.js": "/web/assets/core/dom.js?v=uiux-3",
+                "/web/assets/core/store.js": "/web/assets/core/store.js?v=uiux-2",
+                "/web/assets/core/dom.js?v=uiux-1": "/web/assets/core/dom.js?v=uiux-3",
+                "/web/assets/core/store.js?v=uiux-1": "/web/assets/core/store.js?v=uiux-2"
+            }
+        }
+    </script>
 </head>
 <body data-page-title-key="console.pageTitle">
-    <div class="page-shell">
+    <div class="page-shell" data-mobile-workspace-view="stage">
         <h1 class="sr-only" data-i18n-key="console.pageTitle">EchoBot Console</h1>
-        <section class="stage-panel">
+        <nav
+            id="console-mobile-workspace-tabs"
+            class="console-mobile-workspace-tabs"
+            role="tablist"
+            aria-label="EchoBot Console"
+            data-i18n-aria-label-key="console.pageTitle"
+        >
+            <button
+                id="console-mobile-workspace-tab-stage"
+                class="console-mobile-workspace-tab"
+                type="button"
+                role="tab"
+                aria-selected="true"
+                aria-controls="console-stage-workspace"
+                tabindex="0"
+                data-console-workspace-tab="stage"
+                data-i18n-key="console.openStage"
+            >Stage</button>
+            <button
+                id="console-mobile-workspace-tab-operations"
+                class="console-mobile-workspace-tab"
+                type="button"
+                role="tab"
+                aria-selected="false"
+                aria-controls="console-operations-workspace"
+                tabindex="-1"
+                data-console-workspace-tab="operations"
+                data-i18n-key="console.controlPanel"
+            >Operations</button>
+            <button
+                id="console-mobile-workspace-tab-chat"
+                class="console-mobile-workspace-tab"
+                type="button"
+                role="tab"
+                aria-selected="false"
+                aria-controls="console-chat-workspace"
+                tabindex="-1"
+                data-console-workspace-tab="chat"
+                data-i18n-key="console.conversation"
+            >Chat</button>
+        </nav>
+        <section
+            id="console-stage-workspace"
+            class="stage-panel"
+            data-console-workspace-region="stage"
+        >
             <div class="stage-header">
                 <div class="stage-header-meta">
                     <p class="eyebrow" data-i18n-key="console.eyebrow">EchoBot Web Console</p>
                     <span id="connection-badge" class="status-badge status-idle" data-i18n-key="console.status.initializing">initializing</span>
+                    <span id="access-role-badge" class="status-badge" hidden>Operator</span>
                     <span id="session-label" class="muted-text" data-i18n-key="console.sessionDefault">session: default</span>
                     <span id="model-profile-badge" class="model-profile-badge" hidden>
+                        <label id="model-profile-search-label" class="model-profile-search-label" hidden>
+                            <span class="sr-only" data-i18n-key="console.modelProfileSearch">Search models</span>
+                            <input
+                                id="model-profile-search"
+                                class="model-profile-search"
+                                type="search"
+                                autocomplete="off"
+                                aria-controls="model-profile-select"
+                                data-i18n-placeholder-key="console.modelProfileSearch"
+                                placeholder="Search models"
+                            >
+                        </label>
                         <label class="model-profile-select-label">
                             <span data-i18n-key="console.modelProfile">Model</span>
                             <select id="model-profile-select" class="model-profile-select" autocomplete="off"></select>
                         </label>
-                        <a id="model-profile-link" class="model-profile-manage-link" href="/admin/models" data-i18n-key="console.modelProfileManage">Manage</a>
+                        <a id="model-profile-link" class="model-profile-manage-link" href="/admin/models" data-admin-only hidden data-i18n-key="console.modelProfileManage">Manage</a>
                     </span>
                 </div>
                 <div class="stage-actions">
                     <nav class="console-quick-nav" aria-label="Console quick navigation" data-i18n-aria-label-key="console.quickNavAria">
                         <a id="console-nav-stage-link" class="console-nav-button" href="/stage?session_name=default" data-session-link data-i18n-key="console.openStage">Stage</a>
                         <a id="console-nav-messenger-link" class="console-nav-button" href="/messenger?session_name=default" data-session-link data-i18n-key="console.openMessenger">Messenger</a>
-                        <a class="console-nav-button" href="/admin" data-i18n-key="console.openAdmin">Admin</a>
-                        <a class="console-nav-button" href="/admin/sessions" data-i18n-key="console.openSessions">Sessions</a>
+                        <a class="console-nav-button" href="/admin" data-admin-only hidden data-i18n-key="console.openAdmin">Admin</a>
                     </nav>
                     <div class="console-language-switcher" data-language-switcher></div>
                     <div class="console-display-mode-switcher" data-display-mode-switcher></div>
-                    <button
-                        id="live2d-drawer-toggle"
-                        class="ghost-button ghost-button-compact"
-                        type="button"
-                        aria-expanded="false"
-                        aria-controls="live2d-drawer"
-                        data-i18n-key="console.live2dOptions"
-                    >
-                        Live2D options
-                    </button>
-                    <button id="reset-view-button" class="ghost-button" type="button" data-i18n-key="console.resetModel">Reset model</button>
-                    <button id="stop-audio-button" class="ghost-button" type="button" data-i18n-key="console.stopAudio">Stop voice</button>
-                    <button id="stop-agent-button" class="ghost-button stop-agent-button" type="button" disabled data-i18n-key="console.stopTask">Stop task</button>
+                    <div class="console-command-group" aria-label="Stage commands" data-i18n-aria-label-key="console.stageCommands">
+                        <button
+                            id="live2d-drawer-toggle"
+                            class="ghost-button ghost-button-compact console-command-button"
+                            type="button"
+                            aria-expanded="false"
+                            aria-controls="live2d-drawer"
+                            data-i18n-title-key="console.live2dOptions"
+                            data-i18n-aria-label-key="console.live2dOptions"
+                        >
+                            <span class="console-command-icon" aria-hidden="true">L2D</span>
+                            <span class="console-command-label" data-i18n-key="console.live2dOptions">Live2D options</span>
+                        </button>
+                        <button
+                            id="reset-view-button"
+                            class="ghost-button console-command-button"
+                            type="button"
+                            data-i18n-title-key="console.resetModel"
+                            data-i18n-aria-label-key="console.resetModel"
+                        >
+                            <span class="console-command-icon" aria-hidden="true">&#8634;</span>
+                            <span class="console-command-label" data-i18n-key="console.resetModel">Reset model</span>
+                        </button>
+                        <button
+                            id="stop-audio-button"
+                            class="ghost-button console-command-button"
+                            type="button"
+                            data-i18n-title-key="console.stopAudio"
+                            data-i18n-aria-label-key="console.stopAudio"
+                        >
+                            <span class="console-command-icon" aria-hidden="true">&#9632;</span>
+                            <span class="console-command-label" data-i18n-key="console.stopAudio">Stop voice</span>
+                        </button>
+                        <button
+                            id="stop-agent-button"
+                            class="ghost-button console-command-button stop-agent-button"
+                            type="button"
+                            disabled
+                            data-i18n-title-key="console.stopTask"
+                            data-i18n-aria-label-key="console.stopTask"
+                        >
+                            <span class="console-command-icon" aria-hidden="true">&#10005;</span>
+                            <span class="console-command-label" data-i18n-key="console.stopTask">Stop task</span>
+                        </button>
+                    </div>
                 </div>
             </div>
             <div id="live2d-stage" class="live2d-stage">
@@ -184,7 +283,7 @@
                     </button>
                 </div>
                 <div class="session-sidebar-toolbar">
-                    <a class="console-control-link" href="/admin/sessions" data-i18n-key="admin.sessions">Sessions</a>
+                    <a class="console-control-link" href="/admin/sessions" data-admin-only hidden data-i18n-key="admin.sessions">Sessions</a>
                     <button
                         id="session-refresh-button"
                         class="ghost-button ghost-button-compact"
@@ -234,6 +333,8 @@
                             id="role-model-profile-link"
                             class="role-model-profile-link"
                             href="/admin/models"
+                            data-admin-only
+                            hidden
                             data-i18n-key="console.roleModelProfileAction"
                         >Manage in Admin</a>
                         <span id="role-model-profile-detail" class="muted-text role-model-profile-detail" data-i18n-key="console.roleModelProfileUnbound">No role-specific profile binding</span>
@@ -242,7 +343,7 @@
                         <button id="role-refresh-button" class="ghost-button ghost-button-compact" type="button">
                             <span data-i18n-key="console.refresh">Refresh</span>
                         </button>
-                        <a class="console-control-link" href="/admin/characters" data-i18n-key="admin.characters">Characters</a>
+                        <a class="console-control-link" href="/admin/characters" data-admin-only hidden data-i18n-key="admin.characters">Characters</a>
                     </div>
                     <div id="role-preview" class="role-preview">
                         <p class="section-title" data-i18n-key="console.roleContent">Role content</p>
@@ -260,7 +361,15 @@
             ></button>
 
             <div class="chat-main">
-            <details id="settings-panel" class="panel-section settings-panel">
+            <section
+                id="console-operations-workspace"
+                class="console-operations-workspace"
+                data-console-workspace-region="operations"
+            >
+            <details
+                id="settings-panel"
+                class="panel-section settings-panel"
+            >
                 <summary class="settings-summary">
                     <div class="settings-summary-main">
                         <p class="section-title" data-i18n-key="console.controlPanel">Control Panel</p>
@@ -304,8 +413,20 @@
                                 >
                                     Apply to Stage
                                 </button>
-                                <a class="console-control-link" href="/admin/sessions" data-i18n-key="admin.sessions">Sessions</a>
+                                <a class="console-control-link" href="/admin/sessions" data-admin-only hidden data-i18n-key="admin.sessions">Sessions</a>
                             </div>
+                        </div>
+                        <div class="session-runtime-scope" aria-live="polite" aria-atomic="true">
+                            <span class="session-runtime-scope-label" data-i18n-key="console.runtimeLocalOverride">
+                                Temporary Console override; Admin settings are unchanged.
+                            </span>
+                            <span
+                                id="session-runtime-change-status"
+                                class="session-runtime-change-status is-applied"
+                                role="status"
+                                data-runtime-state="applied"
+                                data-i18n-key="console.runtimeAppliedToStage"
+                            >Applied to Stage</span>
                         </div>
                         <dl class="session-settings-grid">
                             <div>
@@ -334,7 +455,7 @@
                             </div>
                         </dl>
                     </section>
-                    <section class="console-admin-handoff" aria-label="Admin setup" data-i18n-aria-label-key="console.adminHandoff">
+                    <section class="console-admin-handoff" data-admin-only hidden aria-label="Admin setup" data-i18n-aria-label-key="console.adminHandoff">
                         <div>
                             <p class="section-title" data-i18n-key="console.adminHandoff">Detailed setup</p>
                             <span class="muted-text" data-i18n-key="console.adminHandoffHelp">
@@ -365,27 +486,37 @@
                                     <p class="section-title" data-i18n-key="console.groupModelRouting">Model / Voice / Routing</p>
                                     <span class="muted-text" data-i18n-key="console.groupModelRoutingHelp">Model profiles, speech providers, and session route mode.</span>
                                 </div>
-                                <a class="console-control-link" href="/admin/models" data-i18n-key="admin.modelProfiles">LLM Models</a>
+                                <a class="console-control-link" href="/admin/models" data-admin-only hidden data-i18n-key="admin.modelProfiles">LLM Models</a>
                             </div>
                             <div class="field-grid">
                                 <label class="field">
                                     <span data-i18n-key="console.ttsProvider">TTS provider</span>
                                     <select id="tts-provider-select"></select>
                                 </label>
-                                <label class="field">
-                                    <span data-i18n-key="console.voiceSelect">TTS voice</span>
+                                <div class="field voice-search-field">
+                                    <label for="voice-search" data-i18n-key="console.voiceSelect">TTS voice</label>
+                                    <input
+                                        id="voice-search"
+                                        type="search"
+                                        autocomplete="off"
+                                        aria-controls="voice-select"
+                                        data-i18n-placeholder-key="console.voiceSearch"
+                                        placeholder="Search by voice, language, or region"
+                                    >
+                                    <label class="sr-only" for="voice-select" data-i18n-key="console.voiceSearchResults">Voice search results</label>
                                     <select id="voice-select"></select>
-                                </label>
-                                <label class="field">
+                                    <output id="voice-search-status" class="muted-text voice-search-status" aria-live="polite"></output>
+                                </div>
+                                <label class="field" data-admin-only hidden>
                                     <span data-i18n-key="console.asrProvider">ASR provider</span>
                                     <select id="asr-provider-select"></select>
                                 </label>
                                 <label class="field field-span-full">
                                     <span data-i18n-key="console.routeMode">Route mode</span>
                                     <select id="route-mode-select">
-                                        <option value="auto" data-i18n-key="console.routeAuto">Auto decision</option>
+                                        <option value="auto" data-agent-route hidden disabled data-i18n-key="console.routeAuto">Auto decision</option>
                                         <option value="chat_only" data-i18n-key="console.routeChatOnly">Chat only</option>
-                                        <option value="force_agent" data-i18n-key="console.routeForceAgent">Force Agent</option>
+                                        <option value="force_agent" data-agent-route hidden disabled data-i18n-key="console.routeForceAgent">Force Agent</option>
                                     </select>
                                 </label>
                             </div>
@@ -395,7 +526,7 @@
                             <span class="muted-text" data-i18n-key="console.groupRuntimeJobsHelp">Agent permissions, scheduled jobs, and heartbeat work.</span>
                         </div>
                     </div>
-                    <details id="runtime-panel" class="stage-background-panel runtime-panel">
+                    <details id="runtime-panel" class="stage-background-panel runtime-panel" data-admin-only hidden>
                         <summary class="stage-background-header">
                             <div class="stage-background-header-main">
                                 <p class="section-title" data-i18n-key="console.runtimeConfig">Runtime Config</p>
@@ -470,6 +601,8 @@
                                     id="live2d-upload-button"
                                     class="ghost-button ghost-button-compact"
                                     type="button"
+                                    data-admin-only
+                                    hidden
                                 >
                                     <span data-i18n-key="console.uploadLive2dFolder">Upload Live2D folder</span>
                                 </button>
@@ -510,6 +643,8 @@
                                     id="stage-background-upload-button"
                                     class="ghost-button ghost-button-compact"
                                     type="button"
+                                    data-admin-only
+                                    hidden
                                 >
                                     <span data-i18n-key="console.uploadBackground">Upload background</span>
                                 </button>
@@ -841,7 +976,7 @@
                         <span id="asr-detail" class="muted-text" data-i18n-key="console.asrPreparing">Preparing speech recognition...</span>
                     </div>
 
-                    <details id="cron-panel" class="cron-panel">
+                    <details id="cron-panel" class="cron-panel" data-admin-only hidden>
                         <summary class="cron-summary">
                             <div class="cron-summary-main">
                                 <p class="section-title" data-i18n-key="console.cronJobs">CRON Jobs</p>
@@ -866,7 +1001,7 @@
                         </div>
                     </details>
 
-                    <details id="heartbeat-panel" class="heartbeat-panel">
+                    <details id="heartbeat-panel" class="heartbeat-panel" data-admin-only hidden>
                         <summary class="heartbeat-summary">
                             <div class="heartbeat-summary-main">
                                 <p class="section-title" data-i18n-key="console.heartbeatJobs">HEARTBEAT Jobs</p>
@@ -916,8 +1051,15 @@
                     </details>
                 </div>
             </details>
+            </section>
 
-            <section class="conversation-panel" aria-label="Current session" data-i18n-aria-label-key="console.currentSession">
+            <section
+                id="console-chat-workspace"
+                class="conversation-panel"
+                aria-label="Current session"
+                data-i18n-aria-label-key="console.currentSession"
+                data-console-workspace-region="chat"
+            >
                 <div class="panel-section messages-section">
                     <div class="messages-header">
                         <p class="section-title" data-i18n-key="console.conversation">Conversation</p>
@@ -1027,6 +1169,7 @@
                         </div>
                     </div>
                 </form>
+                <p id="assistant-announcement" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></p>
             </section>
             </div>
         </aside>
@@ -1073,6 +1216,6 @@
     <script src="/web/assets/vendor/pixi.min.js"></script>
     <script src="/web/assets/vendor/live2dcubismcore.min.js"></script>
     <script src="/web/assets/vendor/cubism4.min.js"></script>
-    <script type="module" src="/web/assets/app.js?v=background-i18n-1"></script>
+    <script type="module" src="/web/assets/app.js?v=session-runtime-p1-4-mobile-workspace-9"></script>
 </body>
 </html>

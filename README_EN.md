@@ -27,7 +27,7 @@ Based on the currently verifiable pages, APIs, tests, documentation, and smoke s
 | 4 | Admin backend | `/admin` now links guide, structure, deployment, models, voice, Live2D, characters, channels, and other setup pages |
 | 5 | Session-centered runtime | Session drives character, model, voice, Live2D, channel entry, and conversation state resolution |
 | 6 | Three-language i18n | English, Traditional Chinese, and Simplified Chinese switching for the main static and dynamic UI |
-| 7 | Device/display modes | Auto, mobile, portrait, landscape, desktop/dense modes for phone, tablet, and desktop usability |
+| 7 | Device/display modes | Auto, mobile, tablet, and desktop/dense modes for usable layouts across screen sizes |
 | 8 | Trusted-user namespace | Cloudflare Access / reverse-proxy trusted-header mode plus `.echobot/users/<user_id>` isolation |
 | 9 | Stage Event Broker | user/session scoped SSE broker for subtitles, emotion, expression, motion, and Stage replay |
 | 10 | Runtime profiles | LLM, Voice, and Live2D Admin pages; characters bind a full interaction config and support package import/export |
@@ -81,7 +81,8 @@ Original EchoBot mainly used `/web` as the operation page. This edition adds and
 | Console | `/console` | Operator workbench, carrying the original `/web` control surface |
 | Compatible Web | `/web` | Preserved legacy entry, mapped to Console |
 | Admin | `/admin` | Admin index, health, API docs, jobs, and management pages |
-| Operation Guide | `/admin/guide` | Operation, setup, expected outcomes, failure signs, and troubleshooting |
+| Operation Guide | `/guide` | Role-aware usage, expected outcomes, and troubleshooting |
+| Admin Operation Guide | `/admin/guide` | Full Admin setup and deployment guidance, sharing role-filtered content with `/guide` |
 | Site Structure | `/admin/structure` | Route map, Console sections, and API namespace boundaries |
 | Sessions | `/admin/sessions` | Create, inspect, and maintain Sessions; Session is the core entity for character, model, channel entry, and conversation state |
 | Characters | `/admin/characters` | Manage role prompts, LLM / Voice / Live2D bindings, emotion maps, and character package import/export |
@@ -97,9 +98,11 @@ Original EchoBot mainly used `/web` as the operation page. This edition adds and
 This edition adds consistent language and display controls:
 
 - Languages: English, Traditional Chinese, Simplified Chinese.
-- Display modes: Auto, Mobile, Portrait, Landscape, Desktop / Dense.
+- Display modes: Auto, Mobile, Tablet, Desktop / Dense.
 - Console, Stage, Messenger, and Admin pages share the same switching pattern.
 - `/console` adapts its operation layout based on device and selected display mode.
+- Stage full screen and automatic control-bar hiding support presentation use. Mouse-wheel, touch zoom, and reset controls share one character-view state.
+- Console includes model and voice search. After `Apply to Stage`, the `Applied to Stage` status means the change is temporary for the selected Session and does not overwrite an Admin profile.
 
 ### 3. Sitewide Language Switching
 
@@ -138,10 +141,14 @@ python -m echobot app --host 127.0.0.1 --port 8001
 This edition adds trusted-header support so private-test data can be isolated by logged-in identity:
 
 - Default trusted user header: `Cf-Access-Authenticated-User-Email`
+- Tunnel/production profiles also require `Cf-Access-Jwt-Assertion`; after `cloudflared` validates the JWT, EchoBot compares its email claim with the trusted user header.
 - When enabled, protected pages, API docs, `/api/*`, and the ASR WebSocket require a trusted user id.
 - Sessions, history, jobs, attachments, and settings are stored under `.echobot/users/<user_id>/...`.
 - Different users should not see each other's sessions, history, jobs, attachments, or Stage events.
-- `ECHOBOT_ADMIN_ALLOWLIST` can restrict high-risk mutation APIs for runtime, channels, roles, and LLM/voice/Live2D profiles.
+- `ECHOBOT_ADMIN_ALLOWLIST` names administrators who may enter `/admin*` and manage secrets, providers, channels, deployment, and persistent configuration.
+- `ECHOBOT_OPERATOR_ALLOWLIST` may separately name operators who can enter `/web` and `/console`, operate their own sessions, and apply temporary Stage/runtime overrides without overwriting Admin profiles.
+- Operators cannot enter `/admin*`, read owner-global status, upload persistent assets, change provider endpoints, or use `auto` / `force_agent` Agent routes. Regular testers continue to use only `/messenger` and `/stage`.
+- Web config, Session runtime-context, and health responses redact provider endpoints, API-key status, local resource paths, Channel/bus status, and global runtime settings for non-Admin callers.
 
 ### 6. Stage Event Broker
 
@@ -212,10 +219,17 @@ Runtime model configuration is split across three Admin pages so model, voice, a
 
 This edition adds planning, site structure, and reference documents:
 
+- [`docs/README.md`](./docs/README.md): complete documentation entrypoint grouped into current operation, reference/planning, and historical records.
 - [`docs/implementation/echobot-web-mobile-integration-plan.md`](./docs/implementation/echobot-web-mobile-integration-plan.md)
 - [`docs/implementation/echobot-web-page-links.md`](./docs/implementation/echobot-web-page-links.md)
 - [`docs/implementation/echobot-web-site-structure.md`](./docs/implementation/echobot-web-site-structure.md)
 - [`docs/implementation/open-llm-vtuber-reference-gap.md`](./docs/implementation/open-llm-vtuber-reference-gap.md)
+- [`docs/architecture/modular-runtime-foundation-2026-07-20.md`](./docs/architecture/modular-runtime-foundation-2026-07-20.md)
+- [`docs/architecture/modular-api-review-2026-07-20.md`](./docs/architecture/modular-api-review-2026-07-20.md)
+- [`docs/architecture/stage-event-broker.md`](./docs/architecture/stage-event-broker.md)
+- [`docs/database/session-store-backends.md`](./docs/database/session-store-backends.md)
+
+The runtime foundation now includes bounded user runtimes and caches, revisioned runtime context with `ETag`/`304`, JSONL/SQLite Session repositories, and explicit migration/export. The memory Stage broker is single-worker only; multi-worker deployments must select Redis explicitly and never silently fall back to memory.
 
 ## Current Status And Public-Repo Notes
 
@@ -268,6 +282,15 @@ LLM_MODEL=your-model-name
 LLM_BASE_URL=https://your-provider.example/v1
 ```
 
+For a first text-only check, disable automatic speech-model downloads so startup does not unexpectedly fetch additional resources:
+
+```text
+ECHOBOT_ASR_SHERPA_AUTO_DOWNLOAD=false
+ECHOBOT_VAD_SILERO_AUTO_DOWNLOAD=false
+```
+
+Enable local ASR/VAD deliberately when needed and allow time and disk space for downloads. These flags do not disable an external OpenAI-compatible speech provider.
+
 Configure local models, remote private model services, and API keys in your own `.env` file or secret manager. Do not put real hosts, tailnet IPs, model inventories, or keys into a public repository.
 
 ### Model And CUDA Deployment Strategy
@@ -315,6 +338,16 @@ http://127.0.0.1:8000/stage?session_name=demo
 http://127.0.0.1:8000/messenger
 http://127.0.0.1:8000/admin
 ```
+
+### 5. First Success In 10–15 Minutes
+
+1. As an Admin, open `/admin/models`, create or select an LLM profile, save it, and press Test connection. The UI reports a ready connection only after the real smoke succeeds.
+2. Open `/admin/characters`, create a character, and bind that LLM profile. Voice and Live2D can remain unset for the first text-only test.
+3. Open `/admin/sessions`, create a Session named `demo`, and select the character.
+4. As an Operator or Admin, open `/console`, select `demo`, and send one message. Console edits are temporary for the selected Session and do not overwrite Admin profiles.
+5. Open `/stage?session_name=demo` in another tab and confirm the same final reply appears as a subtitle. If it does not, first verify that Console and Stage use the same Session, then follow `/guide` troubleshooting.
+
+The first-success criterion is: model connection smoke passes, Console receives a reply, and Stage displays the final subtitle for the same Session. Voice and Live2D do not block this initial text path.
 
 ## Tests
 

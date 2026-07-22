@@ -21,6 +21,7 @@ from ..providers.openai_compatible import (
     OpenAICompatibleProvider,
     OpenAICompatibleSettings,
 )
+from ..providers.base import LLMProvider
 from ..runtime.session_runner import SessionAgentRunner
 from ..runtime.agent_traces import AgentTraceStore
 from ..runtime.settings import (
@@ -30,7 +31,9 @@ from ..runtime.settings import (
     RuntimeSettings,
     RuntimeSettingsStore,
 )
+from ..runtime.session_repository import SessionRepository
 from ..runtime.sessions import ChatSession, SessionStore
+from ..runtime.sqlite_sessions import SQLiteSessionStore
 from ..runtime.system_prompt import build_default_system_prompt
 from ..scheduling.cron import CronService
 from ..scheduling.heartbeat import HeartbeatService
@@ -46,6 +49,8 @@ class RuntimeOptions:
     env_file: str = ".env"
     workspace: Path | None = None
     storage_root: Path | None = None
+    tool_workspace: Path | None = None
+    memory_workspace: Path | None = None
     temperature: float | None = None
     max_tokens: int | None = None
     allow_unconfigured_llm: bool = False
@@ -57,6 +62,8 @@ class RuntimeOptions:
     heartbeat_interval: int | None = None
     session: str | None = None
     new_session: str | None = None
+    session_store_backend: str = "jsonl"
+    agent_session_store_backend: str | None = None
 
 
 @dataclass(slots=True)
@@ -65,8 +72,8 @@ class RuntimeContext:
     attachment_store: AttachmentStore
     supports_image_input: bool
     agent: AgentCore
-    session_store: SessionStore
-    agent_session_store: SessionStore
+    session_store: SessionRepository
+    agent_session_store: SessionRepository
     session: ChatSession | None
     tool_registry: ToolRegistry | None
     skill_registry: SkillRegistry | None
@@ -82,6 +89,17 @@ class RuntimeContext:
     runtime_controls: RuntimeControls
     default_runtime_config: RuntimeConfigSnapshot
     storage_root: Path | None = None
+    tool_workspace: Path | None = None
+    decision_provider: LLMProvider | None = None
+    roleplay_provider: LLMProvider | None = None
+    dedicated_decision_provider: bool = False
+    dedicated_roleplay_provider: bool = False
+    default_temperature: float | None = None
+    default_max_tokens: int | None = None
+
+    def close_session_stores(self) -> None:
+        """Close optional resource-backed repositories without widening the protocol."""
+        close_session_repositories(self.session_store, self.agent_session_store)
 
 
 def build_runtime_context(
@@ -89,8 +107,14 @@ def build_runtime_context(
     *,
     load_session_state: bool,
 ) -> RuntimeContext:
+    session_backend = _resolve_session_store_backend(options.session_store_backend)
+    agent_session_backend = _resolve_session_store_backend(
+        options.agent_session_store_backend or session_backend,
+    )
     workspace = (options.workspace or Path(".")).resolve()
     storage_root = _storage_root(workspace, options.storage_root)
+    tool_workspace = _resolve_optional_workspace(workspace, options.tool_workspace)
+    tool_workspace.mkdir(parents=True, exist_ok=True)
     env_file_path = _resolve_runtime_path(workspace, options.env_file)
     load_env_file(str(env_file_path))
     default_runtime_config = _default_runtime_config(options)
@@ -130,6 +154,8 @@ def build_runtime_context(
         image_budget=_image_budget_from_env(),
         file_budget=_file_budget_from_env(),
     )
+    dedicated_decision_provider = _has_provider_env("DECIDER_LLM_")
+    dedicated_roleplay_provider = _has_provider_env("ROLE_LLM_")
     decider_provider = _build_provider_from_env(
         prefix="DECIDER_LLM_",
         fallback_settings=settings,
@@ -147,6 +173,11 @@ def build_runtime_context(
             workspace,
             settings,
         )
+        if options.memory_workspace is not None:
+            memory_settings.working_dir = _resolve_optional_workspace(
+                workspace,
+                options.memory_workspace,
+            )
         memory_support = ReMeLightSupport(memory_settings)
 
     provider = OpenAICompatibleProvider(
@@ -159,7 +190,7 @@ def build_runtime_context(
     agent = AgentCore(
         provider,
         system_prompt=_build_system_prompt_provider(
-            workspace=workspace,
+            workspace=tool_workspace,
             supports_image_input=supports_image_input,
             memory_support=memory_support,
             cron_store_path=cron_store_path,
@@ -169,14 +200,22 @@ def build_runtime_context(
         ),
         memory_support=memory_support,
     )
-    session_store = SessionStore(storage_root / "sessions")
-    agent_session_store = SessionStore(storage_root / "agent_sessions")
+    session_store = _build_session_store(
+        storage_root,
+        namespace="sessions",
+        backend=session_backend,
+    )
+    agent_session_store = _build_session_store(
+        storage_root,
+        namespace="agent_sessions",
+        backend=agent_session_backend,
+    )
     agent_trace_store = AgentTraceStore(storage_root / "agent_traces")
     session = _load_session(session_store, options) if load_session_state else None
     cron_service = CronService(cron_store_path)
     tool_registry_factory = _build_tool_registry_factory(
         options,
-        workspace=workspace,
+        workspace=tool_workspace,
         attachment_store=attachment_store,
         supports_image_input=supports_image_input,
         memory_support=memory_support,
@@ -254,6 +293,13 @@ def build_runtime_context(
         runtime_controls=runtime_controls,
         default_runtime_config=default_runtime_config,
         storage_root=storage_root,
+        tool_workspace=tool_workspace,
+        decision_provider=decider_provider,
+        roleplay_provider=role_provider,
+        dedicated_decision_provider=dedicated_decision_provider,
+        dedicated_roleplay_provider=dedicated_roleplay_provider,
+        default_temperature=options.temperature,
+        default_max_tokens=options.max_tokens,
     )
 
 
@@ -322,7 +368,7 @@ def _build_system_prompt_provider(
 
 
 def _load_session(
-    session_store: SessionStore,
+    session_store: SessionRepository,
     options: RuntimeOptions,
 ) -> ChatSession:
     if options.new_session:
@@ -334,6 +380,45 @@ def _load_session(
         return session
 
     return session_store.load_current_session()
+
+
+def _resolve_session_store_backend(value: str) -> str:
+    backend = str(value or "").strip().lower()
+    if backend not in {"jsonl", "sqlite"}:
+        raise ValueError(
+            "session store backend must be one of: jsonl, sqlite",
+        )
+    return backend
+
+
+def _build_session_store(
+    storage_root: Path,
+    *,
+    namespace: str,
+    backend: str,
+) -> SessionRepository:
+    if backend == "jsonl":
+        return SessionStore(storage_root / namespace)
+    if backend == "sqlite":
+        return SQLiteSessionStore(storage_root / f"{namespace}.sqlite3")
+    raise ValueError(f"Unsupported session store backend: {backend}")
+
+
+def close_session_repositories(*repositories: SessionRepository) -> None:
+    """Close repositories that own external resources; JSONL remains a no-op."""
+    failures: list[Exception] = []
+    for repository in repositories:
+        close = getattr(repository, "close", None)
+        if callable(close):
+            try:
+                close()
+            except Exception as exc:
+                failures.append(exc)
+    if failures:
+        details = "; ".join(
+            f"{type(error).__name__}: {error}" for error in failures
+        )
+        raise RuntimeError(f"Session repository cleanup failed: {details}") from failures[0]
 
 
 def _heartbeat_file_path(workspace: Path, storage_root: Path) -> Path:
@@ -492,6 +577,18 @@ def _storage_root(workspace: Path, storage_root: str | Path | None) -> Path:
     if resolved_root.is_absolute():
         return resolved_root.resolve()
     return (workspace / resolved_root).resolve()
+
+
+def _resolve_optional_workspace(
+    project_workspace: Path,
+    configured_workspace: str | Path | None,
+) -> Path:
+    if configured_workspace is None:
+        return project_workspace
+    resolved_workspace = Path(configured_workspace).expanduser()
+    if resolved_workspace.is_absolute():
+        return resolved_workspace.resolve()
+    return (project_workspace / resolved_workspace).resolve()
 
 
 def _build_provider_from_env(

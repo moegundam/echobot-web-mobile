@@ -4,14 +4,14 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title data-i18n-key="messenger.pageTitle">EchoBot</title>
-    <link rel="stylesheet" href="/web/assets/styles/shell-pages.css?v=ux-audit-1">
+    <link rel="stylesheet" href="/web/assets/styles/shell-pages.css?v=messenger-file-i18n-1&uiux=3">
 </head>
 <body class="messenger-page" data-page-title-key="messenger.pageTitle">
     <main id="messenger-root" class="messenger-root">
         <header class="messenger-header">
             <div>
                 <h1 data-i18n-key="messenger.heading">EchoBot Messenger</h1>
-                <p id="messenger-status" data-i18n-key="messenger.status.ready">ready</p>
+                <p id="messenger-status" role="status" aria-live="polite" aria-atomic="true" data-i18n-key="messenger.status.ready">ready</p>
             </div>
             <div class="language-switcher" data-language-switcher></div>
             <div class="display-mode-switcher" data-display-mode-switcher></div>
@@ -21,14 +21,17 @@
                 <input id="messenger-session" type="hidden" value="default" autocomplete="off">
             </label>
             <nav class="messenger-quick-nav" aria-label="Messenger quick navigation" data-i18n-aria-label-key="messenger.quickNavAria">
-                <a href="/console" data-i18n-key="admin.console">Console</a>
+                <a href="/console" data-operator-only hidden data-i18n-key="admin.console">Console</a>
                 <a href="/stage?session_name=default" data-session-link data-i18n-key="console.openStage">Stage</a>
-                <a href="/admin/sessions" data-i18n-key="admin.sessions">Sessions</a>
-                <a href="/admin" data-i18n-key="console.openAdmin">Admin</a>
+                <a href="/guide" data-i18n-key="admin.guide">Guide</a>
+                <a href="/admin/sessions" data-admin-only hidden data-i18n-key="admin.sessions">Sessions</a>
+                <a href="/admin" data-admin-only hidden data-i18n-key="console.openAdmin">Admin</a>
             </nav>
         </header>
-        <section id="messenger-runtime-context" class="runtime-context-strip" aria-live="polite"></section>
-        <section id="messenger-messages" class="messenger-messages" aria-live="polite"></section>
+        <section id="messenger-runtime-context" class="runtime-context-strip" aria-live="off"></section>
+        <section id="messenger-messages" class="messenger-messages">
+            <p id="messenger-empty-state" class="messenger-empty-state" data-i18n-key="console.emptySessionStart">This session has no messages yet. Start chatting.</p>
+        </section>
         <form id="messenger-form" class="messenger-composer">
             <div class="messenger-input-tools">
                 <button id="messenger-record" type="button" data-i18n-key="messenger.startRecording">Start recording</button>
@@ -36,16 +39,21 @@
                     <span data-i18n-key="messenger.urlInput">URL</span>
                     <input id="messenger-url" type="url" autocomplete="off" data-i18n-placeholder-key="messenger.urlPlaceholder">
                 </label>
-                <label class="messenger-file-control">
-                    <span data-i18n-key="messenger.uploadFile">Upload file</span>
-                    <input id="messenger-file-input" type="file" multiple>
-                </label>
+                <div class="messenger-file-control" role="group" aria-labelledby="messenger-file-label">
+                    <span id="messenger-file-label" data-i18n-key="messenger.uploadFile">Upload file</span>
+                    <div class="messenger-file-picker">
+                        <input id="messenger-file-input" class="messenger-file-input" type="file" multiple tabindex="-1" aria-hidden="true">
+                        <button id="messenger-file-button" type="button" aria-controls="messenger-file-input" data-i18n-key="messenger.chooseFiles">Choose files</button>
+                        <span id="messenger-file-summary" class="messenger-file-summary" data-i18n-key="messenger.noFilesSelected">No files selected</span>
+                    </div>
+                </div>
             </div>
             <div id="messenger-attachments" class="messenger-attachments" aria-live="polite"></div>
-            <textarea id="messenger-input" rows="3" placeholder="Type a message" data-i18n-placeholder-key="messenger.inputPlaceholder"></textarea>
+            <label id="messenger-input-label" class="messenger-message-label" for="messenger-input" data-i18n-key="messenger.inputPlaceholder">Type a message</label>
+            <textarea id="messenger-input" rows="3" aria-labelledby="messenger-input-label" placeholder="Type a message" data-i18n-placeholder-key="messenger.inputPlaceholder"></textarea>
             <button id="messenger-send" type="submit" data-i18n-key="messenger.send">Send</button>
         </form>
     </main>
-    <script type="module" src="/web/assets/messenger-app.js?v=language-menu-1"></script>
+    <script type="module" src="/web/assets/messenger-app.js?v=session-runtime-p1-3&uiux=2"></script>
 </body>
 </html>

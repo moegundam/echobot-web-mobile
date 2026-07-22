@@ -16,11 +16,28 @@ export function createLive2DSceneController(deps) {
         applyStageEffectsSettings,
         applyStageBackgroundTransform,
         currentStageBackgroundOption,
+        reframeLive2DViewForResize,
         refreshLive2DFocusFromLastPointer,
         syncPixiStageBackground,
     } = deps;
 
     let stageResizeFrameId = 0;
+    let renderedStageSize = null;
+
+    function currentStageSize() {
+        if (renderedStageSize) {
+            return { ...renderedStageSize };
+        }
+        return measuredStageSize();
+    }
+
+    function measuredStageSize() {
+        const screen = live2dState.pixiApp && live2dState.pixiApp.screen;
+        return {
+            width: Math.max(Number(screen && screen.width) || 0, 1),
+            height: Math.max(Number(screen && screen.height) || 0, 1),
+        };
+    }
 
     function updateSceneFilterBounds() {
         if (!live2dState.pixiApp || !live2dState.live2dStage) {
@@ -418,7 +435,10 @@ export function createLive2DSceneController(deps) {
 
             stageResizeFrameId = window.requestAnimationFrame(() => {
                 stageResizeFrameId = 0;
+                const previousStageSize = currentStageSize();
                 resizePixiApplicationToStage();
+                reframeLive2DViewForResize(previousStageSize);
+                renderedStageSize = measuredStageSize();
                 updateSceneFilterBounds();
                 if (live2dState.pixiApp) {
                     resetAllStageParticles(
@@ -496,6 +516,7 @@ export function createLive2DSceneController(deps) {
         live2dState.live2dStage.interactive = true;
         live2dState.live2dStage.hitArea = live2dState.pixiApp.screen;
         resizePixiApplicationToStage();
+        renderedStageSize = measuredStageSize();
         createStageScene();
     }
 

@@ -1,6 +1,7 @@
 services:
   echobot:
     image: "ghcr.io/moegundam/echobot-web-mobile@sha256:${ECHOBOT_IMAGE_SHA256:?Set ECHOBOT_IMAGE_SHA256 to the 64-character digest value without the sha256 prefix}"
+    command: ["python", "-m", "echobot", "app", "--host", "0.0.0.0", "--port", "8000"]
     expose:
       - "8000"
     env_file:
@@ -10,7 +11,11 @@ services:
       ECHOBOT_SHELL_SAFETY_MODE: ${ECHOBOT_SHELL_SAFETY_MODE:-workspace-write}
       ECHOBOT_DEPLOYMENT_PROFILE: ${ECHOBOT_DEPLOYMENT_PROFILE:-tunnel}
       ECHOBOT_TRUSTED_USER_HEADER_ENABLED: ${ECHOBOT_TRUSTED_USER_HEADER_ENABLED:-true}
+      ECHOBOT_TRUSTED_USER_REQUIRED: ${ECHOBOT_TRUSTED_USER_REQUIRED:-true}
+      ECHOBOT_TRUSTED_USER_ASSERTION_REQUIRED: ${ECHOBOT_TRUSTED_USER_ASSERTION_REQUIRED:-true}
+      ECHOBOT_ADMIN_ALLOWLIST: ${ECHOBOT_ADMIN_ALLOWLIST:-}
       ECHOBOT_ADMIN_REQUIRED: ${ECHOBOT_ADMIN_REQUIRED:-true}
+      ECHOBOT_OPERATOR_ALLOWLIST: ${ECHOBOT_OPERATOR_ALLOWLIST:-}
     volumes:
       - echobot_data:/app/.echobot
     tmpfs:

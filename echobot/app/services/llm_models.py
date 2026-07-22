@@ -7,7 +7,7 @@ from .session_catalog import llm_model_from_profile, project_llm_models
 
 
 class LLMModelService:
-    """LLM model use cases and API projection."""
+    """LLM model use cases returning transport-independent payloads."""
 
     def __init__(self, repository: LLMModelRepository) -> None:
         self._repository = repository
@@ -16,10 +16,7 @@ class LLMModelService:
         payload = self._repository.list_payload()
         return {
             "active_model_id": str(payload.get("active_profile_id") or "a"),
-            "models": [
-                model.model_dump(mode="json")
-                for model in project_llm_models(payload)
-            ],
+            "models": project_llm_models(payload),
         }
 
     def legacy_payload(self) -> dict[str, Any]:
@@ -35,11 +32,11 @@ class LLMModelService:
             name=name,
             source_model_id=source_model_id,
         )
-        return llm_model_from_profile(profile).model_dump(mode="json")
+        return llm_model_from_profile(profile)
 
     def update_model(self, model_id: str, updates: dict[str, Any]) -> dict[str, Any]:
         profile = self._repository.update(model_id, updates)
-        return llm_model_from_profile(profile).model_dump(mode="json")
+        return llm_model_from_profile(profile)
 
     def activate_model(self, model_id: str) -> dict[str, Any]:
         self._repository.activate(model_id)

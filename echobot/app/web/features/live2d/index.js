@@ -98,6 +98,9 @@ export function createLive2DModule(deps) {
         currentStageBackgroundOption(...args) {
             return backgroundController.currentStageBackgroundOption(...args);
         },
+        reframeLive2DViewForResize(...args) {
+            modelController.reframeLive2DViewForResize(...args);
+        },
         refreshLive2DFocusFromLastPointer(...args) {
             modelController.refreshLive2DFocusFromLastPointer(...args);
         },
@@ -147,6 +150,8 @@ export function createLive2DModule(deps) {
         applyConfigToUI: configController.applyConfigToUI,
         applyLive2DMouseFollowSetting: modelController.applyLive2DMouseFollowSetting,
         applyMouthValue: modelController.applyMouthValue,
+        applyStageBackgroundByKey: backgroundController.applyStageBackgroundByKey,
+        applyStageBackgroundRuntimeOverride: backgroundController.applyStageBackgroundRuntimeOverride,
         handleLive2DDirectoryUpload: configController.handleLive2DDirectoryUpload,
         handleLive2DModelChange: configController.handleLive2DModelChange,
         handleLive2DControlsClick: controlsController.handleControlsClick,

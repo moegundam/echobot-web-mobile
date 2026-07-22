@@ -207,7 +207,13 @@ jobs:
             --detach \
             --name echobot-ci-runtime \
             --publish 127.0.0.1:18080:8000 \
-            echobot-web-mobile:ci
+            --env ECHOBOT_DEPLOYMENT_PROFILE=local \
+            --env ECHOBOT_TRUSTED_USER_HEADER_ENABLED=false \
+            --env ECHOBOT_TRUSTED_USER_REQUIRED=false \
+            --env ECHOBOT_TRUSTED_USER_ASSERTION_REQUIRED=false \
+            --env ECHOBOT_ADMIN_REQUIRED=false \
+            echobot-web-mobile:ci \
+            python -m echobot app --host 0.0.0.0 --port 8000
           trap 'docker rm --force echobot-ci-runtime >/dev/null 2>&1 || true' EXIT
 
           for attempt in {1..60}; do

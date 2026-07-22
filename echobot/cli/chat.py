@@ -10,7 +10,11 @@ from ..commands.bindings import CliCommandContext, dispatch_cli_command
 from ..memory import ReMeLightSupport
 from ..models import LLMMessage
 from ..orchestration import ConversationCoordinator
-from ..runtime.bootstrap import RuntimeOptions, build_runtime_context
+from ..runtime.bootstrap import (
+    RuntimeOptions,
+    build_runtime_context,
+    close_session_repositories,
+)
 from ..runtime.scheduled_tasks import (
     build_cron_job_executor as build_shared_cron_job_executor,
     build_heartbeat_executor as build_shared_heartbeat_executor,
@@ -30,6 +34,18 @@ from .session_commands import (
 
 EXIT_COMMANDS = {"exit", "quit", "/exit", "/quit"}
 CLEAR_COMMANDS = {"clear", "/clear"}
+
+
+class CliRuntimeCleanupError(RuntimeError):
+    """Reports CLI shutdown failures after every resource was attempted."""
+
+    def __init__(self, failures: list[tuple[str, Exception]]) -> None:
+        self.failures = tuple(failures)
+        details = "; ".join(
+            f"{name}: {type(error).__name__}: {error}"
+            for name, error in failures
+        )
+        super().__init__(f"CLI runtime cleanup failed: {details}")
 
 
 def configure_parser(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
@@ -275,16 +291,38 @@ async def _main_async(args: argparse.Namespace) -> None:
                 print(f"Assistant> {content}")
             print()
     finally:
-        await context.cron_service.stop()
-        if context.heartbeat_service is not None:
-            await context.heartbeat_service.stop()
-        await coordinator.close()
-        if context.memory_support is not None:
-            await context.memory_support.close()
+        await cleanup_cli_runtime_resources(context, coordinator)
 
 
 def run(args: argparse.Namespace) -> None:
     asyncio.run(_main_async(args))
+
+
+async def cleanup_cli_runtime_resources(context, coordinator) -> None:
+    failures: list[tuple[str, Exception]] = []
+
+    async def attempt(name: str, cleanup) -> None:
+        try:
+            await cleanup()
+        except Exception as exc:
+            failures.append((name, exc))
+
+    await attempt("cron", context.cron_service.stop)
+    if context.heartbeat_service is not None:
+        await attempt("heartbeat", context.heartbeat_service.stop)
+    await attempt("coordinator", coordinator.close)
+    if context.memory_support is not None:
+        await attempt("memory", context.memory_support.close)
+    try:
+        close_session_repositories(
+            context.session_store,
+            context.agent_session_store,
+        )
+    except Exception as exc:
+        failures.append(("session repositories", exc))
+
+    if failures:
+        raise CliRuntimeCleanupError(failures)
 
 
 def main(argv: list[str] | None = None) -> None:

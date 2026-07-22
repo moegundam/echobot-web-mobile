@@ -23,7 +23,7 @@ from ..models import (
     message_content_to_text,
     normalize_message_content,
 )
-from ..speech_assets import open_http_url
+from ..network.http import open_http_url
 from .base import LLMProvider
 
 logger = logging.getLogger(__name__)
@@ -31,6 +31,50 @@ _THINKING_TAG_PATTERN = re.compile(r"<think>(.*?)</think>", re.DOTALL)
 _REASONING_RESPONSE_FIELDS = ("reasoning_content", "reasoning")
 _DEFAULT_BASE_URL = "https://api.openai.com/v1"
 _DEFAULT_TIMEOUT_SECONDS = 60.0
+_THINK_OPEN_TAG = "<think>"
+_THINK_CLOSE_TAG = "</think>"
+
+
+class _ThinkingTagStreamFilter:
+    def __init__(self) -> None:
+        self._buffer = ""
+        self._inside_thinking = False
+
+    def feed(self, chunk: str) -> str:
+        self._buffer += chunk
+        visible_parts: list[str] = []
+
+        while self._buffer:
+            marker = _THINK_CLOSE_TAG if self._inside_thinking else _THINK_OPEN_TAG
+            marker_index = self._buffer.find(marker)
+            if marker_index >= 0:
+                if not self._inside_thinking:
+                    visible_parts.append(self._buffer[:marker_index])
+                self._buffer = self._buffer[marker_index + len(marker) :]
+                self._inside_thinking = not self._inside_thinking
+                continue
+
+            retained_length = _partial_marker_suffix_length(self._buffer, marker)
+            consumable_length = len(self._buffer) - retained_length
+            if not self._inside_thinking and consumable_length:
+                visible_parts.append(self._buffer[:consumable_length])
+            self._buffer = self._buffer[consumable_length:]
+            break
+
+        return "".join(visible_parts)
+
+    def flush(self) -> str:
+        visible = "" if self._inside_thinking else self._buffer
+        self._buffer = ""
+        return visible
+
+
+def _partial_marker_suffix_length(value: str, marker: str) -> int:
+    maximum = min(len(value), len(marker) - 1)
+    for length in range(maximum, 0, -1):
+        if value.endswith(marker[:length]):
+            return length
+    return 0
 
 
 @dataclass(slots=True)
@@ -181,13 +225,20 @@ class OpenAICompatibleProvider(LLMProvider):
         )
         thread.start()
 
+        thinking_filter = _ThinkingTagStreamFilter()
         while True:
             item = await queue.get()
             if item is stream_end:
                 break
             if isinstance(item, Exception):
                 raise item
-            yield str(item)
+            visible_chunk = thinking_filter.feed(str(item))
+            if visible_chunk:
+                yield visible_chunk
+
+        trailing_text = thinking_filter.flush()
+        if trailing_text:
+            yield trailing_text
 
     def _build_payload(
         self,
@@ -309,12 +360,10 @@ class OpenAICompatibleProvider(LLMProvider):
             ) as response:
                 return json.loads(response.read().decode("utf-8"))
         except error.HTTPError as exc:
-            detail = exc.read().decode("utf-8", errors="replace")
-            raise RuntimeError(
-                f"LLM provider request failed: status={exc.code}, detail={detail}"
-            ) from exc
+            logger.warning("LLM provider request failed with HTTP status %s", exc.code)
+            raise RuntimeError(f"LLM provider request failed: status={exc.code}") from exc
         except error.URLError as exc:
-            raise RuntimeError(f"LLM provider network error: {exc.reason}") from exc
+            raise RuntimeError("LLM provider network error") from exc
 
     def _stream_text_chunks(self, payload: dict[str, Any]) -> Iterator[str]:
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -332,6 +381,7 @@ class OpenAICompatibleProvider(LLMProvider):
                 timeout_seconds=self.settings.timeout,
                 allow_private=True,
             ) as response:
+                completed = False
                 for raw_line in response:
                     line = raw_line.decode("utf-8", errors="replace").strip()
                     if not line or not line.startswith("data:"):
@@ -341,18 +391,23 @@ class OpenAICompatibleProvider(LLMProvider):
                     if not payload_text:
                         continue
                     if payload_text == "[DONE]":
+                        completed = True
                         break
 
                     chunk_text = self._parse_stream_chunk(payload_text)
+                    if _stream_payload_has_finish_reason(payload_text):
+                        completed = True
                     if chunk_text:
                         yield chunk_text
+                if not completed:
+                    raise RuntimeError(
+                        "LLM provider stream ended before completion"
+                    )
         except error.HTTPError as exc:
-            detail = exc.read().decode("utf-8", errors="replace")
-            raise RuntimeError(
-                f"LLM provider request failed: status={exc.code}, detail={detail}"
-            ) from exc
+            logger.warning("LLM provider request failed with HTTP status %s", exc.code)
+            raise RuntimeError(f"LLM provider request failed: status={exc.code}") from exc
         except error.URLError as exc:
-            raise RuntimeError(f"LLM provider network error: {exc.reason}") from exc
+            raise RuntimeError("LLM provider network error") from exc
 
     def _parse_response(self, data: dict[str, Any]) -> LLMResponse:
         choices = data.get("choices")
@@ -445,7 +500,6 @@ class OpenAICompatibleProvider(LLMProvider):
 
         content = delta.get("content")
         if isinstance(content, str):
-            content, _reasoning_content = _extract_thinking_tags_from_content(content)
             return content
         return ""
 
@@ -481,6 +535,20 @@ def _extract_reasoning_content(data: dict[str, Any]) -> tuple[str, str]:
         if value:
             return str(value), field_name
     return "", "reasoning_content"
+
+
+def _stream_payload_has_finish_reason(payload_text: str) -> bool:
+    try:
+        data = json.loads(payload_text)
+    except json.JSONDecodeError:
+        return False
+    choices = data.get("choices")
+    if not isinstance(choices, list):
+        return False
+    return any(
+        isinstance(choice, dict) and choice.get("finish_reason") is not None
+        for choice in choices
+    )
 
 
 def _extract_thinking_tags_from_content(content: Any) -> tuple[Any, str]:

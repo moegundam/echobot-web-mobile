@@ -118,6 +118,15 @@ def main() -> int:
 def _check_page(context, *, base_url: str, page_path: str, viewport: Viewport) -> list[str]:
     failures: list[str] = []
     page = context.new_page()
+    console_errors: list[str] = []
+    uncaught_errors: list[str] = []
+    page.on(
+        "console",
+        lambda message: console_errors.append(message.text)
+        if message.type == "error"
+        else None,
+    )
+    page.on("pageerror", lambda error: uncaught_errors.append(str(error)))
     url = f"{base_url}{page_path}"
     try:
         response = page.goto(url, wait_until="domcontentloaded", timeout=15000)
@@ -136,13 +145,21 @@ def _check_page(context, *, base_url: str, page_path: str, viewport: Viewport) -
             failures.append(
                 f"{viewport.label} {page_path}: horizontal overflow {overflow}px"
             )
-        page_errors = page.evaluate(
+        reported_page_errors = page.evaluate(
             """() => Array.from(document.querySelectorAll('[data-page-error]'))
                 .map((node) => node.textContent || '')
                 .filter(Boolean)"""
         )
-        for page_error in page_errors:
-            failures.append(f"{viewport.label} {page_path}: {page_error}")
+        for page_error in reported_page_errors:
+            failures.append(f"{viewport.label} {page_path}: reported error: {page_error}")
+        for uncaught_error in uncaught_errors:
+            failures.append(
+                f"{viewport.label} {page_path}: page error: {uncaught_error}"
+            )
+        for console_error in console_errors:
+            failures.append(
+                f"{viewport.label} {page_path}: console error: {console_error}"
+            )
     except Exception as exc:
         failures.append(f"{viewport.label} {page_path}: {exc}")
     finally:

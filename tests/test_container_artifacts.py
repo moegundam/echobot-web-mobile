@@ -21,6 +21,12 @@ def test_dockerfile_uses_hardened_runtime_defaults() -> None:
     assert "HEALTHCHECK" in dockerfile
     assert "urlopen('http://127.0.0.1:8000/healthz', timeout=5)" in dockerfile
     assert "ECHOBOT_SHELL_SAFETY_MODE=workspace-write" in dockerfile
+    assert "ECHOBOT_DEPLOYMENT_PROFILE=production" in dockerfile
+    assert "ECHOBOT_TRUSTED_USER_HEADER_ENABLED=true" in dockerfile
+    assert "ECHOBOT_TRUSTED_USER_REQUIRED=true" in dockerfile
+    assert "ECHOBOT_TRUSTED_USER_ASSERTION_REQUIRED=true" in dockerfile
+    assert "ECHOBOT_ADMIN_REQUIRED=true" in dockerfile
+    assert 'CMD ["python", "-m", "echobot", "app", "--host", "127.0.0.1"' in dockerfile
     assert "LLM_API_KEY=" not in dockerfile
     assert "TELEGRAM_BOT_TOKEN=" not in dockerfile
     assert "DISCORD_BOT_TOKEN=" not in dockerfile
@@ -33,11 +39,23 @@ def test_compose_places_the_app_behind_a_loopback_ingress() -> None:
     ingress = compose["services"]["ingress"]
 
     assert service["image"] == "echobot-web-mobile:local"
+    assert service["command"] == [
+        "python",
+        "-m",
+        "echobot",
+        "app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+    ]
     assert "ports" not in service
     assert service["expose"] == ["8000"]
     assert "echobot_data:/app/.echobot" in service["volumes"]
     assert "LLM_API_KEY" not in service["environment"]
     assert "ECHOBOT_DEPLOYMENT_PROFILE" in service["environment"]
+    assert "ECHOBOT_ADMIN_ALLOWLIST" in service["environment"]
+    assert "ECHOBOT_OPERATOR_ALLOWLIST" in service["environment"]
     assert service["read_only"] is True
     assert service["cap_drop"] == ["ALL"]
     assert "no-new-privileges:true" in service["security_opt"]
@@ -82,6 +100,8 @@ def test_production_compose_requires_an_immutable_image_reference() -> None:
     assert ":latest" not in service["image"]
     assert ":upgrade" not in service["image"]
     assert "build" not in service
+    assert "ECHOBOT_ADMIN_ALLOWLIST" in service["environment"]
+    assert "ECHOBOT_OPERATOR_ALLOWLIST" in service["environment"]
     assert "ports" not in service
 
 
@@ -116,6 +136,7 @@ def test_tunnel_env_template_uses_fail_closed_security_and_bounded_uploads() -> 
     assert "ECHOBOT_DEPLOYMENT_PROFILE=tunnel" in template
     assert "ECHOBOT_TRUSTED_USER_HEADER_ENABLED=true" in template
     assert "ECHOBOT_TRUSTED_USER_REQUIRED=true" in template
+    assert "ECHOBOT_TRUSTED_USER_ASSERTION_REQUIRED=true" in template
     assert "ECHOBOT_ADMIN_REQUIRED=true" in template
     assert "ECHOBOT_FILE_MAX_INPUT_BYTES=26214400" in template
 
@@ -158,6 +179,11 @@ def test_nginx_ingress_limits_requests_before_the_application_parser() -> None:
     assert "proxy_set_header Upgrade $http_upgrade" in config
     assert "proxy_set_header Connection $connection_upgrade" in config
     assert "proxy_set_header X-Forwarded-Proto https" in config
+    assert "proxy_set_header Cf-Access-Jwt-Assertion $http_cf_access_jwt_assertion" in config
+    assert (
+        "proxy_set_header Cf-Access-Jwt-Assertion $http_cf_access_jwt_assertion"
+        in container_config
+    )
     assert "resolver 127.0.0.11 valid=5s ipv6=off" in container_config
     assert "resolver_timeout 2s" in container_config
     assert "zone echobot_app 64k" in container_config
@@ -209,6 +235,18 @@ def test_ci_validates_the_production_ingress_config_in_the_pinned_container() ->
     )
     assert "scripts/compose_replacement_smoke.py" in replacement_step["run"]
 
+    runtime_step = next(
+        step
+        for step in workflow["jobs"]["test"]["steps"]
+        if step.get("name") == "Container runtime smoke"
+    )
+    runtime_run = runtime_step["run"]
+    assert "--publish 127.0.0.1:18080:8000" in runtime_run
+    assert "--env ECHOBOT_DEPLOYMENT_PROFILE=local" in runtime_run
+    assert "--env ECHOBOT_TRUSTED_USER_HEADER_ENABLED=false" in runtime_run
+    assert "--env ECHOBOT_TRUSTED_USER_ASSERTION_REQUIRED=false" in runtime_run
+    assert "python -m echobot app --host 0.0.0.0 --port 8000" in runtime_run
+
 
 def test_compose_replacement_smoke_requires_new_app_ip_without_ingress_restart() -> None:
     source = (ROOT / "scripts" / "compose_replacement_smoke.py").read_text(
@@ -242,3 +280,8 @@ def test_cloudflared_template_routes_through_bounded_ingress() -> None:
 
     assert "service: http://127.0.0.1:8080" in config
     assert "service: http://127.0.0.1:8000" not in config
+    assert "access:" in config
+    assert "required: true" in config
+    assert "teamName: <CLOUDFLARE-TEAM-NAME>" in config
+    assert "audTag:" in config
+    assert "- <ACCESS-APPLICATION-AUDIENCE-TAG>" in config

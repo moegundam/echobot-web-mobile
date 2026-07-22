@@ -1,4 +1,20 @@
 import { DEFAULT_LIP_SYNC_IDS, appState, live2dState } from "../../core/store.js";
+import { createLive2DFocusController } from "./model/focus.js";
+import {
+    createLive2DExpressionController,
+} from "./model/expressions.js";
+import {
+    LIVE2D_MAX_SCALE,
+    LIVE2D_MIN_SCALE,
+    buildTransformSnapshot,
+    calculateDefaultTransform,
+    calculateResizedTransform,
+    canRestoreSavedTransform,
+    measureLive2DBaseSize,
+    normalizeSelectionKey,
+    selectionKeyFromConfig,
+    shouldIgnoreStageWheel,
+} from "./model/transform.js";
 
 const LIVE2D_TRANSFORM_SAVE_DELAY_MS = 140;
 
@@ -16,15 +32,21 @@ export function createLive2DModelController(deps) {
     let transformSaveTimerId = 0;
     let pendingTransformSnapshot = null;
 
-    function normalizeSelectionKey(value) {
-        return String(value || "").trim();
-    }
+    const focusController = createLive2DFocusController({
+        clamp,
+        live2dState,
+    });
 
-    function selectionKeyFromConfig(live2dConfig) {
-        return normalizeSelectionKey(
-            live2dConfig && (live2dConfig.selection_key || live2dConfig.model_url),
-        );
-    }
+    const expressionController = createLive2DExpressionController({
+        assertSelectionReady,
+        defaultLipSyncIds: DEFAULT_LIP_SYNC_IDS,
+        getSelectionRuntimeState,
+        live2dState,
+        normalizeSelectionKey,
+        resolveActionSelectionKey,
+        selectionKeyFromConfig,
+        t,
+    });
 
     function markSelectionLoading(selectionKey) {
         live2dState.live2dLoading = true;
@@ -127,7 +149,7 @@ export function createLive2DModelController(deps) {
 
             applyLive2DMouseFollowSetting();
             bindLive2DDrag(model);
-            attachLipSyncHook(model, live2dConfig);
+            expressionController.attachLipSyncHook(model, live2dConfig);
             resetLive2DView();
             finishSelectionLoad(selectionKey);
 
@@ -151,7 +173,7 @@ export function createLive2DModelController(deps) {
     function suspendCurrentModelInteractions() {
         flushLive2DTransformPersist();
         unbindLive2DDrag();
-        unbindLive2DFocus();
+        focusController.unbind();
 
         if (!live2dState.live2dModel) {
             return;
@@ -193,7 +215,7 @@ export function createLive2DModelController(deps) {
             const point = event.data.getLocalPosition(live2dState.live2dStage);
             model.x = point.x + live2dState.dragOffsetX;
             model.y = point.y + live2dState.dragOffsetY;
-            refreshLive2DFocusFromLastPointer();
+            focusController.refreshFromLastPointer();
             scheduleLive2DTransformPersist();
         };
 
@@ -240,247 +262,15 @@ export function createLive2DModelController(deps) {
         live2dState.live2dDragHandlers = null;
     }
 
-    function bindLive2DFocus() {
-        unbindLive2DFocus();
-
-        if (!live2dState.live2dStage) {
-            return;
-        }
-
-        const pointerMove = (event) => {
-            const globalPoint = event && event.data ? event.data.global : null;
-            if (!globalPoint) {
-                return;
-            }
-
-            live2dState.live2dLastPointerX = globalPoint.x;
-            live2dState.live2dLastPointerY = globalPoint.y;
-            updateLive2DFocusFromGlobalPoint(globalPoint.x, globalPoint.y);
-        };
-
-        live2dState.live2dStage.on("pointermove", pointerMove);
-        live2dState.live2dFocusHandlers = {
-            pointerMove: pointerMove,
-        };
-        refreshLive2DFocusFromLastPointer();
-    }
-
-    function unbindLive2DFocus() {
-        if (!live2dState.live2dFocusHandlers || !live2dState.live2dStage) {
-            return;
-        }
-
-        live2dState.live2dStage.off("pointermove", live2dState.live2dFocusHandlers.pointerMove);
-        live2dState.live2dFocusHandlers = null;
-    }
-
-    function refreshLive2DFocusFromLastPointer() {
-        if (
-            !live2dState.live2dMouseFollowEnabled
-            || !Number.isFinite(live2dState.live2dLastPointerX)
-            || !Number.isFinite(live2dState.live2dLastPointerY)
-        ) {
-            return;
-        }
-
-        updateLive2DFocusFromGlobalPoint(
-            live2dState.live2dLastPointerX,
-            live2dState.live2dLastPointerY,
-        );
-    }
-
-    function updateLive2DFocusFromGlobalPoint(globalX, globalY) {
-        const model = live2dState.live2dModel;
-        const internalModel = model && model.internalModel;
-        if (
-            !model
-            || !internalModel
-            || !internalModel.focusController
-            || typeof internalModel.focusController.focus !== "function"
-        ) {
-            return;
-        }
-
-        const localPoint = toLive2DModelPoint(model, globalX, globalY);
-        if (!localPoint) {
-            return;
-        }
-
-        const rawFocusX = normalizeLive2DFocusAxis(
-            localPoint.x,
-            0,
-            internalModel.originalWidth,
-        );
-        const visibleVerticalBounds = resolveVisibleLive2DVerticalBounds(model);
-        const rawFocusY = visibleVerticalBounds
-            ? normalizeLive2DFocusAxis(
-                localPoint.y,
-                visibleVerticalBounds.top,
-                visibleVerticalBounds.bottom,
-            )
-            : normalizeLive2DFocusAxis(
-                localPoint.y,
-                0,
-                internalModel.originalHeight,
-            );
-
-        applyLive2DFocusTarget(
-            internalModel.focusController,
-            rawFocusX,
-            rawFocusY,
-        );
-    }
-
-    function toLive2DModelPoint(model, globalX, globalY) {
-        if (
-            !window.PIXI
-            || typeof window.PIXI.Point !== "function"
-            || typeof model.toModelPosition !== "function"
-        ) {
-            return null;
-        }
-
-        const globalPoint = new window.PIXI.Point(globalX, globalY);
-        return model.toModelPosition(globalPoint, new window.PIXI.Point());
-    }
-
-    function resolveVisibleLive2DVerticalBounds(model) {
-        if (!live2dState.pixiApp || typeof model.getBounds !== "function") {
-            return null;
-        }
-
-        const modelBounds = model.getBounds();
-        const screen = live2dState.pixiApp.screen;
-        if (
-            !modelBounds
-            || modelBounds.width <= 0
-            || modelBounds.height <= 0
-            || screen.width <= 0
-            || screen.height <= 0
-        ) {
-            return null;
-        }
-
-        const visibleLeft = Math.max(modelBounds.x, screen.x);
-        const visibleTop = Math.max(modelBounds.y, screen.y);
-        const visibleRight = Math.min(
-            modelBounds.x + modelBounds.width,
-            screen.x + screen.width,
-        );
-        const visibleBottom = Math.min(
-            modelBounds.y + modelBounds.height,
-            screen.y + screen.height,
-        );
-
-        if (visibleRight <= visibleLeft || visibleBottom <= visibleTop) {
-            return null;
-        }
-
-        const topPoint = toLive2DModelPoint(model, visibleLeft, visibleTop);
-        const bottomPoint = toLive2DModelPoint(model, visibleLeft, visibleBottom);
-        if (!topPoint || !bottomPoint) {
-            return null;
-        }
-
-        const top = Math.min(topPoint.y, bottomPoint.y);
-        const bottom = Math.max(topPoint.y, bottomPoint.y);
-        if (bottom - top <= 0.0001) {
-            return null;
-        }
-
-        return {
-            top: top,
-            bottom: bottom,
-        };
-    }
-
-    function normalizeLive2DFocusAxis(value, min, max) {
-        const span = max - min;
-        if (!Number.isFinite(span) || Math.abs(span) <= 0.0001) {
-            return 0;
-        }
-
-        return clamp(((value - min) / span) * 2 - 1, -1, 1);
-    }
-
-    function applyLive2DFocusTarget(focusController, rawX, rawY) {
-        const distance = Math.hypot(rawX, rawY);
-        if (!Number.isFinite(distance) || distance <= 0.0001) {
-            focusController.focus(0, 0);
-            return;
-        }
-
-        focusController.focus(rawX / distance, -rawY / distance);
-    }
-
-    function attachLipSyncHook(model, live2dConfig) {
-        detachLive2DLipSyncHook();
-
-        const internalModel = model.internalModel;
-        if (!internalModel || typeof internalModel.on !== "function") {
-            return;
-        }
-
-        live2dState.lipSyncHook = function () {
-            applyMouthValue(live2dConfig, live2dState.currentMouthValue);
-            applyActiveExpressions();
-        };
-        internalModel.on("beforeModelUpdate", live2dState.lipSyncHook);
-        live2dState.live2dInternalModel = internalModel;
-    }
-
     function applyLive2DMouseFollowSetting() {
-        const model = live2dState.live2dModel;
-        if (!model) {
-            return;
-        }
-
-        model.interactive = true;
-        model.autoInteract = false;
-        if (typeof model.unregisterInteraction === "function") {
-            model.unregisterInteraction();
-        }
-
-        if (!live2dState.live2dMouseFollowEnabled) {
-            unbindLive2DFocus();
-            resetLive2DFocus();
-            return;
-        }
-
-        bindLive2DFocus();
-    }
-
-    function resetLive2DFocus() {
-        const internalModel = live2dState.live2dModel && live2dState.live2dModel.internalModel;
-        if (
-            !internalModel
-            || !internalModel.focusController
-            || typeof internalModel.focusController.focus !== "function"
-        ) {
-            return;
-        }
-
-        internalModel.focusController.focus(0, 0, true);
-    }
-
-    function detachLive2DLipSyncHook() {
-        if (
-            live2dState.live2dInternalModel
-            && live2dState.lipSyncHook
-            && typeof live2dState.live2dInternalModel.off === "function"
-        ) {
-            live2dState.live2dInternalModel.off("beforeModelUpdate", live2dState.lipSyncHook);
-        }
-
-        live2dState.live2dInternalModel = null;
-        live2dState.lipSyncHook = null;
+        focusController.applyMouseFollowSetting();
     }
 
     function disposeCurrentLive2DModel() {
         unbindLive2DDrag();
-        unbindLive2DFocus();
-        detachLive2DLipSyncHook();
-        clearActiveExpressions();
+        focusController.unbind();
+        expressionController.detachLipSyncHook();
+        expressionController.clearActiveExpressions();
 
         if (live2dState.live2dCharacterLayer) {
             live2dState.live2dCharacterLayer.removeChildren();
@@ -513,11 +303,7 @@ export function createLive2DModelController(deps) {
     }
 
     function handleStageWheel(event) {
-        if (live2dState.live2dLoading) {
-            return;
-        }
-
-        if (!live2dState.live2dModel) {
+        if (live2dState.live2dLoading || !live2dState.live2dModel) {
             return;
         }
 
@@ -529,21 +315,12 @@ export function createLive2DModelController(deps) {
         const scaleStep = event.deltaY < 0 ? 1.06 : 0.94;
         const nextScale = clamp(
             live2dState.live2dModel.scale.x * scaleStep,
-            0.08,
-            3.2,
+            LIVE2D_MIN_SCALE,
+            LIVE2D_MAX_SCALE,
         );
         live2dState.live2dModel.scale.set(nextScale);
-        refreshLive2DFocusFromLastPointer();
+        focusController.refreshFromLastPointer();
         scheduleLive2DTransformPersist();
-    }
-
-    function shouldIgnoreStageWheel(event) {
-        const target = event && event.target;
-        if (!target || typeof target.closest !== "function") {
-            return false;
-        }
-
-        return Boolean(target.closest("#live2d-drawer, #live2d-drawer-backdrop"));
     }
 
     function resetLive2DView() {
@@ -556,12 +333,12 @@ export function createLive2DModelController(deps) {
         if (savedTransform) {
             model.position.set(savedTransform.x, savedTransform.y);
             model.scale.set(savedTransform.scale);
-            refreshLive2DFocusFromLastPointer();
+            focusController.refreshFromLastPointer();
             return;
         }
 
         applyDefaultLive2DTransform(model);
-        refreshLive2DFocusFromLastPointer();
+        focusController.refreshFromLastPointer();
         scheduleLive2DTransformPersist({ immediate: true });
     }
 
@@ -577,39 +354,49 @@ export function createLive2DModelController(deps) {
 
         clearSavedLive2DTransform();
         applyDefaultLive2DTransform(model);
-        refreshLive2DFocusFromLastPointer();
+        focusController.refreshFromLastPointer();
         scheduleLive2DTransformPersist({ immediate: true });
     }
 
     function applyDefaultLive2DTransform(model) {
         const stageWidth = live2dState.pixiApp.screen.width;
         const stageHeight = live2dState.pixiApp.screen.height;
-        const baseSize = measureLive2DBaseSize(model);
-        const widthRatio = stageWidth / Math.max(baseSize.width, 1);
-        const heightRatio = stageHeight / Math.max(baseSize.height, 1);
-        const nextScale = Math.min(widthRatio, heightRatio) * 0.82;
-
-        model.scale.set(nextScale);
-        model.position.set(stageWidth * 0.5, stageHeight * 0.62);
+        const transform = calculateDefaultTransform({
+            baseSize: measureLive2DBaseSize(model),
+            stageHeight: stageHeight,
+            stageWidth: stageWidth,
+        });
+        model.scale.set(transform.scale);
+        model.position.set(transform.x, transform.y);
     }
 
-    function measureLive2DBaseSize(model) {
-        if (typeof model.getLocalBounds === "function") {
-            const bounds = model.getLocalBounds();
-            if (bounds && bounds.width > 0 && bounds.height > 0) {
-                return {
-                    width: bounds.width,
-                    height: bounds.height,
-                };
-            }
+    function reframeLive2DViewForResize(previousStageSize) {
+        const model = live2dState.live2dModel;
+        const app = live2dState.pixiApp;
+        if (!model || !app || !previousStageSize) {
+            return;
         }
 
-        const scaleX = Math.max(Math.abs(model.scale.x) || 0, 0.0001);
-        const scaleY = Math.max(Math.abs(model.scale.y) || 0, 0.0001);
-        return {
-            width: model.width / scaleX,
-            height: model.height / scaleY,
-        };
+        const previousWidth = Number(previousStageSize.width);
+        const previousHeight = Number(previousStageSize.height);
+        const transform = calculateResizedTransform({
+            clamp,
+            currentStageSize: app.screen,
+            modelScale: model.scale.x,
+            modelX: model.x,
+            modelY: model.y,
+            normalizedX: model.x / previousWidth,
+            normalizedY: model.y / previousHeight,
+            previousStageSize: previousStageSize,
+        });
+        if (!transform) {
+            return;
+        }
+
+        model.position.set(transform.x, transform.y);
+        model.scale.set(transform.scale);
+        focusController.refreshFromLastPointer();
+        scheduleLive2DTransformPersist();
     }
 
     function scheduleLive2DTransformPersist(options = {}) {
@@ -654,16 +441,12 @@ export function createLive2DModelController(deps) {
             return null;
         }
 
-        return {
+        return buildTransformSnapshot({
+            model: model,
+            roundTo: roundTo,
+            stageSize: live2dState.pixiApp.screen,
             storageKey: live2dStorageKey(),
-            transform: {
-                x: roundTo(model.x, 2),
-                y: roundTo(model.y, 2),
-                scale: roundTo(model.scale.x, 4),
-                stageWidth: roundTo(live2dState.pixiApp.screen.width, 2),
-                stageHeight: roundTo(live2dState.pixiApp.screen.height, 2),
-            },
-        };
+        });
     }
 
     function loadSavedLive2DTransform() {
@@ -673,40 +456,12 @@ export function createLive2DModelController(deps) {
             && typeof payload.x === "number"
             && typeof payload.y === "number"
             && typeof payload.scale === "number"
-            && canRestoreSavedLive2DTransform(payload)
+            && canRestoreSavedTransform(payload, live2dState.pixiApp && live2dState.pixiApp.screen)
         ) {
             return payload;
         }
 
         return null;
-    }
-
-    function canRestoreSavedLive2DTransform(payload) {
-        if (!live2dState.pixiApp) {
-            return false;
-        }
-
-        const savedWidth = Number(payload.stageWidth);
-        const savedHeight = Number(payload.stageHeight);
-        const currentWidth = Math.max(live2dState.pixiApp.screen.width, 1);
-        const currentHeight = Math.max(live2dState.pixiApp.screen.height, 1);
-        if (
-            !Number.isFinite(savedWidth)
-            || !Number.isFinite(savedHeight)
-            || savedWidth <= 0
-            || savedHeight <= 0
-        ) {
-            return false;
-        }
-
-        const widthRatio = savedWidth / currentWidth;
-        const heightRatio = savedHeight / currentHeight;
-        return (
-            widthRatio >= 0.72
-            && widthRatio <= 1.38
-            && heightRatio >= 0.72
-            && heightRatio <= 1.38
-        );
     }
 
     function clearSavedLive2DTransform() {
@@ -720,295 +475,19 @@ export function createLive2DModelController(deps) {
         return `echobot.web.live2d.${selectionKey}`;
     }
 
-    function applyMouthValue(live2dConfig, value) {
-        if (!live2dConfig || !live2dState.live2dModel || !live2dState.live2dModel.internalModel) {
-            return;
-        }
-
-        const coreModel = live2dState.live2dModel.internalModel.coreModel;
-        if (!coreModel || typeof coreModel.setParameterValueById !== "function") {
-            return;
-        }
-
-        const lipSyncIds = (live2dConfig.lip_sync_parameter_ids || []).length > 0
-            ? live2dConfig.lip_sync_parameter_ids
-            : DEFAULT_LIP_SYNC_IDS;
-
-        lipSyncIds.forEach((parameterId) => {
-            try {
-                coreModel.setParameterValueById(parameterId, value);
-            } catch (error) {
-                console.warn(`Failed to update lip sync parameter ${parameterId}`, error);
-            }
-        });
-
-        if (live2dConfig.mouth_form_parameter_id) {
-            try {
-                coreModel.setParameterValueById(live2dConfig.mouth_form_parameter_id, 0);
-            } catch (error) {
-                console.warn("Failed to reset mouth form parameter", error);
-            }
-        }
-    }
-
-    function applyActiveExpressions() {
-        const model = live2dState.live2dModel;
-        const internalModel = model && model.internalModel;
-        const coreModel = internalModel && internalModel.coreModel;
-        if (
-            !coreModel
-            || typeof coreModel.setParameterValueById !== "function"
-            || live2dState.activeExpressionMap.size === 0
-        ) {
-            return;
-        }
-
-        live2dState.activeExpressionMap.forEach((expressionDefinition) => {
-            expressionDefinition.parameters.forEach((parameter) => {
-                try {
-                    if (parameter.blend === "Add" && typeof coreModel.addParameterValueById === "function") {
-                        coreModel.addParameterValueById(parameter.id, parameter.value);
-                        return;
-                    }
-                    if (
-                        parameter.blend === "Multiply"
-                        && typeof coreModel.multiplyParameterValueById === "function"
-                    ) {
-                        coreModel.multiplyParameterValueById(parameter.id, parameter.value);
-                        return;
-                    }
-                    coreModel.setParameterValueById(parameter.id, parameter.value);
-                } catch (error) {
-                    console.warn(`Failed to apply Live2D expression parameter ${parameter.id}`, error);
-                }
-            });
-        });
-    }
-
-    async function toggleExpression(expressionItem, selectionKey = "") {
-        const normalizedSelectionKey = resolveActionSelectionKey(selectionKey);
-        const normalizedItem = normalizeExpressionItem(expressionItem);
-        if (!normalizedItem) {
-            throw new Error(t("console.live2dInvalidExpression"));
-        }
-        assertSelectionReady(normalizedSelectionKey);
-
-        if (live2dState.activeExpressionMap.has(normalizedItem.file)) {
-            live2dState.activeExpressionMap.delete(normalizedItem.file);
-            syncActiveExpressionFiles();
-            return {
-                active: false,
-                name: normalizedItem.name,
-                file: normalizedItem.file,
-            };
-        }
-
-        const expressionDefinition = await loadExpressionDefinition(
-            normalizedItem,
-            normalizedSelectionKey,
-        );
-        assertSelectionReady(normalizedSelectionKey);
-        live2dState.activeExpressionMap.set(normalizedItem.file, expressionDefinition);
-        syncActiveExpressionFiles();
-        return {
-            active: true,
-            name: normalizedItem.name,
-            file: normalizedItem.file,
-        };
-    }
-
-    function clearActiveExpressions() {
-        live2dState.activeExpressionMap.clear();
-        syncActiveExpressionFiles();
-    }
-
-    async function playMotion(motionItem, selectionKey = "") {
-        const normalizedSelectionKey = resolveActionSelectionKey(selectionKey);
-        const model = live2dState.live2dModel;
-        const normalizedItem = normalizeMotionItem(motionItem);
-        if (!model || !normalizedItem) {
-            throw new Error(t("console.live2dInvalidMotion"));
-        }
-        assertSelectionReady(normalizedSelectionKey);
-        if (typeof model.motion !== "function") {
-            throw new Error(t("console.live2dMotionUnsupported"));
-        }
-
-        await model.motion(normalizedItem.group, normalizedItem.index);
-        return {
-            name: normalizedItem.name,
-            file: normalizedItem.file,
-        };
-    }
-
-    async function triggerHotkey(hotkeyItem, live2dConfig) {
-        const selectionKey = selectionKeyFromConfig(live2dConfig);
-        const normalizedHotkey = normalizeHotkeyItem(hotkeyItem);
-        if (!normalizedHotkey || !normalizedHotkey.supported) {
-            throw new Error(t("console.live2dUnsupportedHotkey"));
-        }
-
-        if (normalizedHotkey.action === "ToggleExpression") {
-            const expressionItem = (live2dConfig && live2dConfig.expressions || []).find(
-                (item) => item.file === normalizedHotkey.file,
-            );
-            if (!expressionItem) {
-                throw new Error(t("console.live2dExpressionNotFound", { file: normalizedHotkey.file }));
-            }
-            const result = await toggleExpression(expressionItem, selectionKey);
-            return {
-                hotkey: normalizedHotkey,
-                result: result,
-            };
-        }
-
-        if (normalizedHotkey.action === "TriggerAnimation") {
-            const motionItem = (live2dConfig && live2dConfig.motions || []).find(
-                (item) => item.file === normalizedHotkey.file,
-            );
-            if (!motionItem) {
-                throw new Error(t("console.live2dMotionNotFound", { file: normalizedHotkey.file }));
-            }
-            const result = await playMotion(motionItem, selectionKey);
-            return {
-                hotkey: normalizedHotkey,
-                result: result,
-            };
-        }
-
-        if (normalizedHotkey.action === "RemoveAllExpressions") {
-            assertSelectionReady(selectionKey);
-            clearActiveExpressions();
-            return {
-                hotkey: normalizedHotkey,
-                result: {
-                    cleared: true,
-                },
-            };
-        }
-
-        throw new Error(t("console.live2dUnsupportedHotkeyAction", { action: normalizedHotkey.action }));
-    }
-
-    function isExpressionActive(selectionKey, file) {
-        if (!getSelectionRuntimeState(selectionKey).canInteract) {
-            return false;
-        }
-
-        return live2dState.activeExpressionMap.has(String(file || ""));
-    }
-
-    function syncActiveExpressionFiles() {
-        live2dState.activeExpressionFiles = Array.from(live2dState.activeExpressionMap.keys());
-    }
-
-    function normalizeExpressionItem(expressionItem) {
-        if (!expressionItem || typeof expressionItem !== "object") {
-            return null;
-        }
-        const file = String(expressionItem.file || "");
-        const url = String(expressionItem.url || "");
-        if (!file || !url) {
-            return null;
-        }
-        return {
-            name: String(expressionItem.name || file),
-            file: file,
-            url: url,
-        };
-    }
-
-    function normalizeMotionItem(motionItem) {
-        if (!motionItem || typeof motionItem !== "object") {
-            return null;
-        }
-        const file = String(motionItem.file || "");
-        const group = String(motionItem.group || "");
-        const index = Number.isInteger(motionItem.index) ? motionItem.index : 0;
-        if (!file || !group) {
-            return null;
-        }
-        return {
-            name: String(motionItem.name || file),
-            file: file,
-            group: group,
-            index: index,
-        };
-    }
-
-    function normalizeHotkeyItem(hotkeyItem) {
-        if (!hotkeyItem || typeof hotkeyItem !== "object") {
-            return null;
-        }
-        return {
-            hotkey_id: String(hotkeyItem.hotkey_id || ""),
-            name: String(hotkeyItem.name || hotkeyItem.action || "Hotkey"),
-            action: String(hotkeyItem.action || ""),
-            file: String(hotkeyItem.file || ""),
-            supported: Boolean(hotkeyItem.supported),
-        };
-    }
-
-    async function loadExpressionDefinition(expressionItem, selectionKey) {
-        assertSelectionReady(selectionKey);
-
-        const cacheKey = `${normalizeSelectionKey(selectionKey)}::${expressionItem.url}`;
-        if (live2dState.expressionDataCache.has(cacheKey)) {
-            return live2dState.expressionDataCache.get(cacheKey);
-        }
-
-        const response = await fetch(expressionItem.url, {
-            cache: "no-store",
-        });
-        if (!response.ok) {
-            throw new Error(t("console.live2dExpressionLoadFailed", { name: expressionItem.name }));
-        }
-
-        const payload = await response.json();
-        assertSelectionReady(selectionKey);
-        const parameters = Array.isArray(payload && payload.Parameters)
-            ? payload.Parameters
-                .filter((item) => item && typeof item === "object")
-                .map((item) => ({
-                    id: String(item.Id || ""),
-                    value: typeof item.Value === "number" ? item.Value : 0,
-                    blend: normalizeExpressionBlend(item.Blend),
-                }))
-                .filter((item) => item.id)
-            : [];
-
-        const expressionDefinition = {
-            name: expressionItem.name,
-            file: expressionItem.file,
-            parameters: parameters,
-        };
-        live2dState.expressionDataCache.set(cacheKey, expressionDefinition);
-        return expressionDefinition;
-    }
-
-    function normalizeExpressionBlend(blend) {
-        const normalizedBlend = String(blend || "").trim().toLowerCase();
-        if (normalizedBlend === "add") {
-            return "Add";
-        }
-        if (normalizedBlend === "multiply") {
-            return "Multiply";
-        }
-        return "Set";
-    }
-
     return {
         applyLive2DMouseFollowSetting,
-        applyMouthValue,
-        clearActiveExpressions,
+        applyMouthValue: expressionController.applyMouthValue,
+        clearActiveExpressions: expressionController.clearActiveExpressions,
         getSelectionRuntimeState,
         handleStageWheel,
         loadLive2DModel,
-        isExpressionActive,
-        playMotion,
-        refreshLive2DFocusFromLastPointer,
+        isExpressionActive: expressionController.isExpressionActive,
+        playMotion: expressionController.playMotion,
+        reframeLive2DViewForResize,
+        refreshLive2DFocusFromLastPointer: focusController.refreshFromLastPointer,
         resetLive2DViewToDefault,
-        toggleExpression,
-        triggerHotkey,
+        toggleExpression: expressionController.toggleExpression,
+        triggerHotkey: expressionController.triggerHotkey,
     };
 }

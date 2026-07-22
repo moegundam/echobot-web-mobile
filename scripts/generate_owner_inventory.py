@@ -7,6 +7,7 @@ import hashlib
 import os
 import re
 import subprocess
+import sys
 import tempfile
 from collections import defaultdict
 from pathlib import Path
@@ -22,7 +23,7 @@ OUTPUT_NAMES = (
     "ENVIRONMENT_KEY_INDEX.md",
     "GENERATED_MANIFEST.md",
 )
-GENERATOR_VERSION = "2"
+GENERATOR_VERSION = "3"
 GENERATION_COMMAND = (
     "python scripts/generate_owner_inventory.py "
     "--output-dir <owner-docs>/generated"
@@ -430,7 +431,7 @@ def _manifest(indexes: dict[str, str]) -> str:
     source_commit_time = _git_output("show", "-s", "--format=%cI", "HEAD")
     tree_state = (
         "dirty"
-        if _git_output("status", "--porcelain", "--untracked-files=no")
+        if _git_output("status", "--porcelain", "--untracked-files=normal")
         else "clean"
     )
     lines = [
@@ -440,7 +441,7 @@ def _manifest(indexes: dict[str, str]) -> str:
         "",
         f"Source SHA: **`{source_sha}`**",
         f"Source tree state: **{tree_state}**",
-        f"Generated at: **{source_commit_time}**",
+        f"Source commit time: **{source_commit_time}**",
         f"Generator version: **{GENERATOR_VERSION}**",
         f"Generation command: `{GENERATION_COMMAND}`",
         "",
@@ -494,12 +495,46 @@ def _atomic_write_all(output_dir: Path, outputs: dict[str, str]) -> None:
             temporary.unlink(missing_ok=True)
 
 
+def _check_all(output_dir: Path, outputs: dict[str, str]) -> list[str]:
+    issues: list[str] = []
+    for name, expected in outputs.items():
+        path = output_dir / name
+        if not path.is_file():
+            issues.append(f"missing: {name}")
+            continue
+        try:
+            actual = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeError):
+            issues.append(f"unreadable: {name}")
+            continue
+        if actual != expected:
+            issues.append(f"stale: {name}")
+    if output_dir.is_dir():
+        for path in sorted(output_dir.iterdir()):
+            if path.is_file() and path.name not in outputs:
+                issues.append(f"unexpected: {path.name}")
+    return issues
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Generate deterministic owner inventory Markdown files.")
     parser.add_argument("--output-dir", required=True, type=Path)
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Exit non-zero when the output directory is missing or stale; do not write files.",
+    )
     arguments = parser.parse_args()
     try:
-        _atomic_write_all(arguments.output_dir, generate())
+        outputs = generate()
+        if arguments.check:
+            issues = _check_all(arguments.output_dir, outputs)
+            if issues:
+                for issue in issues:
+                    print(issue, file=sys.stderr)
+                return 1
+        else:
+            _atomic_write_all(arguments.output_dir, outputs)
     except InventoryError as exc:
         parser.error(str(exc))
     return 0

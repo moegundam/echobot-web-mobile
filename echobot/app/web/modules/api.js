@@ -1,7 +1,23 @@
-export async function requestJson(url, options) {
-    const response = await fetch(url, options);
+export async function requestJson(url, options = {}) {
+    const requestInit = { ...options };
+    const providedHeaders = options.headers || {};
+    const hasContentType = Boolean(
+        providedHeaders["Content-Type"] || providedHeaders["content-type"],
+    );
+    requestInit.headers = {
+        Accept: "application/json",
+        ...(typeof requestInit.body === "string" && !hasContentType
+            ? { "Content-Type": "application/json" }
+            : {}),
+        ...providedHeaders,
+    };
+
+    const response = await fetch(url, requestInit);
     if (!response.ok) {
         throw await responseToError(response);
+    }
+    if (response.status === 204) {
+        return null;
     }
     return await response.json();
 }
@@ -33,13 +49,14 @@ export async function deleteAttachment(attachmentId) {
     }
 }
 
-export async function requestChatStream(payload, handlers) {
+export async function requestChatStream(payload, handlers, options = {}) {
     const response = await fetch("/api/chat/stream", {
         method: "POST",
         headers: {
             "Content-Type": "application/json",
         },
         body: JSON.stringify(payload),
+        signal: options.signal,
     });
 
     if (!response.ok) {
@@ -47,13 +64,23 @@ export async function requestChatStream(payload, handlers) {
     }
 
     if (!response.body) {
-        return await requestJson("/api/chat", {
+        if (options.allowFallback === false) {
+            throw new Error(
+                options.streamUnavailableMessage || "Chat stream is unavailable.",
+            );
+        }
+        const finalPayload = await requestJson("/api/chat", {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
             },
             body: JSON.stringify(payload),
+            signal: options.signal,
         });
+        if (handlers && typeof handlers.onDone === "function") {
+            await handlers.onDone(finalPayload);
+        }
+        return finalPayload;
     }
 
     const reader = response.body.getReader();
@@ -76,13 +103,21 @@ export async function requestChatStream(payload, handlers) {
     }
 
     buffer += decoder.decode();
-    const parsed = await consumeChatStreamBuffer(buffer, handlers);
+    const parsed = await consumeChatStreamBuffer(
+        buffer ? `${buffer}\n` : buffer,
+        handlers,
+    );
     if (parsed.finalPayload) {
         finalPayload = parsed.finalPayload;
     }
 
     if (!finalPayload) {
-        throw new Error("Chat stream ended without a final response.");
+        throw new Error(
+            options.streamEndedMessage || "Chat stream ended without a final response.",
+        );
+    }
+    if (handlers && typeof handlers.onDone === "function") {
+        await handlers.onDone(finalPayload);
     }
 
     return finalPayload;
@@ -151,13 +186,35 @@ export async function consumeChatStreamBuffer(buffer, handlers) {
 
 export async function responseToError(response) {
     let detail = `${response.status} ${response.statusText}`;
+    let code = "";
     try {
         const payload = await response.json();
         if (payload && typeof payload.detail === "string") {
             detail = payload.detail;
         }
+        if (payload && typeof payload.code === "string") {
+            code = payload.code;
+        }
     } catch (error) {
         console.warn("Non-JSON error response", error);
     }
-    return new Error(detail);
+    const requestError = new Error(detail);
+    requestError.status = response.status;
+    requestError.code = code;
+    return requestError;
+}
+
+export function requestErrorMessage(error, t, fallbackKey) {
+    const status = Number(error && error.status || 0);
+    if (status === 401) {
+        return t("errors.authenticationRequired");
+    }
+    if (status === 403) {
+        return t("errors.permissionDenied");
+    }
+    if (status >= 500) {
+        return t("errors.serverUnavailable", { status });
+    }
+    const detail = String(error && error.message || "").trim();
+    return detail || t(fallbackKey);
 }

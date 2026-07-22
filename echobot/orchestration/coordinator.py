@@ -38,6 +38,7 @@ from .route_modes import (
     set_route_mode,
 )
 from .roles import RoleCard, RoleCardRegistry, role_name_from_metadata, set_role_name
+from .turn_runtime import ConversationTurnRuntime, TurnRuntimeResolver
 
 
 BackgroundJobFactory = Callable[[], Awaitable[None]]
@@ -58,6 +59,7 @@ class ConversationCoordinator:
         role_registry: RoleCardRegistry,
         delegated_ack_enabled: bool = True,
         job_store: ConversationJobStore | None = None,
+        turn_runtime_resolver: TurnRuntimeResolver | None = None,
     ) -> None:
         self._session_store = session_store
         self._agent_runner = agent_runner
@@ -66,6 +68,7 @@ class ConversationCoordinator:
         self._role_registry = role_registry
         self._delegated_ack_enabled = delegated_ack_enabled
         self._jobs = job_store or ConversationJobStore()
+        self._turn_runtime_resolver = turn_runtime_resolver
         self._session_locks: dict[str, AsyncReentrantLock] = {}
         self._session_locks_guard = asyncio.Lock()
         self._background_tasks: set[asyncio.Task[None]] = set()
@@ -81,10 +84,24 @@ class ConversationCoordinator:
     def set_delegated_ack_enabled(self, enabled: bool) -> None:
         self._delegated_ack_enabled = bool(enabled)
 
-    def set_llm_provider(self, provider) -> None:
+    def set_llm_provider(
+        self,
+        provider,
+        *,
+        update_decision: bool = True,
+        update_roleplay: bool = True,
+    ) -> None:
         self._agent_runner.set_provider(provider)
-        self._decision_engine.set_provider(provider)
-        self._roleplay_engine.set_provider(provider)
+        if update_decision:
+            self._decision_engine.set_provider(provider)
+        if update_roleplay:
+            self._roleplay_engine.set_provider(provider)
+
+    def set_turn_runtime_resolver(
+        self,
+        resolver: TurnRuntimeResolver | None,
+    ) -> None:
+        self._turn_runtime_resolver = resolver
 
     def set_generation_defaults(
         self,
@@ -157,10 +174,22 @@ class ConversationCoordinator:
                 session.name,
             )
             role_card = self._resolve_turn_role(session, role_name)
+            turn_runtime = await self._resolve_turn_runtime(
+                session.name,
+                role_card.name,
+            )
+            decision_engine = self._decision_engine.for_provider(
+                turn_runtime.decision_provider,
+            )
+            roleplay_engine = self._roleplay_engine.for_turn(
+                provider=turn_runtime.roleplay_provider,
+                temperature=turn_runtime.temperature,
+                max_tokens=turn_runtime.max_tokens,
+            )
             resolved_route_mode = self._resolve_turn_route_mode(session, route_mode)
             pending_user_input = _pending_user_input_from_metadata(session.metadata)
             if pending_user_input is None:
-                decision = await self._decision_engine.decide(
+                decision = await decision_engine.decide(
                     prompt,
                     history=list(session.history[-8:]),
                     route_mode=resolved_route_mode,
@@ -169,7 +198,7 @@ class ConversationCoordinator:
                 decision = _forced_agent_decision_for_pending_input()
 
             if not decision.requires_agent:
-                response_text = await self._roleplay_engine.stream_chat_reply(
+                response_text = await roleplay_engine.stream_chat_reply(
                     session=session,
                     user_input=prompt,
                     image_urls=image_urls,
@@ -205,7 +234,7 @@ class ConversationCoordinator:
 
             immediate_response = ""
             if self._delegated_ack_enabled and pending_user_input is None:
-                immediate_response = await self._roleplay_engine.delegated_ack(
+                immediate_response = await roleplay_engine.delegated_ack(
                     session=session,
                     user_input=prompt,
                     image_urls=image_urls,
@@ -268,6 +297,8 @@ class ConversationCoordinator:
                     response_language=response_language,
                     trace_run_id=trace_run_id,
                     completion_callback=completion_callback,
+                    roleplay_engine=roleplay_engine,
+                    turn_runtime=turn_runtime,
                 ),
             )
             if immediate_response.strip():
@@ -553,6 +584,8 @@ class ConversationCoordinator:
         response_language: str | None,
         trace_run_id: str | None,
         completion_callback: CompletionCallback | None,
+        roleplay_engine: RoleplayEngine,
+        turn_runtime: ConversationTurnRuntime,
     ) -> None:
         visible_role_name = ""
         try:
@@ -573,7 +606,11 @@ class ConversationCoordinator:
                 "image_urls": image_urls,
                 "file_attachments": file_attachments,
                 "trace_run_id": trace_run_id,
+                "temperature": turn_runtime.temperature,
+                "max_tokens": turn_runtime.max_tokens,
             }
+            if turn_runtime.agent_provider is not None:
+                run_prompt_kwargs["provider"] = turn_runtime.agent_provider
 
             execution = await self._agent_runner.run_prompt(
                 session_name,
@@ -607,6 +644,7 @@ class ConversationCoordinator:
                 ),
                 pending_user_input=execution.agent_result.pending_user_input,
                 response_language=response_language,
+                roleplay_engine=roleplay_engine,
             )
             if awaiting_user_input:
                 job = await self._jobs.set_waiting_for_input(
@@ -635,6 +673,7 @@ class ConversationCoordinator:
                 raw_content=error_text,
                 is_error=True,
                 response_language=response_language,
+                roleplay_engine=roleplay_engine,
             )
             job = await self._jobs.set_failed(
                 job_id,
@@ -692,7 +731,9 @@ class ConversationCoordinator:
         direct_response_content: MessageContent = "",
         pending_user_input: dict[str, Any] | None = None,
         response_language: str | None = None,
+        roleplay_engine: RoleplayEngine | None = None,
     ) -> tuple[str, MessageContent, str]:
+        active_roleplay_engine = roleplay_engine or self._roleplay_engine
         lock = await self._session_lock(session_name)
         async with lock:
             deleted = await self._is_session_deleted(session_name)
@@ -716,7 +757,7 @@ class ConversationCoordinator:
             if bypass_roleplay:
                 lead_in_text = ""
                 if normalized_pending_user_input is not None:
-                    lead_in_text = await self._roleplay_engine.present_user_input_request(
+                    lead_in_text = await active_roleplay_engine.present_user_input_request(
                         session=session,
                         follow_up_prompt=normalized_pending_user_input["prompt"],
                         choices=list(normalized_pending_user_input.get("choices") or []),
@@ -733,7 +774,7 @@ class ConversationCoordinator:
                 )
             elif raw_content.strip():
                 if is_error:
-                    final_text = await self._roleplay_engine.present_agent_failure(
+                    final_text = await active_roleplay_engine.present_agent_failure(
                         session=session,
                         user_input=prompt,
                         error_text=raw_content,
@@ -744,7 +785,7 @@ class ConversationCoordinator:
                     )
                 elif scheduled_job is not None:
                     final_text = (
-                        await self._roleplay_engine.present_scheduled_setup_result(
+                        await active_roleplay_engine.present_scheduled_setup_result(
                             session=session,
                             user_input=prompt,
                             agent_output=raw_content,
@@ -756,7 +797,7 @@ class ConversationCoordinator:
                         )
                     )
                 else:
-                    final_text = await self._roleplay_engine.present_agent_result(
+                    final_text = await active_roleplay_engine.present_agent_result(
                         session=session,
                         user_input=prompt,
                         agent_output=raw_content,
@@ -806,7 +847,16 @@ class ConversationCoordinator:
                 session_name,
             )
             role_card = self._resolve_session_role(session)
-            final_text = await self._roleplay_engine.present_scheduled_notification(
+            turn_runtime = await self._resolve_turn_runtime(
+                session.name,
+                role_card.name,
+            )
+            roleplay_engine = self._roleplay_engine.for_turn(
+                provider=turn_runtime.roleplay_provider,
+                temperature=turn_runtime.temperature,
+                max_tokens=turn_runtime.max_tokens,
+            )
+            final_text = await roleplay_engine.present_scheduled_notification(
                 session=session,
                 reminder_text=content,
                 role_card=role_card,
@@ -837,9 +887,7 @@ class ConversationCoordinator:
         role_name: str | None,
     ) -> RoleCard:
         if role_name is not None:
-            role_card = self._role_registry.require(role_name)
-            session.metadata = set_role_name(session.metadata, role_card.name)
-            return role_card
+            return self._role_registry.require(role_name)
         return self._resolve_session_role(session)
 
     def _resolve_session_role(self, session: ChatSession) -> RoleCard:
@@ -883,6 +931,18 @@ class ConversationCoordinator:
         session_name = normalize_session_name(session_name)
         async with self._deleted_sessions_guard:
             return session_name in self._deleted_sessions
+
+    async def _resolve_turn_runtime(
+        self,
+        session_name: str,
+        role_name: str,
+    ) -> ConversationTurnRuntime:
+        if self._turn_runtime_resolver is None:
+            return ConversationTurnRuntime()
+        runtime = await self._turn_runtime_resolver(session_name, role_name)
+        if not isinstance(runtime, ConversationTurnRuntime):
+            raise RuntimeError("Turn runtime resolver returned an invalid value")
+        return runtime
 
     def _start_background_job(
         self,

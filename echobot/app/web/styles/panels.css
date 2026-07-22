@@ -34,17 +34,16 @@
 
 .settings-panel,
 .conversation-panel {
-    border: 1px solid rgba(87, 57, 34, 0.12);
-    border-radius: 24px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
     overflow: hidden;
-    box-shadow: var(--shadow-soft);
+    box-shadow: none;
 }
 
 .settings-panel {
     padding: 0;
     flex: 0 0 auto;
-    background:
-        linear-gradient(180deg, rgba(255, 247, 236, 0.98) 0%, rgba(245, 232, 217, 0.94) 100%);
+    background: #ffffff;
 }
 
 .settings-panel[open] {
@@ -53,7 +52,7 @@
     overflow-y: auto;
     overscroll-behavior: contain;
     scrollbar-gutter: stable;
-    box-shadow: 0 20px 38px rgba(70, 37, 18, 0.1);
+    box-shadow: none;
 }
 
 .settings-summary {
@@ -65,8 +64,7 @@
     flex-wrap: wrap;
     cursor: pointer;
     padding: 18px 24px;
-    background:
-        linear-gradient(180deg, rgba(255, 251, 246, 0.72) 0%, rgba(255, 246, 235, 0.42) 100%);
+    background: #f7f9fa;
     position: sticky;
     top: 0;
     z-index: 2;
@@ -104,8 +102,7 @@
 .settings-panel-body {
     border-top: 1px solid var(--line);
     padding: 18px 24px;
-    background:
-        linear-gradient(180deg, rgba(255, 252, 247, 0.44) 0%, rgba(255, 247, 238, 0.82) 100%);
+    background: #ffffff;
 }
 
 .settings-panel-toolbar {
@@ -139,10 +136,10 @@
     flex: 0 0 auto;
     min-height: 40px;
     padding: 8px 12px;
-    border: 1px solid rgba(87, 57, 34, 0.12);
-    border-radius: 999px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
     color: var(--text);
-    background: rgba(255, 251, 246, 0.82);
+    background: #ffffff;
     font-size: 0.86rem;
     font-weight: 700;
     text-decoration: none;
@@ -170,10 +167,11 @@
     display: grid;
     gap: 12px;
     margin-top: 16px;
-    padding: 14px;
-    border: 1px solid rgba(87, 57, 34, 0.1);
-    border-radius: 16px;
-    background: rgba(255, 251, 246, 0.72);
+    padding: 16px 0 0;
+    border: 0;
+    border-top: 1px solid var(--line);
+    border-radius: 0;
+    background: transparent;
 }
 
 .console-admin-handoff > div:first-child {
@@ -190,10 +188,10 @@
 
 .console-advanced-overrides-panel {
     margin-top: 16px;
-    border: 1px solid rgba(87, 57, 34, 0.1);
-    border-radius: 16px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
     overflow: hidden;
-    background: rgba(255, 251, 246, 0.54);
+    background: #ffffff;
 }
 
 .console-advanced-overrides-summary {
@@ -224,7 +222,7 @@
 .console-advanced-overrides-body {
     border-top: 1px solid rgba(87, 57, 34, 0.1);
     padding: 14px;
-    background: rgba(255, 252, 248, 0.72);
+    background: #ffffff;
 }
 
 .console-advanced-overrides-body > .console-control-section-heading:first-child {
@@ -251,6 +249,51 @@
     flex-wrap: wrap;
     gap: 8px;
     justify-content: flex-start;
+}
+
+.session-runtime-change-status {
+    align-self: center;
+    padding: 5px 8px;
+    border-radius: 999px;
+    color: var(--success);
+    background: rgba(15, 118, 110, 0.1);
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.session-runtime-scope {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    min-width: 0;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #f7f9fa;
+}
+
+.session-runtime-scope-label {
+    flex: 1 1 220px;
+    min-width: 0;
+    color: var(--muted);
+    font-size: 0.82rem;
+    line-height: 1.4;
+}
+
+.session-runtime-change-status.is-pending {
+    color: var(--warning);
+    background: rgba(154, 91, 18, 0.12);
+}
+
+.session-runtime-change-status.is-applied {
+    color: var(--success);
+    background: rgba(15, 118, 110, 0.1);
+}
+
+.has-pending-runtime-changes {
+    box-shadow: 0 0 0 2px rgba(192, 108, 32, 0.24);
 }
 
 .session-settings-grid {
@@ -286,12 +329,17 @@
 
 html[data-layout-mode="desktop"] .settings-panel[open],
 html[data-layout-mode="tablet"][data-viewport-orientation="landscape"] .settings-panel[open] {
-    max-height: min(52vh, calc(100dvh - 320px), 560px);
+    max-height: min(48vh, clamp(220px, calc(100dvh - 480px), 480px));
 }
 
 html[data-layout-mode="desktop"] .conversation-panel,
 html[data-layout-mode="tablet"][data-viewport-orientation="landscape"] .conversation-panel {
     min-height: 250px;
+}
+
+html[data-layout-mode="desktop"] .messages,
+html[data-layout-mode="tablet"][data-viewport-orientation="landscape"] .messages {
+    min-height: 64px;
 }
 
 .session-sidebar,
@@ -506,8 +554,7 @@ html[data-layout-mode="tablet"][data-viewport-orientation="landscape"] .conversa
     flex: 1;
     min-height: 0;
     flex-direction: column;
-    background:
-        linear-gradient(180deg, rgba(255, 253, 249, 0.98) 0%, rgba(255, 248, 240, 0.96) 100%);
+    background: #ffffff;
     position: relative;
 }
 
@@ -534,8 +581,8 @@ html[data-layout-mode="tablet"][data-viewport-orientation="landscape"] .conversa
 .field textarea,
 .composer textarea {
     width: 100%;
-    border: 1px solid rgba(87, 57, 34, 0.16);
-    border-radius: 14px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
     background: var(--panel-strong);
     color: var(--text);
     padding: 12px 14px;
@@ -553,7 +600,16 @@ html[data-layout-mode="tablet"][data-viewport-orientation="landscape"] .conversa
 
 .field input[readonly] {
     color: var(--muted);
-    background: rgba(255, 246, 236, 0.92);
+    background: #f2f5f6;
+}
+
+.voice-search-field {
+    align-content: start;
+}
+
+.voice-search-status {
+    min-height: 1.2em;
+    font-size: 0.78rem;
 }
 
 .field-label-with-value {

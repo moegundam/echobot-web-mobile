@@ -1,5 +1,6 @@
-import { initShellI18n } from "./shell-i18n.js?v=ux-public-1";
+import { initShellI18n } from "./shell-i18n.js?v=ux-public-1&uiux=2";
 import { initShellDisplayMode } from "./shell-display-mode.js?v=site-public-6";
+import { requestJson } from "./modules/api.js";
 
 const statusGrid = document.getElementById("deployment-status-grid");
 const guidedGrid = document.getElementById("deployment-guided-grid");
@@ -21,15 +22,7 @@ loadDeploymentStatus();
 
 async function loadDeploymentStatus() {
     try {
-        const response = await fetch("/api/deployment/status", {
-            headers: {
-                "Accept": "application/json",
-            },
-        });
-        if (!response.ok) {
-            throw await responseToError(response);
-        }
-        statusPayload = await response.json();
+        statusPayload = await requestJson("/api/deployment/status");
         statusError = "";
     } catch (error) {
         statusPayload = null;
@@ -231,17 +224,4 @@ function statusTone(status) {
         return "danger";
     }
     return "muted";
-}
-
-async function responseToError(response) {
-    let detail = `${response.status} ${response.statusText}`;
-    try {
-        const payload = await response.json();
-        if (payload && typeof payload.detail === "string") {
-            detail = payload.detail;
-        }
-    } catch (_error) {
-        return new Error(detail);
-    }
-    return new Error(detail);
 }

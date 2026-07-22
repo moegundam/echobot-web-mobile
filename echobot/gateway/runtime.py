@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 
 
 StageEventPublisher = Callable[[str, OutboundMessage], Awaitable[None]]
+RuntimeContextChangeNotifier = Callable[[str, str], Awaitable[None]]
 
 
 class GatewayRuntime:
@@ -45,6 +46,7 @@ class GatewayRuntime:
         max_inflight_messages: int = 32,
         runtime_for_user: Callable[[str], Awaitable[Any]] | None = None,
         stage_event_publisher: StageEventPublisher | None = None,
+        runtime_context_change_notifier: RuntimeContextChangeNotifier | None = None,
     ) -> None:
         self._context = context
         self._bus = bus
@@ -72,6 +74,7 @@ class GatewayRuntime:
         self._route_locks_guard = asyncio.Lock()
         self._runtime_for_user = runtime_for_user
         self._stage_event_publisher = stage_event_publisher
+        self._runtime_context_change_notifier = runtime_context_change_notifier
         self._scoped_gateways: dict[str, GatewayRuntime] = {}
         self._scoped_gateways_guard = asyncio.Lock()
 
@@ -117,8 +120,8 @@ class GatewayRuntime:
     async def _handle_inbound_message(self, message: InboundMessage) -> None:
         route_key = message.route_key
         delete_session_name = await self._route_delete_session_name(message)
-        resolved_session_name, resolved_route_session = await self._resolve_inbound_session(
-            message,
+        resolved_session_name, resolved_route_session, stage_session_name = (
+            await self._resolve_inbound_session(message)
         )
         command_result = await dispatch_gateway_command(
             GatewayCommandContext(
@@ -130,6 +133,7 @@ class GatewayRuntime:
                 address=message.address,
                 metadata=message.metadata,
                 session_name=resolved_session_name,
+                runtime_context_change_notifier=self._notify_runtime_context_changed,
             ),
             message.text,
         )
@@ -160,6 +164,7 @@ class GatewayRuntime:
                     text=command_result.text,
                     metadata=dict(message.metadata),
                 ),
+                stage_session_name=stage_session_name,
             )
             return
 
@@ -180,20 +185,25 @@ class GatewayRuntime:
             file_attachments = await _resolve_gateway_files(
                 message,
                 self._context.attachment_store,
-                self._context.workspace,
+                self._context.tool_workspace or self._context.workspace,
             )
             execution = await self._context.coordinator.handle_user_turn(
                 session_name,
                 message.text,
                 image_urls=image_urls,
                 file_attachments=file_attachments,
-                route_mode=await self._resolve_effective_route_mode(
-                    session_name,
-                    has_file_attachments=bool(file_attachments),
+                route_mode=(
+                    "chat_only"
+                    if route_session is not None
+                    else await self._resolve_effective_route_mode(
+                        session_name,
+                        has_file_attachments=bool(file_attachments),
+                    )
                 ),
                 completion_callback=self._completion_callback_for_session(
                     session_name,
                     immediate_response_sent=immediate_response_sent,
+                    stage_session_name=stage_session_name,
                 ),
             )
             content: MessageContent = execution.response_content
@@ -207,6 +217,7 @@ class GatewayRuntime:
                                 content=content,
                                 metadata=dict(message.metadata),
                             ),
+                            stage_session_name=stage_session_name,
                         )
                 finally:
                     immediate_response_sent.set()
@@ -243,6 +254,7 @@ class GatewayRuntime:
                 content=content,
                 metadata=dict(message.metadata),
             ),
+            stage_session_name=stage_session_name,
         )
 
     async def _load_requested_session(self, session_name: str):
@@ -256,18 +268,20 @@ class GatewayRuntime:
                 session = await self._session_service.load_or_create_session(
                     requested_session_name,
                 )
-                return await self._context.coordinator.set_session_route_mode(
+                session = await self._context.coordinator.set_session_route_mode(
                     session.name,
                     "chat_only",
                 )
+                await self._notify_runtime_context_changed(
+                    session.name,
+                    "gateway_session_initialized",
+                )
+                return session
             except ValueError:
                 return None
 
     async def _resolve_inbound_session(self, message: InboundMessage):
         requested_session_name = str(message.metadata.get("session_name") or "").strip()
-        channel_default_session_name = str(
-            message.metadata.get("channel_default_session_name") or "",
-        ).strip()
         bound_session = None
         if requested_session_name:
             bound_session = await self._load_requested_session(requested_session_name)
@@ -276,22 +290,23 @@ class GatewayRuntime:
                 channel_type=message.address.channel,
                 channel_integration_id=message.address.channel,
             )
-        if bound_session is None and channel_default_session_name:
-            bound_session = await self._load_requested_session(
-                channel_default_session_name,
-            )
         if bound_session is not None:
-            return bound_session.name, None
+            return bound_session.name, None, bound_session.name
         route_session = await self._session_service.current_route_session(
             message.route_key,
         )
-        return route_session.session_name, route_session
+        # A channel default is a Stage mirror target, not shared conversation state.
+        stage_session_name = str(
+            message.metadata.get("channel_default_session_name") or "",
+        ).strip()
+        return route_session.session_name, route_session, stage_session_name
 
     def _completion_callback_for_session(
         self,
         session_name: str,
         *,
         immediate_response_sent: asyncio.Event | None = None,
+        stage_session_name: str | None = None,
     ):
         async def notify(job) -> None:
             if immediate_response_sent is not None:
@@ -299,6 +314,7 @@ class GatewayRuntime:
             await self._publish_session_response(
                 session_name,
                 job.final_response_content,
+                stage_session_name=stage_session_name,
                 metadata={
                     "async_result": True,
                     "echobot_session_name": session_name,
@@ -362,6 +378,7 @@ class GatewayRuntime:
         content: MessageContent,
         *,
         metadata: dict[str, object] | None = None,
+        stage_session_name: str | None = None,
     ) -> None:
         target = await self._session_service.get_session_target(session_name)
         if target is None:
@@ -377,14 +394,20 @@ class GatewayRuntime:
                 content=content,
                 metadata=next_metadata,
             ),
+            stage_session_name=stage_session_name,
         )
 
     async def _publish_assistant_outbound(
         self,
         session_name: str,
         outbound: OutboundMessage,
+        *,
+        stage_session_name: str | None = None,
     ) -> None:
-        await self._publish_stage_event(session_name, outbound)
+        await self._publish_stage_event(
+            stage_session_name or session_name,
+            outbound,
+        )
         await self._bus.publish_outbound(outbound)
 
     async def _publish_stage_event(
@@ -399,6 +422,21 @@ class GatewayRuntime:
         except Exception:
             logger.exception(
                 "Failed to publish gateway response to stage for session %s",
+                session_name,
+            )
+
+    async def _notify_runtime_context_changed(
+        self,
+        session_name: str,
+        reason: str,
+    ) -> None:
+        if self._runtime_context_change_notifier is None:
+            return
+        try:
+            await self._runtime_context_change_notifier(session_name, reason)
+        except Exception:
+            logger.exception(
+                "Failed to publish runtime-context change for session %s",
                 session_name,
             )
 
@@ -531,14 +569,17 @@ class GatewayRuntime:
                     "publish_gateway_stage_event",
                     self._stage_event_publisher,
                 ),
+                runtime_context_change_notifier=getattr(
+                    runtime,
+                    "notify_session_runtime_context_changed",
+                    self._runtime_context_change_notifier,
+                ),
             )
             self._scoped_gateways[user_id] = gateway
             return gateway
 
     async def _message_targets_shared_session(self, message: InboundMessage) -> bool:
         if str(message.metadata.get("session_name") or "").strip():
-            return True
-        if str(message.metadata.get("channel_default_session_name") or "").strip():
             return True
         bound_session = await self._session_service.bound_session_for_channel(
             channel_type=message.address.channel,
